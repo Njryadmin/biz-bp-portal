@@ -513,14 +513,14 @@ class TestPrompts:
 
 class TestHealthEndpoint:
     @pytest.fixture
-    def client(self):
-        from app.main import create_app
-        return TestClient(create_app())
+    def client(self, app_with_auth):
+        from fastapi.testclient import TestClient
+        return TestClient(app_with_auth)
 
     def test_health_no_env_reports_mock(self, client, monkeypatch):
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
-        r = client.get("/api/copilot/health")
+        r = client_with_auth.get("/api/copilot/health")
         assert r.status_code == 200
         data = r.json()
         assert data["backend"] == "mock"
@@ -534,7 +534,7 @@ class TestHealthEndpoint:
 
     def test_health_with_deepseek_key_reports_deepseek(self, client, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-zzz")
-        r = client.get("/api/copilot/health")
+        r = client_with_auth.get("/api/copilot/health")
         assert r.status_code == 200
         data = r.json()
         assert data["backend"] == "deepseek"
@@ -549,7 +549,7 @@ class TestHealthEndpoint:
     def test_health_with_ollama_reports_ollama(self, client, monkeypatch):
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        r = client.get("/api/copilot/health")
+        r = client_with_auth.get("/api/copilot/health")
         assert r.status_code == 200
         data = r.json()
         assert data["backend"] == "ollama"
@@ -563,9 +563,9 @@ class TestHealthEndpoint:
 
 class TestAskEndpoint:
     @pytest.fixture
-    def client(self):
-        from app.main import create_app
-        return TestClient(create_app())
+    def client(self, app_with_auth):
+        from fastapi.testclient import TestClient
+        return TestClient(app_with_auth)
 
     def test_ask_with_fake_key_does_not_500(self, client, monkeypatch):
         """A fake / unreachable DEEPSEEK_API_KEY should trigger the
@@ -574,7 +574,7 @@ class TestAskEndpoint:
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-clearly-fake-key")
 
         body = {"question": "住宅 IRR 最高的 3 个项目"}
-        r = client.post("/api/copilot/ask", json=body)
+        r = client_with_auth.post("/api/copilot/ask", json=body)
         # Must NOT 500.
         assert r.status_code == 200, r.text
         data = r.json()
@@ -610,7 +610,7 @@ class TestAskEndpoint:
             )
 
         with patch.object(ds_mod.urllib.request, "urlopen", new=fake_urlopen):
-            r = client.post(
+            r = client_with_auth.post(
                 "/api/copilot/ask",
                 json={"question": "随便问点什么"},
             )
@@ -629,7 +629,7 @@ class TestAskEndpoint:
         fragility, not caused by this change)."""
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
-        r = client.post(
+        r = client_with_auth.post(
             "/api/copilot/ask",
             json={"question": "住宅 IRR 最高的 3 个项目"},
         )
@@ -659,7 +659,7 @@ class TestAskEndpoint:
             raise urllib.error.URLError("forced failure for test")
 
         with patch.object(ds_mod.urllib.request, "urlopen", new=fake_urlopen):
-            r = client.post(
+            r = client_with_auth.post(
                 "/api/copilot/ask",
                 json={
                     "question": "住宅 IRR 最高的 3 个项目",
@@ -676,7 +676,7 @@ class TestAskEndpoint:
         """The prefer_real_llm=False flag should force MockBackend,
         even if a real backend is configured."""
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-should-be-ignored")
-        r = client.post(
+        r = client_with_auth.post(
             "/api/copilot/ask",
             json={
                 "question": "住宅 IRR 最高的 3 个项目",
@@ -696,7 +696,7 @@ class TestAskEndpoint:
         be honored — the user should still get a useful answer."""
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
-        r = client.post(
+        r = client_with_auth.post(
             "/api/copilot/ask",
             json={
                 "question": "住宅 IRR 最高的 3 个项目",

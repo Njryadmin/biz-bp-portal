@@ -7,10 +7,15 @@ by ``app.main``.
 Endpoints:
 
 * ``GET    /api/scrapers``                  — list all registered scrapers
+                                              (auth required)
 * ``GET    /api/scrapers/{source_id}``      — detail (incl. last 10 runs)
+                                              (auth required)
 * ``POST   /api/scrapers/{source_id}/run``  — run one scraper now
+                                              (admin only)
 * ``POST   /api/scrapers/run-all``          — run every enabled scraper
+                                              (admin only)
 * ``GET    /api/scrapers/history/{source_id}`` — last 10 historical runs
+                                              (auth required)
 
 Failures from inside a scraper (network, parsing, validation) are
 handled by the framework's fallback chain; this router should NEVER
@@ -22,9 +27,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ..core.auth import CurrentUser, get_current_user
 from ..core.logging import get_logger
+from ..core.rbac import require_admin_dep
 from ..schemas.scraper import (
     ScraperDetail,
     ScraperRunAllResponse,
@@ -77,27 +84,33 @@ async def _list_with_history() -> list[ScraperSummary]:
 @router.get(
     "",
     response_model=list[ScraperSummary],
-    summary="List every registered scraper with last-run status",
+    summary="List every registered scraper with last-run status (auth required)",
 )
-async def list_scrapers() -> list[ScraperSummary]:
+async def list_scrapers(
+    _user: CurrentUser = Depends(get_current_user),
+) -> list[ScraperSummary]:
     return await _list_with_history()
 
 
 @router.get(
     "/run-all",
     response_model=ScraperRunAllResponse,
-    summary="Alias: run every scraper now (GET variant for browser convenience)",
+    summary="Alias: run every scraper now (GET variant for browser convenience; admin only)",
 )
-async def run_all_get() -> ScraperRunAllResponse:
+async def run_all_get(
+    _user: CurrentUser = Depends(require_admin_dep),
+) -> ScraperRunAllResponse:
     return await _run_all_handler()
 
 
 @router.post(
     "/run-all",
     response_model=ScraperRunAllResponse,
-    summary="Run every enabled scraper; persist the result to raw.uploads",
+    summary="Run every enabled scraper; persist the result to raw.uploads (admin only)",
 )
-async def run_all_post() -> ScraperRunAllResponse:
+async def run_all_post(
+    _user: CurrentUser = Depends(require_admin_dep),
+) -> ScraperRunAllResponse:
     return await _run_all_handler()
 
 
@@ -130,9 +143,12 @@ async def _run_all_handler() -> ScraperRunAllResponse:
 @router.get(
     "/{source_id}",
     response_model=ScraperDetail,
-    summary="Scraper detail (metadata + last 10 runs)",
+    summary="Scraper detail (metadata + last 10 runs) (auth required)",
 )
-async def get_scraper(source_id: str) -> ScraperDetail:
+async def get_scraper(
+    source_id: str,
+    _user: CurrentUser = Depends(get_current_user),
+) -> ScraperDetail:
     discover_scrapers()
     s = get(source_id)
     if s is None:
@@ -146,9 +162,12 @@ async def get_scraper(source_id: str) -> ScraperDetail:
 @router.post(
     "/{source_id}/run",
     response_model=ScraperRunResponse,
-    summary="Run a single scraper now; persist the result",
+    summary="Run a single scraper now; persist the result (admin only)",
 )
-async def run_scraper(source_id: str) -> ScraperRunResponse:
+async def run_scraper(
+    source_id: str,
+    _user: CurrentUser = Depends(require_admin_dep),
+) -> ScraperRunResponse:
     raw = await run_one(source_id, persist=True)
     if isinstance(raw, dict) and raw.get("status") == "error" and raw.get("error", "").startswith("unknown"):
         raise HTTPException(status_code=404, detail=raw.get("error", "unknown"))
@@ -167,9 +186,13 @@ async def run_scraper(source_id: str) -> ScraperRunResponse:
 
 @router.get(
     "/history/{source_id}",
-    summary="Last 10 raw.uploads rows for a given scraper source_id",
+    summary="Last 10 raw.uploads rows for a given scraper source_id (auth required)",
 )
-async def get_scraper_history(source_id: str, limit: int = 10) -> list[dict[str, Any]]:
+async def get_scraper_history(
+    source_id: str,
+    limit: int = 10,
+    _user: CurrentUser = Depends(get_current_user),
+) -> list[dict[str, Any]]:
     discover_scrapers()
     if get(source_id) is None:
         raise HTTPException(status_code=404, detail=f"unknown source_id: {source_id}")

@@ -23,7 +23,6 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.main import create_app
 from app.services.alert_engine import (
     AlertCheckRequest,
     clear_profile_cache,
@@ -39,7 +38,7 @@ from app.services.alert_engine import (
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_load_profile_residential():
+def test_load_profile_residential(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     assert p.line_id == "residential"
@@ -53,7 +52,7 @@ def test_load_profile_residential():
     assert "between" in ops
 
 
-def test_load_profile_retail():
+def test_load_profile_retail(client_with_auth):
     clear_profile_cache()
     p = load_profile("retail")
     assert p.line_id == "retail"
@@ -62,14 +61,14 @@ def test_load_profile_retail():
     assert len(consec) >= 1
 
 
-def test_load_profile_retail_leasing():
+def test_load_profile_retail_leasing(client_with_auth):
     clear_profile_cache()
     p = load_profile("retail-leasing")
     assert p.line_id == "retail-leasing"
     assert any(r.id == "occupancy_below" for r in p.rules)
 
 
-def test_load_profile_unknown_line_raises():
+def test_load_profile_unknown_line_raises(client_with_auth):
     clear_profile_cache()
     try:
         load_profile("does-not-exist-line")
@@ -84,7 +83,7 @@ def test_load_profile_unknown_line_raises():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_list_profiles_returns_three():
+def test_list_profiles_returns_three(client_with_auth):
     ids = list_profiles()
     assert {"residential", "retail", "retail-leasing"}.issubset(set(ids))
     assert "my-line" not in ids
@@ -95,7 +94,7 @@ def test_list_profiles_returns_three():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_lt_operator_fires(monkeypatch):
+def test_lt_operator_fires(monkeypatch, client_with_auth):
     """Mock current value below threshold; rule should fire."""
     reset_store()
     clear_profile_cache()
@@ -120,7 +119,7 @@ def test_lt_operator_fires(monkeypatch):
     assert "动态 IRR" in a.message or "irr" in a.message.lower() or "{value" in a.message
 
 
-def test_lt_operator_does_not_fire_when_above(monkeypatch):
+def test_lt_operator_does_not_fire_when_above(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -140,7 +139,7 @@ def test_lt_operator_does_not_fire_when_above(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_gt_operator_fires(monkeypatch):
+def test_gt_operator_fires(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("retail")
@@ -162,7 +161,7 @@ def test_gt_operator_fires(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_between_operator_fires(monkeypatch):
+def test_between_operator_fires(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -179,7 +178,7 @@ def test_between_operator_fires(monkeypatch):
     assert res.alerts_triggered[0].severity == "low"
 
 
-def test_between_operator_outside_range(monkeypatch):
+def test_between_operator_outside_range(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -199,7 +198,7 @@ def test_between_operator_outside_range(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_change_pct_fires_on_drop(monkeypatch):
+def test_change_pct_fires_on_drop(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -220,7 +219,7 @@ def test_change_pct_fires_on_drop(monkeypatch):
     assert "回款" in a.message or "delta" in a.message.lower() or "{delta_pct" in a.message
 
 
-def test_change_pct_does_not_fire_on_rise(monkeypatch):
+def test_change_pct_does_not_fire_on_rise(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -240,7 +239,7 @@ def test_change_pct_does_not_fire_on_rise(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_eq_operator_string_threshold(monkeypatch):
+def test_eq_operator_string_threshold(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -263,7 +262,7 @@ def test_eq_operator_string_threshold(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_consecutive_requires_n_periods(monkeypatch):
+def test_consecutive_requires_n_periods(monkeypatch, client_with_auth):
     """consecutive=3 means the condition must hold for the LAST 3 periods."""
     reset_store()
     clear_profile_cache()
@@ -294,7 +293,7 @@ def test_consecutive_requires_n_periods(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_summary_counts_severities(monkeypatch):
+def test_summary_counts_severities(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -315,7 +314,7 @@ def test_summary_counts_severities(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_acknowledge_and_delete(monkeypatch):
+def test_acknowledge_and_delete(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -365,7 +364,7 @@ def test_acknowledge_and_delete(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_history_pagination_and_line_filter(monkeypatch):
+def test_history_pagination_and_line_filter(monkeypatch, client_with_auth):
     reset_store()
     clear_profile_cache()
     p = load_profile("residential")
@@ -410,27 +409,21 @@ def test_history_pagination_and_line_filter(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_http_rules_endpoint():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/alerts/rules/residential")
+def test_http_rules_endpoint(client_with_auth):
+        r = client_with_auth.get("/api/alerts/rules/residential")
         assert r.status_code == 200
         data = r.json()
         assert data["line_id"] == "residential"
         assert len(data["rules"]) >= 4
 
 
-def test_http_rules_unknown_line_404():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/alerts/rules/does-not-exist")
+def test_http_rules_unknown_line_404(client_with_auth):
+        r = client_with_auth.get("/api/alerts/rules/does-not-exist")
         assert r.status_code == 404
 
 
-def test_http_rules_summary():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/alerts/rules/residential/summary")
+def test_http_rules_summary(client_with_auth):
+        r = client_with_auth.get("/api/alerts/rules/residential/summary")
         assert r.status_code == 200
         data = r.json()
         assert data["total_rules"] >= 4
@@ -438,18 +431,14 @@ def test_http_rules_summary():
         assert sum(data["by_severity"].values()) == data["total_rules"]
 
 
-def test_http_check_unknown_line_404():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.post("/api/alerts/check", json={"line_id": "does-not-exist"})
+def test_http_check_unknown_line_404(client_with_auth):
+        r = client_with_auth.post("/api/alerts/check", json={"line_id": "does-not-exist"})
         assert r.status_code == 404
 
 
-def test_http_check_and_history_and_acknowledge():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_check_and_history_and_acknowledge(client_with_auth):
         # reset store via an internal hack? Not needed — we run on a fresh app.
-        r = client.post("/api/alerts/check", json={"line_id": "residential"})
+        r = client_with_auth.post("/api/alerts/check", json={"line_id": "residential"})
         assert r.status_code == 200, r.text
         data = r.json()
         rules_eval = data["rules_evaluated"]
@@ -460,21 +449,21 @@ def test_http_check_and_history_and_acknowledge():
         if triggered:
             aid = triggered[0]["alert_id"]
             # history
-            hr = client.get(f"/api/alerts/history?line_id=residential&limit=10")
+            hr = client_with_auth.get(f"/api/alerts/history?line_id=residential&limit=10")
             assert hr.status_code == 200
             hdata = hr.json()
             assert hdata["total"] >= 1
             assert any(it["alert_id"] == aid for it in hdata["items"])
             # acknowledge
-            ack = client.post(f"/api/alerts/acknowledge/{aid}")
+            ack = client_with_auth.post(f"/api/alerts/acknowledge/{aid}")
             assert ack.status_code == 200
             ackdata = ack.json()
             assert ackdata["acknowledged"] is True
             # delete
-            dr = client.delete(f"/api/alerts/{aid}")
+            dr = client_with_auth.delete(f"/api/alerts/{aid}")
             assert dr.status_code == 200
             # second delete → 404
-            dr2 = client.delete(f"/api/alerts/{aid}")
+            dr2 = client_with_auth.delete(f"/api/alerts/{aid}")
             assert dr2.status_code == 404
         else:
             # No alerts is OK for this run; just verify the schema.
@@ -482,10 +471,8 @@ def test_http_check_and_history_and_acknowledge():
             assert set(data["summary"].keys()) == {"critical", "high", "medium", "low"}
 
 
-def test_http_acknowledge_unknown_404():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.post("/api/alerts/acknowledge/no-such-id")
+def test_http_acknowledge_unknown_404(client_with_auth):
+        r = client_with_auth.post("/api/alerts/acknowledge/no-such-id")
         assert r.status_code == 404
 
 
@@ -494,7 +481,7 @@ def test_http_acknowledge_unknown_404():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_universality_with_temp_line(repo_root):
+def test_universality_with_temp_line(repo_root, client_with_auth):
     """A throwaway line + alerts.yaml should be auto-discoverable
     without any change to engine code."""
     import shutil

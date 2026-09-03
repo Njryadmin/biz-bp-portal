@@ -59,6 +59,41 @@ troubleshooting, and the full env-var reference.
 
 ---
 
+## Authentication
+
+All routes are protected by an RBAC (role-based access control) layer.
+On the very first boot, the API auto-creates the following accounts
+from the business-line registry (idempotent — only runs when `users` is empty):
+
+| Username | Password | Role | Sees |
+|---|---|---|---|
+| `admin` | `admin123` | `admin` + `auditor` | everything |
+| `viewer` | — (set via API) | `viewer` | everything, read-only |
+| `bp-<line>` | `bp123456` | `bp:<line>` | only that line |
+
+Change these defaults in production via `FIN_BP_BOOTSTRAP_ADMIN_PASSWORD` /
+`FIN_BP_BOOTSTRAP_BP_PASSWORD` env vars or via
+`PATCH /api/auth/users/{id}/roles` after first boot.
+
+Key endpoints:
+
+- `POST /api/auth/login` — body `{username, password}` → httpOnly cookie `finbp_token`
+- `POST /api/auth/logout` — clear cookie
+- `GET  /api/auth/me` — current user + roles + accessible_lines
+- `GET  /api/auth/accessible-lines` — business lines visible to me
+- `GET  /api/auth/users` (admin) / `POST` (admin) / `PATCH /users/{id}/roles` (admin)
+- `GET  /api/auth/audit-log` (admin/auditor) — paginated request log
+
+Business-line enforcement: a user with `bp:residential` cannot read
+`/api/lines/retail/*` (403), the registry list returned from
+`/api/registry/lines` is pre-filtered, and the dashboard sidebar only
+shows the lines the user can access.
+
+See **[docs/rbac-2026-09-03-deliverable.md](docs/rbac-2026-09-03-deliverable.md)**
+for the full design + 15 curl scenarios + bootstrap walkthrough.
+
+---
+
 ## Quick start (Local dev)
 
 ```bash

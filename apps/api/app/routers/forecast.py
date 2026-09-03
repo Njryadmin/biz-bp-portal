@@ -9,18 +9,20 @@ all business lines).
 
 Endpoints:
 
-* GET  /profiles                  — list all line profiles (summary)
-* GET  /profiles/{line_id}        — full profile for one line
-* POST /run                       — run a forecast; returns ForecastResult
-* POST /compare                   — actual vs forecast (mock comparison)
+* GET  /profiles                  — list line profiles the user can access
+* GET  /profiles/{line_id}        — full profile for one line (RBAC)
+* POST /run                       — run a forecast; line access required
+* POST /compare                   — actual vs forecast; line access required
 
 The engine itself lives in `app.services.forecast_engine`.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ..core.auth import CurrentUser, get_current_user
 from ..core.logging import get_logger
+from ..core.rbac import filter_accessible_lines, require_business_line
 from ..services.forecast_engine import (
     ActualVsForecastRequest,
     ActualVsForecastResult,
@@ -73,23 +75,30 @@ def _profile_summary(line_id: str) -> dict:
 
 @router.get(
     "/profiles",
-    summary="List forecast profiles for all business lines that have one",
+    summary="List forecast profiles for business lines the user can access",
 )
-async def list_profiles_endpoint() -> dict:
+async def list_profiles_endpoint(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
     line_ids = list_profiles()
+    allowed = filter_accessible_lines(user, line_ids)
     return {
-        "count": len(line_ids),
+        "count": len(allowed),
         "profiles": [
-            {"line_id": lid, **_profile_summary(lid)} for lid in line_ids
+            {"line_id": lid, **_profile_summary(lid)} for lid in allowed
         ],
     }
 
 
 @router.get(
     "/profiles/{line_id}",
-    summary="Get the full forecast profile for one business line",
+    summary="Get the full forecast profile for one business line (RBAC)",
 )
-async def get_profile_endpoint(line_id: str) -> dict:
+async def get_profile_endpoint(
+    line_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    await require_business_line(line_id, user)
     try:
         p = load_profile(line_id)
     except FileNotFoundError as exc:
@@ -110,9 +119,13 @@ async def get_profile_endpoint(line_id: str) -> dict:
 @router.post(
     "/run",
     response_model=ForecastResult,
-    summary="Run a rolling forecast for one KPI series",
+    summary="Run a rolling forecast for one KPI series (RBAC: line access)",
 )
-async def run_endpoint(req: ForecastRequest) -> ForecastResult:
+async def run_endpoint(
+    req: ForecastRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> ForecastResult:
+    await require_business_line(req.line_id, user, require_write=True)
     try:
         profile = load_profile(req.line_id)
     except FileNotFoundError as exc:
@@ -133,9 +146,13 @@ async def run_endpoint(req: ForecastRequest) -> ForecastResult:
 @router.post(
     "/compare",
     response_model=ActualVsForecastResult,
-    summary="Compare recent actuals vs the model's prediction (mock)",
+    summary="Compare recent actuals vs the model's prediction (RBAC: line access)",
 )
-async def compare_endpoint(req: ActualVsForecastRequest) -> ActualVsForecastResult:
+async def compare_endpoint(
+    req: ActualVsForecastRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> ActualVsForecastResult:
+    await require_business_line(req.line_id, user, require_write=True)
     try:
         profile = load_profile(req.line_id)
     except FileNotFoundError as exc:

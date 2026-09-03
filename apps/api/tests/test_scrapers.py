@@ -41,7 +41,6 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import create_app
 from app.services.scrapers import (
     BaseScraper,
     ScraperRunResult,
@@ -98,7 +97,7 @@ def client(app):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_base_scraper_validate_drops_rows_with_missing_required_fields():
+def test_base_scraper_validate_drops_rows_with_missing_required_fields(client_with_auth):
     class _Demo(BaseScraper):
         source_id = "demo_x"
         name = "Demo"
@@ -122,7 +121,7 @@ def test_base_scraper_validate_drops_rows_with_missing_required_fields():
     assert {r["city"] for r in kept} == {"BJ", "GZ"}
 
 
-def test_base_scraper_validate_keeps_rows_when_no_required_fields():
+def test_base_scraper_validate_keeps_rows_when_no_required_fields(client_with_auth):
     class _Demo(BaseScraper):
         source_id = "demo_y"
         name = "Demo"
@@ -138,7 +137,7 @@ def test_base_scraper_validate_keeps_rows_when_no_required_fields():
     assert s.validate(rows) == rows
 
 
-def test_base_scraper_to_landing_row_stamps_source_and_fetched_at():
+def test_base_scraper_to_landing_row_stamps_source_and_fetched_at(client_with_auth):
     class _Demo(BaseScraper):
         source_id = "demo_z"
         name = "Demo"
@@ -162,7 +161,7 @@ def test_base_scraper_to_landing_row_stamps_source_and_fetched_at():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_registry_register_get_get_all():
+def test_registry_register_get_get_all(client_with_auth):
     class _Demo(BaseScraper):
         source_id = "reg_test_1"
         name = "RegTest1"
@@ -179,14 +178,14 @@ def test_registry_register_get_get_all():
     assert s in get_all()
 
 
-def test_registry_discover_scrapers_finds_three():
+def test_registry_discover_scrapers_finds_three(client_with_auth):
     registry_module.discover_scrapers()
     found = {s.source_id for s in get_all()}
     # All three bundled scrapers should be present.
     assert {"nbs_house_price", "lianjia_deals", "policy_crawler"}.issubset(found)
 
 
-def test_registry_reset_clears():
+def test_registry_reset_clears(client_with_auth):
     register(BaseScraper.__new__(NbsHousePriceScraper))  # instance w/o init
     assert len(get_all()) >= 1
     registry_module.reset()
@@ -198,7 +197,7 @@ def test_registry_reset_clears():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_http_get_smoke():
+def test_http_get_smoke(client_with_auth):
     """Hit a tiny local URL to ensure the call works. We use example.org
     which serves a small static page."""
     r = http_get("https://example.org/", timeout=10)
@@ -206,7 +205,7 @@ def test_http_get_smoke():
     assert "Example" in r.text
 
 
-def test_retry_with_backoff_succeeds_after_transient():
+def test_retry_with_backoff_succeeds_after_transient(client_with_auth):
     calls = {"n": 0}
 
     @retry_with_backoff(max_retries=2, base_delay=0.01)
@@ -220,7 +219,7 @@ def test_retry_with_backoff_succeeds_after_transient():
     assert calls["n"] == 2
 
 
-def test_retry_with_backoff_raises_after_exhausting():
+def test_retry_with_backoff_raises_after_exhausting(client_with_auth):
     calls = {"n": 0}
 
     @retry_with_backoff(max_retries=2, base_delay=0.01)
@@ -233,7 +232,7 @@ def test_retry_with_backoff_raises_after_exhausting():
     assert calls["n"] == 3  # initial + 2 retries
 
 
-def test_rate_limit_check_enforces_budget():
+def test_rate_limit_check_enforces_budget(client_with_auth):
     reset_rate_limit("example.com")
     for i in range(3):
         assert rate_limit_check("example.com", max_per_minute=3) is True
@@ -248,7 +247,7 @@ def test_rate_limit_check_enforces_budget():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_nbs_parse_builds_canonical_rows():
+def test_nbs_parse_builds_canonical_rows(client_with_auth):
     html = """
     <html><body>
     <h2>2024年12月份70个大中城市新建商品住宅价格指数</h2>
@@ -276,7 +275,7 @@ def test_nbs_parse_builds_canonical_rows():
     assert beijing and beijing[0]["new_home_index_yoy"] == -1.2
 
 
-def test_nbs_fallback_returns_three_cities():
+def test_nbs_fallback_returns_three_cities(client_with_auth):
     s = NbsHousePriceScraper()
     fallback = s.fallback()
     assert len(fallback) >= 3
@@ -284,7 +283,7 @@ def test_nbs_fallback_returns_three_cities():
     assert all(r.get("city") for r in fallback)
 
 
-def test_nbs_fetch_failure_triggers_fallback(monkeypatch):
+def test_nbs_fetch_failure_triggers_fallback(monkeypatch, client_with_auth):
     s = NbsHousePriceScraper()
     # Patch the instance's fetch method to always raise. This is more
     # robust than monkey-patching the module-level ``http_get`` name
@@ -304,7 +303,7 @@ def test_nbs_fetch_failure_triggers_fallback(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_lianjia_parse_returns_empty_or_list():
+def test_lianjia_parse_returns_empty_or_list(client_with_auth):
     s = LianjiaDealsScraper()
     # No tables → parse() raises so the framework fires the fallback chain.
     import pytest
@@ -328,7 +327,7 @@ def test_lianjia_parse_returns_empty_or_list():
     assert parsed[0]["deals_count"] == 120
 
 
-def test_lianjia_fallback_has_at_least_five_rows():
+def test_lianjia_fallback_has_at_least_five_rows(client_with_auth):
     s = LianjiaDealsScraper()
     fb = s.fallback()
     assert len(fb) >= 5
@@ -337,7 +336,7 @@ def test_lianjia_fallback_has_at_least_five_rows():
     assert len(cities) >= 2
 
 
-def test_lianjia_fetch_failure_triggers_fallback(monkeypatch):
+def test_lianjia_fetch_failure_triggers_fallback(monkeypatch, client_with_auth):
     s = LianjiaDealsScraper()
     async def _raise():
         raise httpx.HTTPError("blocked in test")
@@ -353,7 +352,7 @@ def test_lianjia_fetch_failure_triggers_fallback(monkeypatch):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_policy_parse_merges_corpus_with_live():
+def test_policy_parse_merges_corpus_with_live(client_with_auth):
     s = PolicyCrawler()
     out = s.parse([])
     # No live data → just the historical corpus.
@@ -364,7 +363,7 @@ def test_policy_parse_merges_corpus_with_live():
         assert r.get("level") in {"国家", "省", "市"}
 
 
-def test_policy_validate_dedupes_by_policy_id():
+def test_policy_validate_dedupes_by_policy_id(client_with_auth):
     s = PolicyCrawler()
     rows = list(_HISTORICAL_POLICIES) + [
         dict(_HISTORICAL_POLICIES[0]),  # duplicate
@@ -384,7 +383,7 @@ def test_policy_validate_dedupes_by_policy_id():
     assert len(set(ids)) == len(ids)
 
 
-def test_policy_fallback_returns_full_corpus():
+def test_policy_fallback_returns_full_corpus(client_with_auth):
     s = PolicyCrawler()
     fb = s.fallback()
     assert len(fb) == len(_HISTORICAL_POLICIES)
@@ -396,8 +395,8 @@ def test_policy_fallback_returns_full_corpus():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_http_list_scrapers_has_three(client):
-    r = client.get("/api/scrapers")
+def test_http_list_scrapers_has_three(client, client_with_auth):
+    r = client_with_auth.get("/api/scrapers")
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
@@ -405,8 +404,8 @@ def test_http_list_scrapers_has_three(client):
     assert {"nbs_house_price", "lianjia_deals", "policy_crawler"}.issubset(ids)
 
 
-def test_http_get_scraper_detail(client):
-    r = client.get("/api/scrapers/nbs_house_price")
+def test_http_get_scraper_detail(client, client_with_auth):
+    r = client_with_auth.get("/api/scrapers/nbs_house_price")
     assert r.status_code == 200
     data = r.json()
     assert data["source_id"] == "nbs_house_price"
@@ -414,7 +413,7 @@ def test_http_get_scraper_detail(client):
     assert isinstance(data["history"], list)
 
 
-def test_http_run_one_scraper(client, monkeypatch):
+def test_http_run_one_scraper(client, monkeypatch, client_with_auth):
     """Run returns rows ≥ 0 even when DB is unavailable (persist is best-effort).
 
     We patch each scraper's ``fetch`` to raise so the fallback path is
@@ -433,7 +432,7 @@ def test_http_run_one_scraper(client, monkeypatch):
     monkeypatch.setattr(lianjia_mod, "http_get", _raise)
     monkeypatch.setattr(policy_mod, "http_get", _raise)
 
-    r = client.post("/api/scrapers/nbs_house_price/run")
+    r = client_with_auth.post("/api/scrapers/nbs_house_price/run")
     assert r.status_code == 200
     data = r.json()
     assert data["source_id"] == "nbs_house_price"
@@ -442,7 +441,7 @@ def test_http_run_one_scraper(client, monkeypatch):
     assert data["rows"] >= 0
 
 
-def test_http_run_all_scrapers(client, monkeypatch):
+def test_http_run_all_scrapers(client, monkeypatch, client_with_auth):
     from app.services.scrapers.scrapers import nbs_house_price as nbs_mod
     from app.services.scrapers.scrapers import lianjia_deals as lianjia_mod
     from app.services.scrapers.scrapers import policy_crawler as policy_mod
@@ -455,7 +454,7 @@ def test_http_run_all_scrapers(client, monkeypatch):
     monkeypatch.setattr(lianjia_mod, "http_get", _raise)
     monkeypatch.setattr(policy_mod, "http_get", _raise)
 
-    r = client.post("/api/scrapers/run-all")
+    r = client_with_auth.post("/api/scrapers/run-all")
     assert r.status_code == 200
     data = r.json()
     assert "results" in data
@@ -465,8 +464,8 @@ def test_http_run_all_scrapers(client, monkeypatch):
         assert "rows" in item
 
 
-def test_http_unknown_scraper_returns_404(client):
-    r = client.get("/api/scrapers/does_not_exist_xyz")
+def test_http_unknown_scraper_returns_404(client, client_with_auth):
+    r = client_with_auth.get("/api/scrapers/does_not_exist_xyz")
     assert r.status_code == 404
-    r2 = client.post("/api/scrapers/does_not_exist_xyz/run")
+    r2 = client_with_auth.post("/api/scrapers/does_not_exist_xyz/run")
     assert r2.status_code == 404

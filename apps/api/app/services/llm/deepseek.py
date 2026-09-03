@@ -151,7 +151,13 @@ class DeepSeekBackend:
         """Force a re-render of the system prompt (tests / registry changes)."""
         self._system_prompt = render_system_prompt()
 
-    async def complete(self, prompt: str, *, max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
+    async def complete(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        system_prompt: str | None = None,
+    ) -> str:
         """Call DeepSeek and return the assistant's text content.
 
         Raises:
@@ -163,11 +169,15 @@ class DeepSeekBackend:
 
         The FallbackBackend catches DeepSeekError + URLError to trigger
         degradation. Any other exception propagates unchanged.
+
+        ``system_prompt`` overrides the cached default — used by the
+        RBAC-aware call site to inject the current user context.
         """
+        sys_prompt = system_prompt if system_prompt is not None else self._system_prompt
         body = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": self._system_prompt},
+                {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": prompt},
             ],
             "max_tokens": max_tokens,

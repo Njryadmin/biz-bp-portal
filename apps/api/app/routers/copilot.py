@@ -8,15 +8,23 @@ auto-discovery path, since the Copilot is cross-cutting).
 
 Endpoints:
   POST /api/copilot/ask         — ask one question, get answer + citations
+                                   (auth required; the active user +
+                                    roles are folded into the system
+                                    prompt so the LLM knows who is
+                                    asking)
   GET  /api/copilot/suggestions — recommended starter questions
-  GET  /api/copilot/health      — current LLM backend name + registered lines
+                                   (auth required; filtered to
+                                   accessible lines)
+  GET  /api/copilot/health      — current LLM backend name + registered
+                                   lines (auth required)
 
 The engine (`app.services.copilot_engine`) does the heavy lifting.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ..core.auth import CurrentUser, get_current_user
 from ..core.logging import get_logger
 from ..services.copilot_engine import (
     CopilotEngine,
@@ -42,7 +50,10 @@ router = APIRouter(prefix="/api/copilot", tags=["copilot"])
     response_model=CopilotResponse,
     summary="Ask a free-form finance question, get an answer with citations",
 )
-def ask_endpoint(req: CopilotRequest) -> CopilotResponse:
+def ask_endpoint(
+    req: CopilotRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> CopilotResponse:
     # NOTE: deliberately NOT `async def` — the mock helper makes sync
     # HTTP calls to the same API process (e.g. GET /api/lines/.../projects).
     # If the handler were async, the sync urllib call would block the
@@ -53,8 +64,28 @@ def ask_endpoint(req: CopilotRequest) -> CopilotResponse:
     if err:
         # 400 for bad input — distinguish from internal errors.
         raise HTTPException(status_code=400, detail=err)
+    # RBAC: if the request carries an explicit line_id, the user must
+    # have access to that line. Otherwise the engine can fall back to
+    # the user's accessible lines.
+    if req.line_id:
+        from ..core.rbac import require_business_line as _rbl
+        # We can't await in a sync handler; run the coroutine in the
+        # current thread via asyncio. FastAPI runs sync handlers in a
+        # worker thread, so there's no event loop here — use a tiny
+        # event-loop helper.
+        import asyncio
+        try:
+            asyncio.run(_rbl(req.line_id, user))
+        except HTTPException:
+            raise
     engine = CopilotEngine()
     try:
+        # Inject the active user into the engine so the system prompt
+        # can mention "current user: alice (roles: admin)".
+        try:
+            engine.set_active_user(user.to_public_dict())
+        except AttributeError:
+            pass
         return engine.ask(req)
     except HTTPException:
         raise
@@ -83,9 +114,17 @@ def ask_endpoint(req: CopilotRequest) -> CopilotResponse:
     response_model=CopilotSuggestions,
     summary="Get recommended starter questions, by line and cross-line",
 )
-async def suggestions_endpoint() -> CopilotSuggestions:
+async def suggestions_endpoint(
+    user: CurrentUser = Depends(get_current_user),
+) -> CopilotSuggestions:
     engine = CopilotEngine()
-    return engine.suggestions()
+    try:
+        return engine.suggestions_for_user(
+            roles=user.roles, accessible_lines=user.accessible_lines
+        )
+    except AttributeError:
+        # Backward compat if the engine doesn't expose suggestions_for_user
+        return engine.suggestions()
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -98,6 +137,8 @@ async def suggestions_endpoint() -> CopilotSuggestions:
     response_model=CopilotHealth,
     summary="Report the active LLM backend and registered lines",
 )
-async def health_endpoint() -> CopilotHealth:
+async def health_endpoint(
+    user: CurrentUser = Depends(get_current_user),
+) -> CopilotHealth:
     engine = CopilotEngine()
     return engine.health()

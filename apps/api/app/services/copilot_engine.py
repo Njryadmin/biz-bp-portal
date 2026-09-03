@@ -321,6 +321,25 @@ class CopilotEngine:
         # ``prefer_real_llm`` field on each request can override this
         # in ``ask()`` by re-picking the backend.
         self._backend = get_llm_backend()
+        # Per-request active user, set by the HTTP router after
+        # auth resolution. The system prompt will mention the user so
+        # the LLM can answer "who is asking" questions. Cleared on
+        # every new CopilotEngine() because engines are per-request.
+        self._active_user: dict[str, Any] | None = None
+
+    def set_active_user(self, user: dict[str, Any] | None) -> None:
+        """Inject the currently authenticated user (id/username/roles/
+        accessible_lines) into the engine so the LLM system prompt
+        can mention who is asking.
+
+        The router calls this after `get_current_user` resolves the
+        cookie. The user dict is the public projection of
+        ``CurrentUser``.
+        """
+        self._active_user = user
+
+    def active_user(self) -> dict[str, Any] | None:
+        return self._active_user
 
     def _pick_backend(self, prefer_real_llm: bool | None) -> Any:
         """Pick a backend honoring the user toggle.
@@ -441,6 +460,67 @@ class CopilotEngine:
         }
         return CopilotSuggestions(by_line=by_line, common=COMMON_SUGGESTIONS)
 
+    def suggestions_for_user(
+        self, *, roles: list[str], accessible_lines: list[str]
+    ) -> CopilotSuggestions:
+        """Like ``suggestions()`` but filtered to the user's accessible lines.
+
+        Rules:
+          * admin / viewer / auditor → see every registered line
+          * bp:<line>                → only that line
+          * multiple roles are unioned
+        """
+        entries = load_registry()
+        registered = {e.line.id for e in entries}
+        all_sug = line_suggestions()
+        is_global = any(r in roles for r in ("admin", "auditor", "viewer"))
+        if is_global:
+            allowed_ids = set(registered)
+        else:
+            allowed_ids = set(accessible_lines or [])
+            for r in roles:
+                if r.startswith("bp:"):
+                    allowed_ids.add(r[3:])
+        by_line: dict[str, list[str]] = {
+            lid: qs
+            for lid, qs in all_sug.items()
+            if lid in registered and lid in allowed_ids
+        }
+        return CopilotSuggestions(by_line=by_line, common=COMMON_SUGGESTIONS)
+
+    def system_prompt_with_user(self, api_base: str | None = None) -> str:
+        """Render the system prompt + append a "current user" block.
+
+        Used by real LLM backends so the model knows who is asking and
+        what they can access.
+        """
+        from .llm.prompts import render_system_prompt
+        base = render_system_prompt(api_base=api_base)
+        if not self._active_user:
+            return base
+        user = self._active_user
+        roles = user.get("roles") or []
+        lines = user.get("accessible_lines") or []
+        try:
+            import json as _json
+            user_block = _json.dumps(
+                {
+                    "username": user.get("username"),
+                    "display_name": user.get("display_name"),
+                    "roles": roles,
+                    "accessible_lines": lines,
+                },
+                ensure_ascii=False,
+            )
+        except Exception:  # noqa: BLE001
+            user_block = f"{user.get('username')} (roles={roles}, lines={lines})"
+        return (
+            base
+            + "\n\n【当前用户身份(RBAC 上下文)】\n"
+            + user_block
+            + "\n注:你只能引用当前用户有访问权限的业务线的数据;若用户问题涉及无权限业务线,应明确告知。\n"
+        )
+
     # ── Internals ──────────────────────────────────────────────────────
 
     def _build_response_from_mock(
@@ -486,8 +566,19 @@ class CopilotEngine:
         """Async path for real LLM backends (DeepSeek, Ollama) and FallbackBackend."""
         backend = backend_override or self._backend
         prompt = self._build_prompt(req, parsed, effective_question)
+        # If we know who is asking, augment the system prompt with the
+        # user's identity + roles so the LLM can refuse to leak data
+        # the user can't see.
+        sys_prompt: str | None = None
+        if self._active_user is not None:
+            try:
+                sys_prompt = self.system_prompt_with_user()
+            except Exception:  # noqa: BLE001
+                sys_prompt = None
         try:
-            raw = await backend.complete(prompt, max_tokens=1024)
+            raw = await backend.complete(
+                prompt, max_tokens=1024, system_prompt=sys_prompt
+            )
         except Exception as exc:  # noqa: BLE001 — defensive; FallbackBackend shouldn't raise
             raw = f"[LLM 后端调用失败: {exc}]"
 

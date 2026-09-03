@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+    # Authentication / RBAC (see core/auth.py)
+    # NOTE: we expose only non-secret defaults here. ``JWT_SECRET`` is
+    # read from the bare ``JWT_SECRET`` env var (no FIN_BP_ prefix) to
+    # match industry convention.
+    jwt_secret: str = "change-me-in-production-32-chars-min-please"
+    cookie_name: str = "finbp_token"
+    cookie_secure: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

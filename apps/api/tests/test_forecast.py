@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.main import create_app
 from app.services.forecast_engine import (
     ForecastRequest,
     clear_profile_cache,
@@ -37,7 +36,7 @@ from app.services.forecast_engine import (
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_load_profile_residential():
+def test_load_profile_residential(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     assert p.line_id == "residential"
@@ -48,21 +47,21 @@ def test_load_profile_residential():
     assert len(p.attribution) == 4
 
 
-def test_load_profile_retail():
+def test_load_profile_retail(client_with_auth):
     clear_profile_cache()
     p = load_profile("retail")
     assert p.line_id == "retail"
     assert any(s.indicator_id == "noi" for s in p.series)
 
 
-def test_load_profile_retail_leasing():
+def test_load_profile_retail_leasing(client_with_auth):
     clear_profile_cache()
     p = load_profile("retail-leasing")
     assert p.line_id == "retail-leasing"
     assert any(s.indicator_id == "occupancy_rate" for s in p.series)
 
 
-def test_load_profile_unknown_line_raises():
+def test_load_profile_unknown_line_raises(client_with_auth):
     clear_profile_cache()
     try:
         load_profile("does-not-exist-line")
@@ -77,7 +76,7 @@ def test_load_profile_unknown_line_raises():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_list_profiles_returns_three():
+def test_list_profiles_returns_three(client_with_auth):
     ids = list_profiles()
     assert "residential" in ids
     assert "retail" in ids
@@ -91,7 +90,7 @@ def test_list_profiles_returns_three():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_sma_forecast_shape_and_values():
+def test_sma_forecast_shape_and_values(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = ForecastRequest(
@@ -128,7 +127,7 @@ def test_sma_forecast_shape_and_values():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_ema_forecast_is_flat_line():
+def test_ema_forecast_is_flat_line(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = ForecastRequest(
@@ -151,7 +150,7 @@ def test_ema_forecast_is_flat_line():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_linear_trend_widening_ci():
+def test_linear_trend_widening_ci(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = ForecastRequest(
@@ -177,7 +176,7 @@ def test_linear_trend_widening_ci():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_seasonal_naive_repeats_year_ago_value():
+def test_seasonal_naive_repeats_year_ago_value(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = ForecastRequest(
@@ -203,7 +202,7 @@ def test_seasonal_naive_repeats_year_ago_value():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_mape_and_bias_present():
+def test_mape_and_bias_present(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = ForecastRequest(
@@ -225,7 +224,7 @@ def test_mape_and_bias_present():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_attribution_buckets_and_weights():
+def test_attribution_buckets_and_weights(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = ForecastRequest(
@@ -249,7 +248,7 @@ def test_attribution_buckets_and_weights():
         assert a.top_driver
 
 
-def test_attribution_omitted_by_default():
+def test_attribution_omitted_by_default(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = ForecastRequest(
@@ -268,10 +267,8 @@ def test_attribution_omitted_by_default():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_http_profiles_endpoint():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/forecast/profiles")
+def test_http_profiles_endpoint(client_with_auth):
+        r = client_with_auth.get("/api/forecast/profiles")
         assert r.status_code == 200
         data = r.json()
         assert data["count"] >= 3
@@ -279,10 +276,8 @@ def test_http_profiles_endpoint():
         assert {"residential", "retail", "retail-leasing"}.issubset(line_ids)
 
 
-def test_http_profile_for_one_line():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/forecast/profiles/residential")
+def test_http_profile_for_one_line(client_with_auth):
+        r = client_with_auth.get("/api/forecast/profiles/residential")
         assert r.status_code == 200
         data = r.json()
         assert data["line_id"] == "residential"
@@ -290,23 +285,19 @@ def test_http_profile_for_one_line():
         assert len(data["attribution"]) == 4
 
 
-def test_http_profile_unknown_line_404():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/forecast/profiles/does-not-exist")
+def test_http_profile_unknown_line_404(client_with_auth):
+        r = client_with_auth.get("/api/forecast/profiles/does-not-exist")
         assert r.status_code == 404
 
 
-def test_http_run_returns_historical_and_forecast():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_run_returns_historical_and_forecast(client_with_auth):
         body = {
             "line_id": "residential",
             "indicator_id": "dynamic_irr",
             "horizon_months": 12,
             "method": "linear_trend",
         }
-        r = client.post("/api/forecast/run", json=body)
+        r = client_with_auth.post("/api/forecast/run", json=body)
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["line_id"] == "residential"
@@ -322,19 +313,15 @@ def test_http_run_returns_historical_and_forecast():
             assert pnt["is_actual"] is False
 
 
-def test_http_run_unknown_line_404():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_run_unknown_line_404(client_with_auth):
         body = {"line_id": "does-not-exist", "indicator_id": "x"}
-        r = client.post("/api/forecast/run", json=body)
+        r = client_with_auth.post("/api/forecast/run", json=body)
         assert r.status_code == 404
 
 
-def test_http_run_unknown_indicator_400():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_run_unknown_indicator_400(client_with_auth):
         body = {"line_id": "residential", "indicator_id": "not_an_indicator"}
-        r = client.post("/api/forecast/run", json=body)
+        r = client_with_auth.post("/api/forecast/run", json=body)
         assert r.status_code == 400
 
 
@@ -343,15 +330,13 @@ def test_http_run_unknown_indicator_400():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_http_compare_returns_deltas():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_compare_returns_deltas(client_with_auth):
         body = {
             "line_id": "residential",
             "indicator_id": "dynamic_irr",
             "horizon_months": 3,
         }
-        r = client.post("/api/forecast/compare", json=body)
+        r = client_with_auth.post("/api/forecast/compare", json=body)
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["line_id"] == "residential"
@@ -373,7 +358,7 @@ def test_http_compare_returns_deltas():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_universality_with_temp_line(repo_root, tmp_path):
+def test_universality_with_temp_line(repo_root, tmp_path, client_with_auth):
     """A throwaway line + forecast.yaml should be auto-discoverable
     without any change to engine code."""
     import shutil

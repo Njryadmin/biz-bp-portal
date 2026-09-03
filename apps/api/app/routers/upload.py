@@ -5,9 +5,10 @@ FastAPI APIRouter for the data-integration upload endpoints.
 
 Routes (mounted under ``/api/upload`` by ``app.main``):
 
-* ``POST /api/upload/excel``  — multipart .xlsx/.xls upload
-* ``POST /api/upload/csv``    — multipart .csv upload
-* ``GET  /api/upload/history``— last 50 uploads (newest first)
+* ``POST /api/upload/excel``  — multipart .xlsx/.xls upload (admin/auditor)
+* ``POST /api/upload/csv``    — multipart .csv upload (admin/auditor)
+* ``POST /api/upload/bank-statement`` — multipart .txt/.csv upload (admin/auditor)
+* ``GET  /api/upload/history``— last 50 uploads (newest first) (admin/auditor)
 
 Each upload is parsed by the corresponding parser in
 ``app.services.parsers`` and persisted as one row in
@@ -21,10 +22,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import text
 
+from ..core.auth import CurrentUser
 from ..core.logging import get_logger
+from ..core.rbac import require_auditor_or_admin_dep
 from ..db import get_session
 from ..services.parsers import parse_csv, parse_excel
 from ..services.parsers.bank_statement import parse_bank_statement
@@ -115,7 +118,10 @@ async def _persist_upload(
     response_model=UploadResponse,
     summary="Upload an Excel file (.xlsx/.xls) and persist as raw.uploads row",
 )
-async def upload_excel(file: UploadFile = File(...)) -> UploadResponse:
+async def upload_excel(
+    file: UploadFile = File(...),
+    _user: CurrentUser = Depends(require_auditor_or_admin_dep),
+) -> UploadResponse:
     _check_ext(file.filename or "", _ALLOWED_EXCEL_EXT)
     contents = await file.read(_MAX_UPLOAD_BYTES + 1)
     if len(contents) > _MAX_UPLOAD_BYTES:
@@ -133,7 +139,10 @@ async def upload_excel(file: UploadFile = File(...)) -> UploadResponse:
     response_model=UploadResponse,
     summary="Upload a CSV file and persist as raw.uploads row",
 )
-async def upload_csv(file: UploadFile = File(...)) -> UploadResponse:
+async def upload_csv(
+    file: UploadFile = File(...),
+    _user: CurrentUser = Depends(require_auditor_or_admin_dep),
+) -> UploadResponse:
     _check_ext(file.filename or "", _ALLOWED_CSV_EXT)
     contents = await file.read(_MAX_UPLOAD_BYTES + 1)
     if len(contents) > _MAX_UPLOAD_BYTES:
@@ -151,7 +160,10 @@ async def upload_csv(file: UploadFile = File(...)) -> UploadResponse:
     response_model=UploadResponse,
     summary="Upload a bank-statement text file (ICBC/CMB) and persist",
 )
-async def upload_bank_statement(file: UploadFile = File(...)) -> UploadResponse:
+async def upload_bank_statement(
+    file: UploadFile = File(...),
+    _user: CurrentUser = Depends(require_auditor_or_admin_dep),
+) -> UploadResponse:
     """Optional endpoint for completeness — the spec only requires excel+csv
     but the bank-statement parser is already wired up, so we expose it too.
     Accepts .txt or .csv files."""
@@ -176,6 +188,7 @@ async def upload_bank_statement(file: UploadFile = File(...)) -> UploadResponse:
 )
 async def upload_history(
     limit: int = Query(default=50, ge=1, le=500),
+    _user: CurrentUser = Depends(require_auditor_or_admin_dep),
 ) -> list[UploadHistoryItem]:
     sql = text(
         """

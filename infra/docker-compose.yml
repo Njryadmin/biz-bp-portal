@@ -47,6 +47,14 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-30}
+      # Authentication / RBAC
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-32-chars-min-please}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-24}
+      FIN_BP_BOOTSTRAP_ADMIN_USERNAME: ${FIN_BP_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      FIN_BP_BOOTSTRAP_ADMIN_PASSWORD: ${FIN_BP_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+      FIN_BP_COOKIE_SECURE: ${FIN_BP_COOKIE_SECURE:-false}
+      FIN_BP_COOKIE_NAME: ${FIN_BP_COOKIE_NAME:-finbp_token}
     ports:
       - "8000:8000"
     volumes:

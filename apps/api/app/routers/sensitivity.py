@@ -11,18 +11,22 @@ business lines.
 Endpoints (mounted under /api/sensitivity by `app.main`):
 
 * GET  /profiles                       — list all line profiles (summary)
-* GET  /profiles/{line_id}             — full profile for one line
+                                        filtered by accessible_lines.
+* GET  /profiles/{line_id}             — full profile for one line (RBAC)
 * POST /analyze                        — run the analysis; returns
-                                         SensitivityResult
-* GET  /scenarios/{line_id}            — preset scenario examples
+                                         SensitivityResult (RBAC: line
+                                         access required)
+* GET  /scenarios/{line_id}            — preset scenario examples (RBAC)
 
 The engine itself lives in `app.services.sensitivity_engine`.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from ..core.auth import CurrentUser, get_current_user
 from ..core.logging import get_logger
+from ..core.rbac import filter_accessible_lines, require_business_line
 from ..services.sensitivity_engine import (
     SensitivityProfile,
     SensitivityRequest,
@@ -75,27 +79,34 @@ def _profile_summary(line_id: str) -> dict:
 
 @router.get(
     "/profiles",
-    summary="List sensitivity profiles for all business lines that have one",
+    summary="List sensitivity profiles for business lines the user can access",
 )
-async def list_profiles_endpoint() -> dict:
+async def list_profiles_endpoint(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
     line_ids = list_profiles()
+    allowed = filter_accessible_lines(user, line_ids)
     return {
-        "count": len(line_ids),
+        "count": len(allowed),
         "profiles": [
             {
                 "line_id": lid,
                 **_profile_summary(lid),
             }
-            for lid in line_ids
+            for lid in allowed
         ],
     }
 
 
 @router.get(
     "/profiles/{line_id}",
-    summary="Get the full sensitivity profile for one business line",
+    summary="Get the full sensitivity profile for one business line (RBAC)",
 )
-async def get_profile_endpoint(line_id: str) -> dict:
+async def get_profile_endpoint(
+    line_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    await require_business_line(line_id, user)
     try:
         p = load_profile(line_id)
     except FileNotFoundError as exc:
@@ -116,9 +127,13 @@ async def get_profile_endpoint(line_id: str) -> dict:
 @router.post(
     "/analyze",
     response_model=SensitivityResult,
-    summary="Run a 1D or 2D sensitivity analysis",
+    summary="Run a 1D or 2D sensitivity analysis (RBAC: line access required)",
 )
-async def analyze_endpoint(req: SensitivityRequest) -> SensitivityResult:
+async def analyze_endpoint(
+    req: SensitivityRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> SensitivityResult:
+    await require_business_line(req.line_id, user, require_write=True)
     try:
         profile = load_profile(req.line_id)
     except FileNotFoundError as exc:
@@ -144,7 +159,11 @@ async def analyze_endpoint(req: SensitivityRequest) -> SensitivityResult:
     "/scenarios/{line_id}",
     summary="Pre-canned scenario examples (worst / base / best) for each output",
 )
-async def scenarios_endpoint(line_id: str) -> dict:
+async def scenarios_endpoint(
+    line_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    await require_business_line(line_id, user)
     try:
         p = load_profile(line_id)
     except FileNotFoundError as exc:

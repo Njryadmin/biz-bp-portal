@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.main import create_app
 from app.services import sensitivity_engine
 from app.services.sensitivity_engine import (
     SensitivityRequest,
@@ -44,7 +43,7 @@ def _get_profiles() -> list[str]:
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_load_profile_residential(repo_root):
+def test_load_profile_residential(repo_root, client_with_auth):
     """residential sensitivity.yaml loads, has inputs + outputs."""
     clear_profile_cache()
     p = load_profile("residential")
@@ -60,7 +59,7 @@ def test_load_profile_residential(repo_root):
             assert isinstance(v, (int, float))
 
 
-def test_load_profile_retail(repo_root):
+def test_load_profile_retail(repo_root, client_with_auth):
     clear_profile_cache()
     p = load_profile("retail")
     assert p.line_id == "retail"
@@ -70,7 +69,7 @@ def test_load_profile_retail(repo_root):
     assert any(o.id == "noi" for o in p.outputs)
 
 
-def test_load_profile_retail_leasing(repo_root):
+def test_load_profile_retail_leasing(repo_root, client_with_auth):
     clear_profile_cache()
     p = load_profile("retail-leasing")
     assert p.line_id == "retail-leasing"
@@ -78,7 +77,7 @@ def test_load_profile_retail_leasing(repo_root):
     assert any(o.id == "commission_revenue" for o in p.outputs)
 
 
-def test_load_profile_unknown_line_raises():
+def test_load_profile_unknown_line_raises(client_with_auth):
     clear_profile_cache()
     try:
         load_profile("does-not-exist-line-xyz")
@@ -93,7 +92,7 @@ def test_load_profile_unknown_line_raises():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_list_profiles_returns_three(repo_root):
+def test_list_profiles_returns_three(repo_root, client_with_auth):
     """All 3 lines have sensitivity.yaml in the seed; the 4th (my-line) does not."""
     lines = _get_profiles()
     assert "residential" in lines
@@ -109,7 +108,7 @@ def test_list_profiles_returns_three(repo_root):
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_analyze_1d_matrix_shape_and_base_point():
+def test_analyze_1d_matrix_shape_and_base_point(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = SensitivityRequest(
@@ -141,7 +140,7 @@ def test_analyze_1d_matrix_shape_and_base_point():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_analyze_2d_matrix_shape_and_corners():
+def test_analyze_2d_matrix_shape_and_corners(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = SensitivityRequest(
@@ -180,7 +179,7 @@ def test_analyze_2d_matrix_shape_and_corners():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_tornado_sorted_by_span():
+def test_tornado_sorted_by_span(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = SensitivityRequest(
@@ -217,7 +216,7 @@ def test_tornado_sorted_by_span():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_scenarios_1d_three_items_base_in_middle():
+def test_scenarios_1d_three_items_base_in_middle(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = SensitivityRequest(
@@ -239,7 +238,7 @@ def test_scenarios_1d_three_items_base_in_middle():
     assert base.delta_from_base == 0.0
 
 
-def test_scenarios_2d_seven_items_includes_corners():
+def test_scenarios_2d_seven_items_includes_corners(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = SensitivityRequest(
@@ -273,7 +272,7 @@ def test_scenarios_2d_seven_items_includes_corners():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_unknown_output_id_raises_keyerror():
+def test_unknown_output_id_raises_keyerror(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = SensitivityRequest(
@@ -290,7 +289,7 @@ def test_unknown_output_id_raises_keyerror():
         raise AssertionError("expected KeyError")
 
 
-def test_unknown_input_id_raises_keyerror():
+def test_unknown_input_id_raises_keyerror(client_with_auth):
     clear_profile_cache()
     p = load_profile("residential")
     req = SensitivityRequest(
@@ -312,10 +311,8 @@ def test_unknown_input_id_raises_keyerror():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_http_profiles_endpoint():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/sensitivity/profiles")
+def test_http_profiles_endpoint(client_with_auth):
+        r = client_with_auth.get("/api/sensitivity/profiles")
         assert r.status_code == 200
         data = r.json()
         assert data["count"] >= 3
@@ -323,10 +320,8 @@ def test_http_profiles_endpoint():
         assert {"residential", "retail", "retail-leasing"}.issubset(line_ids)
 
 
-def test_http_profile_for_one_line():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/sensitivity/profiles/residential")
+def test_http_profile_for_one_line(client_with_auth):
+        r = client_with_auth.get("/api/sensitivity/profiles/residential")
         assert r.status_code == 200
         data = r.json()
         assert data["line_id"] == "residential"
@@ -335,16 +330,12 @@ def test_http_profile_for_one_line():
         assert len(data["outputs"]) == 3
 
 
-def test_http_profile_unknown_line_404():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/sensitivity/profiles/does-not-exist")
+def test_http_profile_unknown_line_404(client_with_auth):
+        r = client_with_auth.get("/api/sensitivity/profiles/does-not-exist")
         assert r.status_code == 404
 
 
-def test_http_analyze_1d_success():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_analyze_1d_success(client_with_auth):
         body = {
             "line_id": "residential",
             "output_id": "dynamic_irr",
@@ -354,7 +345,7 @@ def test_http_analyze_1d_success():
             "input1_step": 0.02,
             "base_overrides": {"dynamic_irr": 0.18},
         }
-        r = client.post("/api/sensitivity/analyze", json=body)
+        r = client_with_auth.post("/api/sensitivity/analyze", json=body)
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["line_id"] == "residential"
@@ -367,9 +358,7 @@ def test_http_analyze_1d_success():
         assert len(data["scenarios"]) == 3
 
 
-def test_http_analyze_2d_success():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_analyze_2d_success(client_with_auth):
         body = {
             "line_id": "residential",
             "output_id": "dynamic_irr",
@@ -381,7 +370,7 @@ def test_http_analyze_2d_success():
             "input2_step": 0.01,
             "base_overrides": {"dynamic_irr": 0.18},
         }
-        r = client.post("/api/sensitivity/analyze", json=body)
+        r = client_with_auth.post("/api/sensitivity/analyze", json=body)
         assert r.status_code == 200, r.text
         data = r.json()
         rows, cols = len(data["matrix"]), len(data["matrix"][0])
@@ -392,37 +381,31 @@ def test_http_analyze_2d_success():
         assert len(data["scenarios"]) == 7
 
 
-def test_http_analyze_unknown_output_400():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_analyze_unknown_output_400(client_with_auth):
         body = {
             "line_id": "residential",
             "output_id": "not_real",
             "input1_id": "avg_price",
             "input2_id": None,
         }
-        r = client.post("/api/sensitivity/analyze", json=body)
+        r = client_with_auth.post("/api/sensitivity/analyze", json=body)
         # Bad IDs surface as 400 from the router's KeyError handler.
         assert r.status_code in (400, 404)
 
 
-def test_http_analyze_unknown_line_404():
-    app = create_app()
-    with TestClient(app) as client:
+def test_http_analyze_unknown_line_404(client_with_auth):
         body = {
             "line_id": "does-not-exist",
             "output_id": "x",
             "input1_id": "y",
             "input2_id": None,
         }
-        r = client.post("/api/sensitivity/analyze", json=body)
+        r = client_with_auth.post("/api/sensitivity/analyze", json=body)
         assert r.status_code == 404
 
 
-def test_http_scenarios_endpoint():
-    app = create_app()
-    with TestClient(app) as client:
-        r = client.get("/api/sensitivity/scenarios/retail")
+def test_http_scenarios_endpoint(client_with_auth):
+        r = client_with_auth.get("/api/sensitivity/scenarios/retail")
         assert r.status_code == 200
         data = r.json()
         assert data["line_id"] == "retail"
@@ -439,7 +422,7 @@ def test_http_scenarios_endpoint():
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def test_universality_with_temp_line(repo_root, tmp_path, monkeypatch):
+def test_universality_with_temp_line(repo_root, tmp_path, monkeypatch, client_with_auth):
     """A throwaway line + sensitivity.yaml should be auto-discoverable
     without any change to engine code."""
     import shutil

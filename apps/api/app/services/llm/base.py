@@ -33,12 +33,23 @@ class LLMBackend(Protocol):
 
     name: str
 
-    async def complete(self, prompt: str, *, max_tokens: int = 1024) -> str:
+    async def complete(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 1024,
+        system_prompt: str | None = None,
+    ) -> str:
         """Return a completion for the given prompt.
 
         Implementations MUST be safe to call concurrently. A request must
         never raise for transient errors — instead return a friendly
         fallback string so the Copilot can wrap it in a citation.
+
+        ``system_prompt`` is an optional override used by the RBAC-aware
+        call site to inject the current user context. Backends that
+        don't have a separate system-prompt channel (e.g. the mock)
+        can ignore it.
         """
         ...
 

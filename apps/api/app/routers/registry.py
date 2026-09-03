@@ -28,8 +28,13 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
+from ..core.auth import CurrentUser, get_current_user
+from ..core.rbac import (
+    business_line_router_guard,
+    filter_accessible_lines,
+)
 from ..core.registry import RegistryEntry, load_registry, registry_version
 from ..core.logging import get_logger
 
@@ -139,15 +144,31 @@ def build_registry_router() -> APIRouter:
     r = APIRouter(prefix="/api/registry", tags=["registry"])
 
     @r.get("/lines")
-    async def list_lines() -> dict:
+    async def list_lines(
+        user: CurrentUser = Depends(get_current_user),
+    ) -> dict:
         entries = load_registry()
+        all_ids = [e.line.id for e in entries]
+        allowed_ids = set(filter_accessible_lines(user, all_ids))
+        filtered = [e for e in entries if e.line.id in allowed_ids]
         return {
             "version": registry_version(),
-            "lines": [_summarize_line(e) for e in entries],
+            "lines": [_summarize_line(e) for e in filtered],
+            "total_registered": len(entries),
         }
 
     @r.get("/lines/{line_id}")
-    async def get_line(line_id: str) -> dict:
+    async def get_line(
+        line_id: str,
+        user: CurrentUser = Depends(get_current_user),
+    ) -> dict:
+        # Enforce access via the same rule as list_lines.
+        all_ids = [e.line.id for e in load_registry()]
+        if line_id not in set(filter_accessible_lines(user, all_ids)):
+            raise HTTPException(
+                status_code=403,
+                detail=f"no access to business line: {line_id}",
+            )
         for entry in load_registry():
             if entry.line.id == line_id:
                 return {
@@ -169,14 +190,96 @@ def mount_business_line_routers(app: FastAPI) -> None:
 
     Mounted at startup (see app.main.lifespan). Errors for one line do not
     prevent the others from mounting.
+
+    RBAC: each mounted line router is wrapped with a guard dependency
+    that requires the caller to be authenticated AND to have access to
+    the specific line id. So a user with only ``bp:residential`` cannot
+    hit ``/api/lines/retail/...`` even if they know the URL.
     """
     for entry, obj in discover_business_line_routers():
         prefix = entry.line.api_prefix
+        line_id = entry.line.id
         if isinstance(obj, FastAPI):
-            # A FastAPI sub-app: mount it.
+            # A FastAPI sub-app: we cannot inject deps via include_router
+            # for mounts, so add a Starlette middleware on the sub-app
+            # that enforces auth + line access. We attach the line id
+            # as an attribute so the middleware knows which line it
+            # guards. The middleware calls the *patchable*
+            # ``_load_user_by_id`` so unit tests can swap in a fake
+            # user store without hitting the real DB.
+            from starlette.middleware.base import BaseHTTPMiddleware
+            from starlette.responses import JSONResponse
+            from ..core.auth import _cookie_name, decode_token, _load_user_by_id
+
+            line_id_for_guard = line_id
+
+            class _LineGuardMiddleware(BaseHTTPMiddleware):
+                async def dispatch(self, request, call_next):
+                    token = request.cookies.get(_cookie_name())
+                    if not token:
+                        auth = request.headers.get("authorization") or request.headers.get(
+                            "Authorization"
+                        )
+                        if auth and auth.lower().startswith("bearer "):
+                            token = auth.split(" ", 1)[1].strip()
+                    if not token:
+                        return JSONResponse(
+                            {"detail": "not authenticated"},
+                            status_code=401,
+                        )
+                    try:
+                        payload = decode_token(token)
+                    except Exception:
+                        return JSONResponse(
+                            {"detail": "invalid token"},
+                            status_code=401,
+                        )
+                    try:
+                        user = await _load_user_by_id(int(payload.sub))
+                    except Exception:
+                        return JSONResponse(
+                            {"detail": "auth backend unavailable"},
+                            status_code=503,
+                        )
+                    if user is None:
+                        return JSONResponse(
+                            {"detail": "user not found or inactive"},
+                            status_code=401,
+                        )
+                    if (
+                        user.has_admin()
+                        or user.has_auditor()
+                        or "viewer" in user.roles
+                        or f"bp:{line_id_for_guard}" in user.roles
+                        or line_id_for_guard in user.accessible_lines
+                    ):
+                        return await call_next(request)
+                    return JSONResponse(
+                        {
+                            "detail": (
+                                f"no access to business line '{line_id_for_guard}'; "
+                                f"user has roles={sorted(user.roles)}"
+                            )
+                        },
+                        status_code=403,
+                    )
+
+            obj.add_middleware(_LineGuardMiddleware)
             app.mount(prefix, obj)
-            logger.info("Mounted business line '%s' (FastAPI sub-app) at %s", entry.line.id, prefix)
+            logger.info(
+                "Mounted business line '%s' (FastAPI sub-app, line-guard) at %s",
+                entry.line.id,
+                prefix,
+            )
         else:
-            # APIRouter
-            app.include_router(obj, prefix=prefix)
-            logger.info("Mounted business line '%s' (APIRouter) at %s", entry.line.id, prefix)
+            # APIRouter: include_router supports dependencies= kwarg.
+            app.include_router(
+                obj,
+                prefix=prefix,
+                dependencies=[Depends(business_line_router_guard(line_id))],
+            )
+            logger.info(
+                "Mounted business line '%s' (APIRouter, line-guard) at %s",
+                entry.line.id,
+                prefix,
+            )

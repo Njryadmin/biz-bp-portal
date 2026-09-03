@@ -1,18 +1,22 @@
 """
 apps/api/app/db/bootstrap.py
 
-Schema bootstrap for the data-integration layer.
+Schema bootstrap for the data-integration + auth layer.
 
-Creates the ``raw`` schema and the ``raw.uploads`` table if they don't
-already exist. Called from ``apps.api.app.db.session.init_db`` at app
-startup, which is itself invoked from the FastAPI lifespan handler.
+Creates (idempotently) the schemas and tables that the rest of the app
+expects to find on first boot. The DDL is split into two groups:
 
-All DDL is idempotent (``CREATE ... IF NOT EXISTS``), so this is safe
-to call on every boot.
+1. ``SCHEMA_DDL`` — the legacy ``raw`` schema + ``raw.uploads`` table
+   (data-integration), preserved verbatim from the original file.
+
+2. ``AUTH_DDL`` — the new RBAC tables (``users``, ``user_roles``,
+   ``user_business_lines``, ``raw.audit_log``) introduced for the
+   2026-09-03 RBAC deliverable.
+
+All DDL is idempotent (``CREATE ... IF NOT EXISTS`` / ``ADD ... IF NOT
+EXISTS``), so this is safe to call on every boot.
 """
 from __future__ import annotations
-
-import asyncio
 
 from sqlalchemy import text
 
@@ -72,8 +76,79 @@ SCHEMA_DDL: list[str] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# RBAC DDL — created 2026-09-03
+# ---------------------------------------------------------------------------
+
+AUTH_DDL: list[str] = [
+    # -----------------------------------------------------------------------
+    # users — every login principal. ``password_hash`` is bcrypt.
+    # -----------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id            SERIAL PRIMARY KEY,
+        username      TEXT UNIQUE NOT NULL,
+        email         TEXT UNIQUE,
+        password_hash TEXT NOT NULL,
+        display_name  TEXT,
+        is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    # -----------------------------------------------------------------------
+    # user_roles — many-to-many (user, role). Role strings are open
+    # (admin / viewer / auditor / bp:<line_id>).
+    # -----------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS user_roles (
+        user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role       TEXT NOT NULL,
+        granted_by INT REFERENCES users(id),
+        granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, role)
+    )
+    """,
+    # -----------------------------------------------------------------------
+    # user_business_lines — explicit list of line ids a user can see.
+    # Always kept in sync with bp:<line_id> roles (a role row and a
+    # business-line row are inserted together).
+    # -----------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS user_business_lines (
+        user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        line_id    TEXT NOT NULL,
+        granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, line_id)
+    )
+    """,
+    # -----------------------------------------------------------------------
+    # raw.audit_log — one row per HTTP request, written by AuditMiddleware.
+    # We keep it in the ``raw`` schema so it doesn't pollute the public
+    # warehouse and so the same retention policy applies.
+    # -----------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS raw.audit_log (
+        id           SERIAL PRIMARY KEY,
+        user_id      INT,
+        username     TEXT,
+        method       TEXT NOT NULL,
+        path         TEXT NOT NULL,
+        query        TEXT,
+        status_code  INT NOT NULL,
+        duration_ms  INT NOT NULL,
+        ip           TEXT,
+        user_agent   TEXT,
+        "timestamp"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_audit_log_user ON raw.audit_log(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_audit_log_ts ON raw.audit_log(\"timestamp\" DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_audit_log_path ON raw.audit_log(path)",
+]
+
+
 async def ensure_raw_schema() -> None:
-    """Create the ``raw`` schema + ``raw.uploads`` table if missing.
+    """Create the ``raw`` schema + ``raw.uploads`` table + RBAC tables if missing.
 
     The engine has ``connect_args={"timeout": 2}`` so a missing
     PostgreSQL server fails fast. ``init_db`` adds an outer
@@ -84,4 +159,6 @@ async def ensure_raw_schema() -> None:
     eng = engine()
     async with eng.begin() as conn:
         for stmt in SCHEMA_DDL:
+            await conn.execute(text(stmt))
+        for stmt in AUTH_DDL:
             await conn.execute(text(stmt))

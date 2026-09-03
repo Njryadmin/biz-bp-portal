@@ -9,20 +9,25 @@ all business lines).
 
 Endpoints:
 
-* GET  /rules/{line_id}                — list all rules for a line
+* GET  /rules/{line_id}                — list all rules for a line (RBAC)
 * GET  /rules/{line_id}/summary        — rule summary (counts by severity)
-* POST /check                          — run a check; persist triggered alerts
+* GET  /profiles                      — list line profiles (filtered)
+* POST /check                          — run a check; line access required
 * GET  /history                        — recent triggered alerts (paginated)
 * POST /acknowledge/{alert_id}         — mark one alert as acknowledged
-* DELETE /{alert_id}                   — soft-delete an alert
+                                          (RBAC: line write)
+* DELETE /{alert_id}                   — soft-delete an alert (RBAC: line
+                                          write)
 
 The engine itself lives in `app.services.alert_engine`.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from ..core.auth import CurrentUser, get_current_user
 from ..core.logging import get_logger
+from ..core.rbac import filter_accessible_lines, require_business_line
 from ..services.alert_engine import (
     AlertCheckRequest,
     AlertCheckResult,
@@ -32,6 +37,7 @@ from ..services.alert_engine import (
     acknowledge,
     check,
     delete,
+    get_alert,
     history,
     list_profiles,
     load_profile,
@@ -49,9 +55,13 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 @router.get(
     "/rules/{line_id}",
-    summary="List alert rules for a business line",
+    summary="List alert rules for a business line (RBAC)",
 )
-async def list_rules_endpoint(line_id: str) -> dict:
+async def list_rules_endpoint(
+    line_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    await require_business_line(line_id, user)
     try:
         p = load_profile(line_id)
     except FileNotFoundError as exc:
@@ -67,9 +77,13 @@ async def list_rules_endpoint(line_id: str) -> dict:
 
 @router.get(
     "/rules/{line_id}/summary",
-    summary="Rule summary: counts by severity + enabled/disabled",
+    summary="Rule summary: counts by severity + enabled/disabled (RBAC)",
 )
-async def rules_summary_endpoint(line_id: str) -> dict:
+async def rules_summary_endpoint(
+    line_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    await require_business_line(line_id, user)
     try:
         p = load_profile(line_id)
     except FileNotFoundError as exc:
@@ -95,18 +109,21 @@ async def rules_summary_endpoint(line_id: str) -> dict:
 
 @router.get(
     "/profiles",
-    summary="List alert profiles for all business lines that have one",
+    summary="List alert profiles for business lines the user can access",
 )
-async def list_profiles_endpoint() -> dict:
+async def list_profiles_endpoint(
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
     line_ids = list_profiles()
+    allowed = filter_accessible_lines(user, line_ids)
     return {
-        "count": len(line_ids),
+        "count": len(allowed),
         "lines": [
             {
                 "line_id": lid,
                 "rule_count": len(load_profile(lid).rules),
             }
-            for lid in line_ids
+            for lid in allowed
         ],
     }
 
@@ -119,9 +136,13 @@ async def list_profiles_endpoint() -> dict:
 @router.post(
     "/check",
     response_model=AlertCheckResult,
-    summary="Run a check; returns triggered alerts (also persisted unless dry_run=true)",
+    summary="Run a check; returns triggered alerts (RBAC: line write)",
 )
-async def check_endpoint(req: AlertCheckRequest) -> AlertCheckResult:
+async def check_endpoint(
+    req: AlertCheckRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> AlertCheckResult:
+    await require_business_line(req.line_id, user, require_write=True)
     try:
         profile = load_profile(req.line_id)
     except FileNotFoundError as exc:
@@ -130,27 +151,48 @@ async def check_endpoint(req: AlertCheckRequest) -> AlertCheckResult:
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# History (read-only)
+# History (read-only, filtered by accessible lines)
 # ─────────────────────────────────────────────────────────────────────────
 
 
 @router.get(
     "/history",
     response_model=AlertHistoryResponse,
-    summary="Recent triggered alerts (newest first), paginated",
+    summary="Recent triggered alerts (newest first), paginated; filtered to accessible lines",
 )
 async def history_endpoint(
     line_id: str | None = Query(None, description="filter by business line id"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    user: CurrentUser = Depends(get_current_user),
 ) -> AlertHistoryResponse:
-    items, total = history(line_id, limit, offset)
+    # If a specific line is requested, require line access; otherwise
+    # the engine filters to the union of accessible lines.
+    if line_id is not None:
+        await require_business_line(line_id, user)
+        items, total = history(line_id, limit, offset)
+        return AlertHistoryResponse(
+            line_id=line_id, total=total, limit=limit, offset=offset, items=items
+        )
+    # No line filter — restrict to the union of accessible lines.
+    allowed = filter_accessible_lines(user, list_profiles())
+    if not allowed:
+        return AlertHistoryResponse(
+            line_id=None, total=0, limit=limit, offset=offset, items=[]
+        )
+    items_all: list = []
+    total_all = 0
+    for lid in allowed:
+        its, tot = history(lid, limit, offset)
+        items_all.extend(its)
+        total_all += tot
+    # sort newest first by triggered_at
+    items_all.sort(
+        key=lambda x: getattr(x, "triggered_at", None) or "", reverse=True
+    )
+    items_all = items_all[:limit]
     return AlertHistoryResponse(
-        line_id=line_id,
-        total=total,
-        limit=limit,
-        offset=offset,
-        items=items,
+        line_id=None, total=total_all, limit=limit, offset=offset, items=items_all
     )
 
 
@@ -162,9 +204,19 @@ async def history_endpoint(
 @router.post(
     "/acknowledge/{alert_id}",
     response_model=TriggeredAlert,
-    summary="Mark an alert as acknowledged",
+    summary="Mark an alert as acknowledged (RBAC: line write)",
 )
-async def acknowledge_endpoint(alert_id: str) -> TriggeredAlert:
+async def acknowledge_endpoint(
+    alert_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> TriggeredAlert:
+    # Look up the alert to know its line_id, then check write access.
+    alert = get_alert(alert_id)
+    if alert is None:
+        raise HTTPException(
+            status_code=404, detail=f"alert not found: {alert_id}"
+        )
+    await require_business_line(alert.line_id, user, require_write=True)
     acked = acknowledge(alert_id)
     if acked is None:
         raise HTTPException(status_code=404, detail=f"alert not found: {alert_id}")
@@ -173,9 +225,18 @@ async def acknowledge_endpoint(alert_id: str) -> TriggeredAlert:
 
 @router.delete(
     "/{alert_id}",
-    summary="Soft-delete (resolve / ignore) an alert",
+    summary="Soft-delete (resolve / ignore) an alert (RBAC: line write)",
 )
-async def delete_endpoint(alert_id: str) -> dict:
+async def delete_endpoint(
+    alert_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    alert = get_alert(alert_id)
+    if alert is None:
+        raise HTTPException(
+            status_code=404, detail=f"alert not found: {alert_id}"
+        )
+    await require_business_line(alert.line_id, user, require_write=True)
     ok = delete(alert_id)
     if not ok:
         raise HTTPException(status_code=404, detail=f"alert not found: {alert_id}")

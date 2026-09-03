@@ -57,23 +57,32 @@ function saveCollapsed(set: Set<string>): void {
 
 export interface SidebarMenuProps {
   lines: BusinessLine[];
+  /**
+   * Line ids the active user can see. When provided, lines NOT in
+   * this set are hidden from the sidebar. Defaults to showing every
+   * line in the `lines` prop (back-compat for admin-only views).
+   */
+  accessibleLineIds?: string[];
 }
 
-export function SidebarMenu({ lines }: SidebarMenuProps) {
+export function SidebarMenu({ lines, accessibleLineIds }: SidebarMenuProps) {
   const pathname = usePathname() ?? "/dashboard";
 
   // -------------------------------------------------------------------------
-  // Sort business lines by display name (zh-CN friendly)
+  // Filter to accessible lines (when provided) + sort by display name
+  // (zh-CN friendly)
   // -------------------------------------------------------------------------
-  const sorted = useMemo(
-    () =>
-      [...lines].sort((a, b) =>
-        displayName(a).localeCompare(displayName(b), "zh-Hans-CN", {
-          sensitivity: "base",
-        }),
-      ),
-    [lines],
-  );
+  const sorted = useMemo(() => {
+    const filtered =
+      accessibleLineIds && accessibleLineIds.length > 0
+        ? lines.filter((l) => accessibleLineIds.includes(l.id))
+        : lines;
+    return [...filtered].sort((a, b) =>
+      displayName(a).localeCompare(displayName(b), "zh-Hans-CN", {
+        sensitivity: "base",
+      }),
+    );
+  }, [lines, accessibleLineIds]);
 
   // -------------------------------------------------------------------------
   // Determine which business line is "active" (i.e. owns the current path).

@@ -16,8 +16,11 @@ from .core.config import get_settings
 from .core.logging import get_logger
 from .core.registry import get_project_root
 from .db import init_db
+from .db.seed_users import seed_initial_users
+from .middleware import AuditMiddleware
 from .routers import build_registry_router
 from .routers.alerts import router as alerts_router
+from .routers.auth import router as auth_router
 from .routers.copilot import router as copilot_router
 from .routers.forecast import router as forecast_router
 from .routers.registry import mount_business_line_routers
@@ -56,6 +59,14 @@ async def lifespan(app: FastAPI):
         logger.warning(
             "init_db failed at lifespan level (continuing without DB): %s", exc
         )
+    # First-boot RBAC seed (admin + 1 BP per line). Best-effort:
+    # never block startup on this.
+    try:
+        await seed_initial_users()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "seed_initial_users failed (continuing without seeded users): %s", exc
+        )
     yield
 
 
@@ -75,6 +86,13 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Audit middleware sits inside CORS so it can read the cookie /
+    # Authorization header that the browser sent. It writes one row
+    # per request to raw.audit_log (best-effort).
+    app.add_middleware(AuditMiddleware)
+
+    # Authentication / user management
+    app.include_router(auth_router)
 
     # Generic registry endpoints
     app.include_router(build_registry_router())
@@ -103,6 +121,7 @@ def create_app() -> FastAPI:
             "service": "fin-bp-portal-api",
             "version": app.version,
             "registry": "/api/registry/lines",
+            "auth": "/api/auth/me",
         }
 
     @app.get("/healthz")

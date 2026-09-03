@@ -703,3 +703,8 @@ def reset_store() -> None:
 def get_store() -> _AlertStore:
     """For tests that need to inspect the store directly."""
     return _STORE
+
+
+def get_alert(alert_id: str) -> TriggeredAlert | None:
+    """Public helper: look up a single alert by id (used by RBAC check)."""
+    return _STORE.get(alert_id)

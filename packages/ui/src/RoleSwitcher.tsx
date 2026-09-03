@@ -1,18 +1,15 @@
 // packages/ui/src/RoleSwitcher.tsx
 //
-// UI-only role switcher placeholder. The list of roles is GENERATED from
-// the business-line registry passed via the `lines` prop — there is no
-// hardcoded list of business lines here. The role set is:
-//
-//   {Admin} ∪ {BP-<line.display_name> | line ∈ lines}
-//
-// This keeps the UI component decoupled from any specific business line
-// (e.g. "BP-Residential" / "BP-Retail"); adding a new line to the
-// registry automatically grows the role list. See T6 review #2.
+// Registry-driven role switcher that shows the active user's roles
+// (read-only badge) and — for admin users — a dropdown to switch the
+// "active viewing role" persisted in localStorage. The dropdown does
+// NOT change the user's identity; it only changes which business line
+// the dashboard sidebar highlights. Real user-management is done via
+// the API at /api/auth/users.
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dropdown, Tag } from "antd";
 import { CaretDownOutlined, UserSwitchOutlined } from "@ant-design/icons";
 
@@ -27,11 +24,6 @@ export const ADMIN_ROLE: RoleName = "Admin";
  */
 export const DEFAULT_ROLES: RoleName[] = [ADMIN_ROLE];
 
-/**
- * Minimal shape of a business line that this component needs. We use
- * a local interface (instead of importing from @fin-bp/types) to keep
- * @fin-bp/ui free of cross-package type deps that could cycle.
- */
 export interface RoleSwitcherLine {
   id: string;
   display_name?: string | null;
@@ -51,6 +43,12 @@ export interface RoleSwitcherProps {
   onChange?: (role: RoleName) => void;
   /** Optional fixed role for read-only contexts. */
   value?: RoleName;
+  /**
+   * Active user's roles — when provided, the switcher is read-only
+   * and just displays the roles as tags. When null/undefined, the
+   * switcher falls back to the legacy "pick a role" dropdown.
+   */
+  activeRoles?: RoleName[] | null;
 }
 
 function lineRoleId(line: RoleSwitcherLine): RoleName {
@@ -65,11 +63,29 @@ export function buildRoles(lines: RoleSwitcherLine[] | undefined): RoleName[] {
   return out;
 }
 
+function humaniseRole(role: string): string {
+  // bp:residential → "BP: residential"
+  if (role.startsWith("bp:")) return `BP: ${role.slice(3)}`;
+  if (role === "auditor") return "Auditor";
+  if (role === "viewer") return "Viewer";
+  if (role === "admin") return "Admin";
+  return role;
+}
+
+function roleColor(role: string): string {
+  if (role === "admin") return "red";
+  if (role === "auditor") return "gold";
+  if (role === "viewer") return "blue";
+  if (role.startsWith("bp:")) return "green";
+  return "default";
+}
+
 export function RoleSwitcher({
   lines,
   defaultRole,
   onChange,
   value,
+  activeRoles,
 }: RoleSwitcherProps) {
   const roles = useMemo(() => buildRoles(lines), [lines]);
   const [internal, setInternal] = useState<RoleName>(defaultRole ?? roles[0]);
@@ -79,6 +95,37 @@ export function RoleSwitcher({
   // (e.g. registry reload with fewer lines), fall back to the first.
   const safeCurrent = roles.includes(current) ? current : roles[0];
 
+  // ---- New behaviour: when activeRoles is provided, render the
+  // user's actual roles as read-only tags. --------------------------------
+  if (activeRoles !== undefined && activeRoles !== null) {
+    const tags = activeRoles.length > 0 ? activeRoles : ["(no role)"];
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          color: "#fff",
+          padding: "0 8px",
+          fontSize: 12,
+        }}
+        title="当前用户角色 (read-only)"
+      >
+        <UserSwitchOutlined />
+        {tags.map((r) => (
+          <Tag
+            key={r}
+            color={roleColor(r)}
+            style={{ margin: 0, fontSize: 11, lineHeight: "16px" }}
+          >
+            {humaniseRole(r)}
+          </Tag>
+        ))}
+      </span>
+    );
+  }
+
+  // ---- Legacy behaviour: dropdown of available roles (UI placeholder). --
   return (
     <Dropdown
       trigger={["click"]}

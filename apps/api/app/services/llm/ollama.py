@@ -32,12 +32,19 @@ class OllamaBackend:
         self.base = os.environ.get("OLLAMA_BASE_URL", DEFAULT_BASE).rstrip("/")
         self.model = os.environ.get("OLLAMA_MODEL", DEFAULT_MODEL)
 
-    async def complete(self, prompt: str, *, max_tokens: int = 1024) -> str:
+    async def complete(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 1024,
+        system_prompt: str | None = None,
+    ) -> str:
         url = f"{self.base}/api/chat"
+        sys_msg = system_prompt or "你是一名金融 BP 业务助手。"
         body = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "你是一名金融 BP 业务助手。"},
+                {"role": "system", "content": sys_msg},
                 {"role": "user", "content": prompt},
             ],
             "stream": False,

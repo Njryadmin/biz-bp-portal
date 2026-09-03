@@ -4,6 +4,88 @@ The Fin BP Portal is delivered as a 7-service Docker Compose stack.
 This document covers environment variables, deployment topology, and
 operational commands.
 
+## 0. Authentication / RBAC (2026-09-03)
+
+All API endpoints are gated by the JWT-based RBAC system. On the very
+first boot, the API auto-creates accounts from the business-line
+registry (idempotent — only runs when `users` is empty). See
+**[docs/rbac-2026-09-03-deliverable.md](docs/rbac-2026-09-03-deliverable.md)**
+for the full design.
+
+**Default initial accounts** (rotate in production via PATCH or
+re-create):
+
+| Username | Password | Role | Sees |
+|---|---|---|---|
+| `admin` | `admin123` | `admin` + `auditor` | all 10 lines |
+| `bp-residential` | `bp123456` | `bp:residential` | residential only |
+| `bp-retail` | `bp123456` | `bp:retail` | retail only |
+| `bp-retail-leasing` | `bp123456` | `bp:retail-leasing` | retail-leasing only |
+| `bp-valuation` | `bp123456` | `bp:valuation` | valuation only |
+| `bp-advisory` | `bp123456` | `bp:advisory` | advisory only |
+| `bp-office-leasing` | `bp123456` | `bp:office-leasing` | office-leasing only |
+| `bp-investment` | `bp123456` | `bp:investment` | investment only |
+| `bp-project-management` | `bp123456` | `bp:project-management` | project-management only |
+| `bp-industrial` | `bp123456` | `bp:industrial` | industrial only |
+| `bp-my-line` | `bp123456` | `bp:my-line` | my-line only |
+
+**Required env vars** (add to `.env`):
+
+```bash
+# 32+ chars, generate with: python -c "import secrets; print(secrets.token_urlsafe(48))"
+JWT_SECRET=change-me-in-production-32-chars-min
+
+# Optional overrides
+JWT_ALGORITHM=HS256
+JWT_EXPIRY_HOURS=24
+FIN_BP_BOOTSTRAP_ADMIN_USERNAME=admin
+FIN_BP_BOOTSTRAP_ADMIN_PASSWORD=admin123       # change in prod
+FIN_BP_COOKIE_SECURE=false                     # set true in prod (HTTPS only)
+FIN_BP_COOKIE_NAME=finbp_token
+```
+
+**Smoke test** (after `docker compose up -d`):
+
+```bash
+# 1. 401 without auth
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/api/registry/lines
+# → 401
+
+# 2. login as admin
+curl -s -c /tmp/c.txt -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+# → 200, cookie written to /tmp/c.txt
+
+# 3. registry with cookie
+curl -s -b /tmp/c.txt http://localhost:8000/api/registry/lines | jq '.lines | length'
+# → 10
+
+# 4. login as bp-residential
+curl -s -c /tmp/c.txt -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"bp-residential","password":"bp123456"}' >/dev/null
+curl -s -b /tmp/c.txt http://localhost:8000/api/registry/lines | jq '.lines | length'
+# → 1  (only residential)
+
+# 5. cross-line access denied
+curl -s -b /tmp/c.txt -o /dev/null -w "%{http_code}\n" \
+  http://localhost:8000/api/lines/retail/indicators
+# → 403
+```
+
+**Audit log**: every authenticated request is recorded in
+`raw.audit_log`. Query as admin or auditor:
+
+```bash
+curl -s -b /tmp/c.txt 'http://localhost:8000/api/auth/audit-log?limit=10'
+# Returns { count, items: [{id, user_id, username, method, path, status_code, ...}, ...] }
+```
+
+Retention: the table grows unbounded. Schedule a daily cron (e.g. via
+Airflow) to `DELETE FROM raw.audit_log WHERE "timestamp" < NOW() - INTERVAL '90 days';`
+in production.
+
 ## 1. Topology
 
 ```

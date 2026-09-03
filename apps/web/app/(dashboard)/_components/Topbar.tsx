@@ -1,9 +1,10 @@
 // apps/web/app/(dashboard)/_components/Topbar.tsx
 //
 // Client-side top bar. Right-hand side hosts:
-//   - RoleSwitcher (UI-only placeholder; no auth wiring). Roles are
-//     built dynamically from the `lines` prop — see T6 review #2.
-//   - User menu (UI-only placeholder; no auth wiring)
+//   - RoleSwitcher (now backed by /api/auth/me — read-only display of
+//     the active user's roles)
+//   - User menu with logout button (POST /api/auth/logout then
+//     redirect to /login)
 
 "use client";
 
@@ -11,7 +12,11 @@ import { Avatar, Dropdown, Space } from "antd";
 import * as Icons from "@ant-design/icons";
 import { RoleSwitcher } from "@fin-bp/ui";
 import type { BusinessLine } from "@fin-bp/types";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useCallback } from "react";
+import type { CurrentUser } from "../../../lib/auth";
+import { logout } from "../../../lib/auth";
 
 export interface TopbarProps {
   /**
@@ -19,9 +24,22 @@ export interface TopbarProps {
    * so the role list is data-driven (Admin + one BP role per line).
    */
   lines?: BusinessLine[];
+  /** Current authenticated user (or null if not loaded yet). */
+  user?: CurrentUser | null;
 }
 
-export function Topbar({ lines }: TopbarProps) {
+export function Topbar({ lines, user }: TopbarProps) {
+  const router = useRouter();
+  const onLogout = useCallback(async () => {
+    try {
+      await logout();
+    } catch {
+      // ignore — we'll redirect regardless
+    }
+    router.replace("/login");
+    router.refresh();
+  }, [router]);
+
   return (
     <Space size="middle" align="center">
       {/* Cross-business-line tools */}
@@ -95,14 +113,27 @@ export function Topbar({ lines }: TopbarProps) {
         <Icons.CloudDownloadOutlined />
         市场数据
       </Link>
-      <RoleSwitcher lines={lines} />
+      <RoleSwitcher lines={lines} activeRoles={user?.roles ?? null} />
       <Dropdown
         menu={{
           items: [
-            { key: "profile", label: "Profile (placeholder)", disabled: true },
-            { key: "settings", label: "Settings (placeholder)", disabled: true },
+            {
+              key: "username",
+              label: user?.display_name || user?.username || "Guest",
+              disabled: true,
+            },
+            {
+              key: "lines",
+              label: `可见业务线: ${user?.accessible_lines?.length ?? 0}`,
+              disabled: true,
+            },
             { type: "divider" },
-            { key: "logout", label: "Sign out (placeholder)", disabled: true },
+            {
+              key: "logout",
+              label: "退出登录",
+              icon: <Icons.LogoutOutlined />,
+              onClick: onLogout,
+            },
           ],
         }}
         placement="bottomRight"
@@ -117,8 +148,14 @@ export function Topbar({ lines }: TopbarProps) {
             color: "#fff",
           }}
         >
-          <Avatar size="small" icon={<Icons.UserOutlined />} style={{ background: "#1677ff" }} />
-          <span style={{ fontSize: 13 }}>Guest</span>
+          <Avatar
+            size="small"
+            icon={<Icons.UserOutlined />}
+            style={{ background: "#1677ff" }}
+          />
+          <span style={{ fontSize: 13 }}>
+            {user?.display_name || user?.username || "Guest"}
+          </span>
         </span>
       </Dropdown>
     </Space>
