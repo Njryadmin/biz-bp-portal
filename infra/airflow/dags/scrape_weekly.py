@@ -32,7 +32,7 @@ from airflow.operators.python import PythonOperator
 
 LANDING_DIR = Path(os.environ.get("SCRAPER_LANDING_DIR", "/data/landing/scrapers"))
 DBT_PROJECT_DIR = Path(os.environ.get("DBT_PROJECT_DIR", "/opt/airflow/dbt"))
-API_APP_DIR = Path(os.environ.get("FIN_BP_API_DIR", "/opt/airflow/api"))
+API_APP_DIR = Path(os.environ.get("BIZ_BP_API_DIR", "/opt/airflow/api"))
 PG_HOST = os.environ.get("POSTGRES_HOST", "postgres")
 PG_PORT = int(os.environ.get("POSTGRES_PORT", "5432"))
 PG_USER = os.environ.get("POSTGRES_USER", "finbp")

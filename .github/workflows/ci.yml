@@ -38,8 +38,8 @@ jobs:
           cache: "pip"
       - name: Set project root
         env:
-          FIN_BP_PROJECT_ROOT: ${{ github.workspace }}
+          BIZ_BP_PROJECT_ROOT: ${{ github.workspace }}
         run: |
-          echo "FIN_BP_PROJECT_ROOT=$FIN_BP_PROJECT_ROOT" >> $GITHUB_ENV
+          echo "BIZ_BP_PROJECT_ROOT=$BIZ_BP_PROJECT_ROOT" >> $GITHUB_ENV
       - run: pip install -e ".[dev]"
       - run: pytest -q

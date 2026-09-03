@@ -22,7 +22,7 @@ The engine is INTENTIONALLY GENERIC: it does NOT import any
 
 - ``apps.api.app.core.registry.load_registry()`` for line metadata.
 - HTTP calls to the running API (e.g. ``GET /api/lines/{line}/projects``).
-  The base URL is ``FIN_BP_API_BASE`` (default http://localhost:8769).
+  The base URL is ``BIZ_BP_API_BASE`` (default http://localhost:8769).
 - The mock backend's helper functions, which do the same HTTP calls.
 
 A new business line that exposes ``/projects`` (or ``/properties``) and
@@ -432,7 +432,7 @@ class CopilotEngine:
         return CopilotHealth(
             backend=backend.name,
             available_lines=[e.line.id for e in entries],
-            api_base=os.environ.get("FIN_BP_API_BASE", "http://localhost:8769"),
+            api_base=os.environ.get("BIZ_BP_API_BASE", "http://localhost:8769"),
             configured_backend=configured_backend_name(),
             deepseek_key_present=deepseek_key_present,
             ollama_url=ollama_url,

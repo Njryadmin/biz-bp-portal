@@ -43,7 +43,7 @@
 - **算法**: HS256 (PyJWT 2.x; `sub` 必为字符串, 我们额外存 `uid: int` 给代码用)
 - **签名密钥**: `JWT_SECRET` 环境变量 (默认占位符, 生产必须改)
 - **过期**: 默认 24h (`JWT_EXPIRY_HOURS`); 过期返回 401 `{"detail": "token expired"}`
-- **传输**: httpOnly cookie `finbp_token` (默认名, `FIN_BP_COOKIE_NAME` 可改); 同时支持 `Authorization: Bearer <jwt>` header (curl / API client)
+- **传输**: httpOnly cookie `finbp_token` (默认名, `BIZ_BP_COOKIE_NAME` 可改); 同时支持 `Authorization: Bearer <jwt>` header (curl / API client)
 - **撤销**: 改密码即失效 (新 token 中 `iat` 变大); 紧急撤销 = 在 DB 把 `users.is_active = FALSE`
 - **存储安全**: bcrypt cost=12, 永不写明文, 永不入 audit log
 
@@ -115,7 +115,7 @@ raw.audit_log    (id, user_id, username, method, path, query, status_code,
 - 空 → 创建 1 个 admin + 10 个 BP 用户
 - 非空 → 跳过 (idempotent)
 
-**默认账号** (`FIN_BP_*` 环境变量可改):
+**默认账号** (`BIZ_BP_*` 环境变量可改):
 
 | Username | Password | 角色 | 业务线 |
 |---|---|---|---|
@@ -378,7 +378,7 @@ PGPASSWORD=finbp psql -h localhost -U finbp -d finbp -c "SELECT COUNT(*) FROM ra
 - `apps/web/app/(dashboard)/_components/SidebarMenu.tsx`
 - `apps/web/app/(dashboard)/layout.tsx`
 - `packages/ui/src/RoleSwitcher.tsx`
-- `.env.example` (JWT_*, FIN_BP_BOOTSTRAP_*, FIN_BP_COOKIE_*)
+- `.env.example` (JWT_*, BIZ_BP_BOOTSTRAP_*, BIZ_BP_COOKIE_*)
 - `infra/docker-compose.yml` (api 服务的 environment 加 JWT + bootstrap 变量)
 - `DEPLOY.md` (env vars + 初始账号)
 - `README.md` (Authentication 章节)

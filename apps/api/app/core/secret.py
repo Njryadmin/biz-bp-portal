@@ -12,7 +12,7 @@ URL-safe base64 so it round-trips through TEXT columns cleanly.
 
 Key handling
 ------------
-* Production: set ``FIN_BP_AI_SECRET_KEY`` to a 32-byte URL-safe
+* Production: set ``BIZ_BP_AI_SECRET_KEY`` to a 32-byte URL-safe
   base64-encoded secret. ``cryptography.fernet.Fernet.generate_key()``
   produces one.
 * Dev (default): when no key is set the helper degrades to a *plaintext
@@ -45,13 +45,13 @@ def _resolve_secret_key() -> bytes | None:
     """Return the Fernet key, or None for dev-mode plaintext fallback.
 
     Order of resolution:
-      1. ``FIN_BP_AI_SECRET_KEY`` env var (URL-safe base64)
+      1. ``BIZ_BP_AI_SECRET_KEY`` env var (URL-safe base64)
       2. ``ai_secret_key`` field on the Settings object
     Both must decode as a 32-byte Fernet key; bad keys raise
     ``ValueError`` (caller-side error — a misconfigured prod secret
     should be loud, not silently fall back to plaintext).
     """
-    raw = os.environ.get("FIN_BP_AI_SECRET_KEY") or get_settings().ai_secret_key
+    raw = os.environ.get("BIZ_BP_AI_SECRET_KEY") or get_settings().ai_secret_key
     if not raw:
         return None
     try:
@@ -62,7 +62,7 @@ def _resolve_secret_key() -> bytes | None:
         Fernet(key)
     except (ValueError, TypeError) as exc:
         raise ValueError(
-            "FIN_BP_AI_SECRET_KEY is set but is not a valid Fernet key "
+            "BIZ_BP_AI_SECRET_KEY is set but is not a valid Fernet key "
             "(must be 32 URL-safe base64 bytes). Regenerate with "
             "`python -c \"from cryptography.fernet import Fernet; "
             "print(Fernet.generate_key().decode())\"` and update the env var. "
@@ -81,8 +81,8 @@ def _get_fernet() -> Fernet | None:
     if key is None:
         if not _dev_mode_warned:
             _logger.warning(
-                "FIN_BP_AI_SECRET_KEY not set — ai_models.api_key will be "
-                "stored as plaintext. Set FIN_BP_AI_SECRET_KEY in production "
+                "BIZ_BP_AI_SECRET_KEY not set — ai_models.api_key will be "
+                "stored as plaintext. Set BIZ_BP_AI_SECRET_KEY in production "
                 "(generate with `python -c \"from cryptography.fernet import "
                 "Fernet; print(Fernet.generate_key().decode())\"`)."
             )

@@ -7,7 +7,7 @@ Design notes
 ------------
 * Token = HS256 JWT signed with the symmetric secret `JWT_SECRET`.
 * Storage: httpOnly cookie `finbp_token` (configurable via
-  ``FIN_BP_COOKIE_NAME``). NOT localStorage — that would be readable by
+  ``BIZ_BP_COOKIE_NAME``). NOT localStorage — that would be readable by
   any XSS payload.
 * Password hashing: passlib's bcrypt implementation. We expose only
   ``hash_password`` / ``verify_password`` so the rest of the app never
@@ -364,7 +364,7 @@ async def _load_user_by_credentials(
 
 def _cookie_name() -> str:
     settings = get_settings()
-    return os.environ.get("FIN_BP_COOKIE_NAME") or settings.cookie_name or "finbp_token"
+    return os.environ.get("BIZ_BP_COOKIE_NAME") or settings.cookie_name or "finbp_token"
 
 
 async def get_current_user(
@@ -375,7 +375,7 @@ async def get_current_user(
 
     Order of precedence:
       0. ``X-Service-Token`` header (internal service-to-service auth).
-         Matched against ``FIN_BP_SERVICE_TOKEN`` env var. The synthetic
+         Matched against ``BIZ_BP_SERVICE_TOKEN`` env var. The synthetic
          user has ``admin`` role and access to every line. Used by the
          Copilot mock engine which makes in-process HTTP calls to fetch
          data and therefore cannot supply a per-user cookie.
@@ -385,7 +385,7 @@ async def get_current_user(
     Raises 401 on missing / invalid / expired tokens.
     """
     # 0. Service-token (in-process service-to-service)
-    service_token = os.environ.get("FIN_BP_SERVICE_TOKEN")
+    service_token = os.environ.get("BIZ_BP_SERVICE_TOKEN")
     if service_token:
         supplied = request.headers.get("x-service-token")
         if supplied and supplied == service_token:

@@ -123,7 +123,7 @@
 
 ```powershell
 # 在 apps/api 下
-$env:FIN_BP_PROJECT_ROOT = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal"
+$env:BIZ_BP_PROJECT_ROOT = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal"
 uvicorn app.main:app --port 8000
 
 # 另开终端

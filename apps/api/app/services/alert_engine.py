@@ -303,7 +303,7 @@ _STORE = _AlertStore()
 # ─────────────────────────────────────────────────────────────────────────
 
 
-API_BASE = os.environ.get("FIN_BP_API_BASE", "http://127.0.0.1:8769")
+API_BASE = os.environ.get("BIZ_BP_API_BASE", "http://127.0.0.1:8769")
 
 
 def _http_json(path: str) -> dict[str, Any] | None:

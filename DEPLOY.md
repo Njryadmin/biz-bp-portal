@@ -38,10 +38,10 @@ JWT_SECRET=change-me-in-production-32-chars-min
 # Optional overrides
 JWT_ALGORITHM=HS256
 JWT_EXPIRY_HOURS=24
-FIN_BP_BOOTSTRAP_ADMIN_USERNAME=admin
-FIN_BP_BOOTSTRAP_ADMIN_PASSWORD=admin123       # change in prod
-FIN_BP_COOKIE_SECURE=false                     # set true in prod (HTTPS only)
-FIN_BP_COOKIE_NAME=finbp_token
+BIZ_BP_BOOTSTRAP_ADMIN_USERNAME=admin
+BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD=admin123       # change in prod
+BIZ_BP_COOKIE_SECURE=false                     # set true in prod (HTTPS only)
+BIZ_BP_COOKIE_NAME=finbp_token
 ```
 
 **Smoke test** (after `docker compose up -d`):
@@ -105,7 +105,7 @@ in production.
 │  ├─ 4 universal engines (Sensitivity, Copilot, Forecast, Alts)│
 │  ├─ 3 scrapers (NBS, Lianjia, Policy)                         │
 │  ├─ dynamic business-line discovery via importlib             │
-│  └─ FIN_BP_API_BASE=http://api:8000 (self-call for engines)  │
+│  └─ BIZ_BP_API_BASE=http://api:8000 (self-call for engines)  │
 └─────────────────┬───────────────────────────────────────────────┘
                   │
                   ▼
@@ -133,9 +133,9 @@ in production.
 
 | Var | Where | Default | Purpose |
 |---|---|---|---|
-| `FIN_BP_PROJECT_ROOT` | api | `/app` | Path to project root inside container |
-| `FIN_BP_API_BASE` | api | `http://api:8000` | How engines call back to the API |
-| `FIN_BP_DATABASE_URL` | api | (built from PG creds) | asyncpg connection string |
+| `BIZ_BP_PROJECT_ROOT` | api | `/app` | Path to project root inside container |
+| `BIZ_BP_API_BASE` | api | `http://api:8000` | How engines call back to the API |
+| `BIZ_BP_DATABASE_URL` | api | (built from PG creds) | asyncpg connection string |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | compose | finbp/finbp/finbp | Postgres credentials |
 | `NEXT_PUBLIC_API_BASE_URL` | web (build-time) | `http://api:8000` | Where the BFF proxies forward |
 

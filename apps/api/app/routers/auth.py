@@ -74,7 +74,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def _cookie_settings() -> dict:
     """Return kwargs for ``Response.set_cookie`` derived from env / config."""
     settings = get_settings()
-    secure_env = os.environ.get("FIN_BP_COOKIE_SECURE")
+    secure_env = os.environ.get("BIZ_BP_COOKIE_SECURE")
     secure = (
         secure_env.lower() in {"1", "true", "yes"}
         if secure_env is not None

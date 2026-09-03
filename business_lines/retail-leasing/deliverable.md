@@ -96,7 +96,7 @@ business_lines/retail-leasing/
 
 ```powershell
 $env:PYTHONPATH = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal\apps\api"
-$env:FIN_BP_PROJECT_ROOT = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal"
+$env:BIZ_BP_PROJECT_ROOT = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal"
 Set-Location C:\Users\mozzi\.mavis\workspace\fin-bp-portal\apps\api
 python -m uvicorn app.main:app --port 8767
 

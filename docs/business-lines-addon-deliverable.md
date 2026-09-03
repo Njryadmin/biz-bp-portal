@@ -399,7 +399,7 @@ Once the init_db issue in `apps/api/app/db/session.py` is fixed:
 
 ```powershell
 $env:PYTHONPATH = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal\apps\api"
-$env:FIN_BP_PROJECT_ROOT = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal"
+$env:BIZ_BP_PROJECT_ROOT = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal"
 cd "C:\Users\mozzi\.mavis\workspace\fin-bp-portal\apps\api"
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8769 --log-level info
 ```

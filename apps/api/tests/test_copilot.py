@@ -440,7 +440,7 @@ async def projects():
             # approach is sufficient because load_registry() reads
             # get_project_root() each call.
             import os
-            os.environ["FIN_BP_PROJECT_ROOT"] = str(repo_root)
+            os.environ["BIZ_BP_PROJECT_ROOT"] = str(repo_root)
             from app.core import registry as core_registry
             core_registry.get_project_root.cache_clear()
 

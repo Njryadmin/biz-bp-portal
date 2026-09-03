@@ -39,9 +39,9 @@ INTENT_CONFIDENCE: dict[str, float] = {
     "fallback_unknown": 0.30,
 }
 
-API_BASE = os.environ.get("FIN_BP_API_BASE", "http://127.0.0.1:8769")
-HTTP_TIMEOUT = float(os.environ.get("FIN_BP_COPILOT_HTTP_TIMEOUT", "2.0"))
-SERVICE_TOKEN = os.environ.get("FIN_BP_SERVICE_TOKEN", "")
+API_BASE = os.environ.get("BIZ_BP_API_BASE", "http://127.0.0.1:8769")
+HTTP_TIMEOUT = float(os.environ.get("BIZ_BP_COPILOT_HTTP_TIMEOUT", "2.0"))
+SERVICE_TOKEN = os.environ.get("BIZ_BP_SERVICE_TOKEN", "")
 
 # ---------------------------------------------------------------------------
 # Per-line endpoint conventions
@@ -116,7 +116,7 @@ def _http_json(path: str, base: str | None = None) -> dict[str, Any] | None:
     down. Errors are logged at debug level by the engine caller.
 
     The mock engine runs INSIDE the API process, so it cannot carry the
-    user's cookie. When a service token is configured (``FIN_BP_SERVICE_TOKEN``
+    user's cookie. When a service token is configured (``BIZ_BP_SERVICE_TOKEN``
     must be set on the API server AND in this process), we send it as
     ``X-Service-Token`` so the API grants admin-equivalent access to the
     internal caller. Without a configured service token, the call is

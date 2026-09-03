@@ -377,7 +377,7 @@ docker exec -it finbp-postgres psql -U finbp -d finbp \
    The docker-compose sets up the matching service, so when running
    inside docker the URL becomes
    `postgresql+asyncpg://finbp:finbp@postgres:5432/finbp` (override via
-   `FIN_BP_DATABASE_URL`). For local dev without docker, the upload
+   `BIZ_BP_DATABASE_URL`). For local dev without docker, the upload
    route will return 500 until you point it at a reachable Postgres.
 
 3. **Airflow image extras.** The base `apache/airflow:2.8-python11`

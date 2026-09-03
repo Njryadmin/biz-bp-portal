@@ -226,7 +226,7 @@ SYSTEM_PROMPT: str = """你是 Fin BP Portal 的 AI Copilot,一名专业的金�
 【跨业务线端点】
 {cross_endpoints}
 
-API 基础地址 (FIN_BP_API_BASE): {api_base}
+API 基础地址 (BIZ_BP_API_BASE): {api_base}
 
 【数据来源原则(强约束)】
 1. 必须仅基于上方"上下文数据"块中已抓取到的数据回答,不得编造任何数字、项目名、城市、IRR、收缴率等。
@@ -284,7 +284,7 @@ def render_system_prompt(api_base: str | None = None) -> str:
     Called by backends before sending the request. The result is cached
     on the backend instance (the registry doesn't change at runtime).
     """
-    api_base = api_base or os.environ.get("FIN_BP_API_BASE", "http://localhost:8769")
+    api_base = api_base or os.environ.get("BIZ_BP_API_BASE", "http://localhost:8769")
     return SYSTEM_PROMPT.format(
         business_lines=_render_business_lines(),
         cross_endpoints=_render_cross_endpoints(),

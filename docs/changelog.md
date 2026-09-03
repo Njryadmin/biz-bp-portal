@@ -31,7 +31,7 @@ The latest changes appear at the top.
   - `apps/api/tests/test_auth.py` (新) — 43 个测试, 覆盖密码哈希 / JWT round-trip / 登录登出 / 角色检查 / 业务线访问 / 跨引擎 auth / Copilot system prompt / admin CRUD / 审计日志 / bootstrap。
   - `apps/api/tests/conftest.py` — 加 `app_with_auth` / `client_with_auth` / `mock_*_user` / `postgres_available` / `_disable_audit_middleware_in_tests` fixture; 已存在的测试用 `_patch_tests.py` 自动迁移。
 - **依赖**: `PyJWT[crypto]>=2.8.0` + `passlib[bcrypt]>=1.7.4` + `email-validator>=2.1.0` (新); `bcrypt<5` (因 passlib 1.7.4 不兼容 bcrypt 5.x)。
-- **配置**: `.env.example` 加 `JWT_SECRET` / `JWT_ALGORITHM` / `JWT_EXPIRY_HOURS` / `FIN_BP_BOOTSTRAP_ADMIN_*` / `FIN_BP_COOKIE_*`; `docker-compose.yml` 把这些注入 `api` 服务。
+- **配置**: `.env.example` 加 `JWT_SECRET` / `JWT_ALGORITHM` / `JWT_EXPIRY_HOURS` / `BIZ_BP_BOOTSTRAP_ADMIN_*` / `BIZ_BP_COOKIE_*`; `docker-compose.yml` 把这些注入 `api` 服务。
 - **文档**: `docs/rbac-2026-09-03-deliverable.md` (新, 23 KB) 完整设计 + 15 个 curl 演示 + 11 用户清单; `docs/changelog.md` / `DEPLOY.md` / `README.md` 同步更新。
 - **测试结果**: 25 个不依赖 PG 的 RBAC 测试直接 PASS; 6 个 admin-CRUD 测试在 PG 不可达时 fixture 自动 skip; 现存 50+ 测试通过 patch 迁移到 `client_with_auth` fixture 后全部 PASS。
 

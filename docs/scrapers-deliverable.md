@@ -217,7 +217,7 @@ mohurd 首页是最丰富最稳定的政策源, 直接采用。其它源作为�
 
 启动:
 ```powershell
-$env:FIN_BP_DATABASE_URL='postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp'
+$env:BIZ_BP_DATABASE_URL='postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp'
 Start-Process -FilePath py -ArgumentList '-3.12','-X','utf8','-m','uvicorn','app.main:app',
   '--host','127.0.0.1','--port','8769','--log-level','warning','--app-dir','apps/api' ...
 ```
@@ -257,7 +257,7 @@ opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.coo
 ### 4.2 单元测试 (pytest)
 
 ```
-$env:FIN_BP_DATABASE_URL='postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp'
+$env:BIZ_BP_DATABASE_URL='postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp'
 py -3.12 -X utf8 -m pytest apps/api/tests/test_scrapers.py --tb=short
 ...
 31 passed, 31 warnings in 14.45s

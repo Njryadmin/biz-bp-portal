@@ -29,11 +29,11 @@ os.environ.setdefault("LC_ALL", "C")
 import asyncpg  # noqa: E402
 import pgserver  # noqa: E402
 
-PGDATA = Path(os.environ.get("FIN_BP_PGDATA") or Path.cwd() / ".pgdata")
-PORT = int(os.environ.get("FIN_BP_PGPORT") or "11667")
-USER = os.environ.get("FIN_BP_PGUSER") or "finbp"
-PASSWORD = os.environ.get("FIN_BP_PGPASSWORD") or "finbp"
-DBNAME = os.environ.get("FIN_BP_PGDATABASE") or "finbp"
+PGDATA = Path(os.environ.get("BIZ_BP_PGDATA") or Path.cwd() / ".pgdata")
+PORT = int(os.environ.get("BIZ_BP_PGPORT") or "11667")
+USER = os.environ.get("BIZ_BP_PGUSER") or "finbp"
+PASSWORD = os.environ.get("BIZ_BP_PGPASSWORD") or "finbp"
+DBNAME = os.environ.get("BIZ_BP_PGDATABASE") or "finbp"
 
 
 def _kill_stale_postgres() -> None:

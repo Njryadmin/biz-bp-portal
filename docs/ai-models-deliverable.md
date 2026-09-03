@@ -54,7 +54,7 @@ DB-backed registry the admin can flip on the fly.
 
 | File | Change |
 | --- | --- |
-| `.env.example` | Documented `FIN_BP_AI_SECRET_KEY` (optional Fernet key for `api_key` encryption). |
+| `.env.example` | Documented `BIZ_BP_AI_SECRET_KEY` (optional Fernet key for `api_key` encryption). |
 | `docs/ai-models-deliverable.md` | **This file.** |
 
 ## 3. New API endpoints (all admin-only)
@@ -171,7 +171,7 @@ bootstrap test silently worked around.
 ### Run
 
 ```bash
-FIN_BP_DATABASE_URL=postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp \
+BIZ_BP_DATABASE_URL=postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp \
   py -3.12 -X utf8 -m pytest apps/api/tests/test_ai_models.py -q
 # 16 passed, 93 warnings in 15.15s
 ```
@@ -384,7 +384,7 @@ next refresh.
 
 * **API key at rest.** By default the value is stored **plaintext**,
   with a single WARNING on first use telling the operator to set
-  `FIN_BP_AI_SECRET_KEY`. In production, set the env var to a Fernet
+  `BIZ_BP_AI_SECRET_KEY`. In production, set the env var to a Fernet
   key (32 URL-safe base64 bytes; generate with `python -c "from
   cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
   The stored value is then `Fernet.encrypt(key)`, which is

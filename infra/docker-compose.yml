@@ -34,10 +34,10 @@ services:
         condition: service_healthy
     environment:
       PYTHONUNBUFFERED: "1"
-      FIN_BP_PROJECT_ROOT: /app
-      FIN_BP_API_BASE: http://api:8000
-      FIN_BP_COPILOT_HTTP_TIMEOUT: "2.0"
-      FIN_BP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      BIZ_BP_PROJECT_ROOT: /app
+      BIZ_BP_API_BASE: http://api:8000
+      BIZ_BP_COPILOT_HTTP_TIMEOUT: "2.0"
+      BIZ_BP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       # AI Copilot LLM
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
@@ -51,10 +51,10 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-32-chars-min-please}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-24}
-      FIN_BP_BOOTSTRAP_ADMIN_USERNAME: ${FIN_BP_BOOTSTRAP_ADMIN_USERNAME:-admin}
-      FIN_BP_BOOTSTRAP_ADMIN_PASSWORD: ${FIN_BP_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
-      FIN_BP_COOKIE_SECURE: ${FIN_BP_COOKIE_SECURE:-false}
-      FIN_BP_COOKIE_NAME: ${FIN_BP_COOKIE_NAME:-finbp_token}
+      BIZ_BP_BOOTSTRAP_ADMIN_USERNAME: ${BIZ_BP_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD: ${BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+      BIZ_BP_COOKIE_SECURE: ${BIZ_BP_COOKIE_SECURE:-false}
+      BIZ_BP_COOKIE_NAME: ${BIZ_BP_COOKIE_NAME:-finbp_token}
     ports:
       - "8000:8000"
     volumes:

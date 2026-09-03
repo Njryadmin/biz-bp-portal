@@ -21,7 +21,7 @@ Same pattern as the user-mgmt tests: the suite hits the live
 ``ai_models`` table, so it requires the embedded pgserver on port
 11667 to be reachable. Run with::
 
-    FIN_BP_DATABASE_URL=postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp \\
+    BIZ_BP_DATABASE_URL=postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp \\
     py -3.12 -X utf8 -m pytest apps/api/tests/test_ai_models.py -q
 
 The seeded MockBackend row from ``db/bootstrap.ensure_raw_schema`` is

@@ -5,8 +5,8 @@ First-boot user bootstrap.
 
 On the very first startup of an empty database this module creates:
 
-  * 1 admin user (configurable via ``FIN_BP_BOOTSTRAP_ADMIN_USERNAME`` /
-    ``FIN_BP_BOOTSTRAP_ADMIN_PASSWORD``; defaults ``admin`` / ``admin123``)
+  * 1 admin user (configurable via ``BIZ_BP_BOOTSTRAP_ADMIN_USERNAME`` /
+    ``BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD``; defaults ``admin`` / ``admin123``)
   * 10 BP users — one per registered business line — with username
     ``bp-<line_id>`` and password ``bp123456``. Each gets a single
     role ``bp:<line_id>`` and a matching ``user_business_lines`` row.
@@ -41,15 +41,15 @@ DEFAULT_BP_PASSWORD = "bp123456"
 
 
 def _admin_username() -> str:
-    return os.environ.get("FIN_BP_BOOTSTRAP_ADMIN_USERNAME") or DEFAULT_ADMIN_USERNAME
+    return os.environ.get("BIZ_BP_BOOTSTRAP_ADMIN_USERNAME") or DEFAULT_ADMIN_USERNAME
 
 
 def _admin_password() -> str:
-    return os.environ.get("FIN_BP_BOOTSTRAP_ADMIN_PASSWORD") or DEFAULT_ADMIN_PASSWORD
+    return os.environ.get("BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD") or DEFAULT_ADMIN_PASSWORD
 
 
 def _bp_password() -> str:
-    return os.environ.get("FIN_BP_BOOTSTRAP_BP_PASSWORD") or DEFAULT_BP_PASSWORD
+    return os.environ.get("BIZ_BP_BOOTSTRAP_BP_PASSWORD") or DEFAULT_BP_PASSWORD
 
 
 async def _users_empty() -> bool:

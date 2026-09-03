@@ -174,8 +174,8 @@ Optional knobs:
 - `DEEPSEEK_BASE_URL` (default `https://api.deepseek.com/v1/chat/completions`)
 - `DEEPSEEK_MODEL` (default `deepseek-chat`)
 - `OLLAMA_MODEL` (default `qwen2.5:7b`)
-- `FIN_BP_COPILOT_HTTP_TIMEOUT` (mock helper timeout, default 2.0s)
-- `FIN_BP_API_BASE` (mock helper upstream, default `http://127.0.0.1:8769`)
+- `BIZ_BP_COPILOT_HTTP_TIMEOUT` (mock helper timeout, default 2.0s)
+- `BIZ_BP_API_BASE` (mock helper upstream, default `http://127.0.0.1:8769`)
 
 The factory at `apps/api/app/services/llm/__init__.py:get_llm_backend()`
 re-reads env each call, so test fixtures can monkey-patch the env and
@@ -344,7 +344,7 @@ tests/test_sensitivity.py  [19 tests, all PASSED]
 
 1. **API base URL** — the mock helper assumes the Python API is
    reachable at `http://127.0.0.1:8769` (overridable via
-   `FIN_BP_API_BASE`). This is the same convention the existing
+   `BIZ_BP_API_BASE`). This is the same convention the existing
    `sensitivity_engine` uses.
 
 2. **Mock engine is the source of truth.** A real LLM backend is wired

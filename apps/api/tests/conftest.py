@@ -37,7 +37,7 @@ def _ensure_on_path() -> None:
 def _setup_paths():
     _ensure_on_path()
     # Tell the registry loader where the project root is.
-    os.environ["FIN_BP_PROJECT_ROOT"] = str(_REPO_ROOT)
+    os.environ["BIZ_BP_PROJECT_ROOT"] = str(_REPO_ROOT)
     # Ensure a deterministic JWT secret for the session (32+ chars so
     # PyJWT doesn't warn about weak HMAC keys).
     os.environ.setdefault(

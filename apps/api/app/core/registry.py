@@ -127,7 +127,7 @@ def _resolve_root() -> Path:
     The `business_lines` directory is the canonical marker. We walk up from
     CWD and from this file's location until we find it.
     """
-    env_root = os.environ.get("FIN_BP_PROJECT_ROOT")
+    env_root = os.environ.get("BIZ_BP_PROJECT_ROOT")
     candidates: list[Path] = []
     if env_root:
         candidates.append(Path(env_root))

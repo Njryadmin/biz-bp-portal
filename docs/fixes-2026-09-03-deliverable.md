@@ -35,7 +35,7 @@
 ```
 Get-Process -Name python | Stop-Process -Force
 $env:PYTHONPATH = "C:\Users\mozzi\...\apps\api"
-$env:FIN_BP_PROJECT_ROOT = "C:\Users\mozzi\...\fin-bp-portal"
+$env:BIZ_BP_PROJECT_ROOT = "C:\Users\mozzi\...\fin-bp-portal"
 Start-Process -FilePath python -ArgumentList -m,uvicorn,app.main:app,--port,8769,--log-level,info ...
 ```
 

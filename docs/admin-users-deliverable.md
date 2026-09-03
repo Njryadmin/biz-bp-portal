@@ -81,7 +81,7 @@ lines, not 10): `test_registry_admin_sees_all_lines`,
 `test_registry_viewer_sees_all_lines`, `test_accessible_lines_for_bp`,
 `test_bootstrap_creates_admin_and_bp_users`.
 
-### Test runs (FIN_BP_DATABASE_URL=postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp)
+### Test runs (BIZ_BP_DATABASE_URL=postgresql+asyncpg://finbp:finbp@127.0.0.1:11667/finbp)
 
 ```text
 tests/test_auth.py::test_login_sets_cookie_and_returns_me PASSED

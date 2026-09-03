@@ -18,7 +18,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const COOKIE_NAME = process.env.FIN_BP_COOKIE_NAME || "finbp_token";
+const COOKIE_NAME = process.env.BIZ_BP_COOKIE_NAME || "finbp_token";
 
 // Public paths that don't require auth. Anything else under (dashboard)
 // or /api/* (except the BFF auth routes) is protected.

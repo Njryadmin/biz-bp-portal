@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="FIN_BP_", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="BIZ_BP_", extra="ignore")
 
     # Paths
     project_root: str = ""  # auto-filled in main
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # Authentication / RBAC (see core/auth.py)
     # NOTE: we expose only non-secret defaults here. ``JWT_SECRET`` is
-    # read from the bare ``JWT_SECRET`` env var (no FIN_BP_ prefix) to
+    # read from the bare ``JWT_SECRET`` env var (no BIZ_BP_ prefix) to
     # match industry convention.
     jwt_secret: str = "change-me-in-production-32-chars-min-please"
     cookie_name: str = "finbp_token"

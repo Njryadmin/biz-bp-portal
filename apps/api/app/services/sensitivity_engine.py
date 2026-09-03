@@ -296,7 +296,7 @@ def _resolve_base_value(ref: str, line_id: str) -> float:
     if not ref or "." not in ref:
         return 0.0
     table, _, field = ref.partition(".")
-    base = os.environ.get("FIN_BP_API_BASE", "http://localhost:8769")
+    base = os.environ.get("BIZ_BP_API_BASE", "http://localhost:8769")
     try:
         if table == "kpi":
             url = f"{base}/api/lines/{line_id}/indicators"

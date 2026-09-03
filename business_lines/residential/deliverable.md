@@ -77,11 +77,11 @@ All paths are relative to the monorepo root `C:\Users\mozzi\.mavis\workspace\fin
 # From the monorepo root
 cd C:\Users\mozzi\.mavis\workspace\fin-bp-portal\apps\api
 $env:PYTHONPATH = "$PWD"
-$env:FIN_BP_PROJECT_ROOT = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal"
+$env:BIZ_BP_PROJECT_ROOT = "C:\Users\mozzi\.mavis\workspace\fin-bp-portal"
 python -m uvicorn app.main:app --port 8765
 ```
 
-`FIN_BP_PROJECT_ROOT` is **not** strictly required because the loader also walks
+`BIZ_BP_PROJECT_ROOT` is **not** strictly required because the loader also walks
 up from its own `__file__`, but exporting it makes the project root
 unambiguous on Windows where `C:\Users\mozzi\.mavis\workspace` and
 `C:\Users\mozzi\.minimax\workspace` are reparse points of each other and
@@ -235,7 +235,7 @@ $ python -X utf8 business_lines/residential/validate.py
    `.minimax`), so the loader happily works through it. The
    `validate.py` script deliberately uses `Path(__file__).parent` (not
    `.resolve()`) and `os.path.exists` to stay robust against the
-   reparse. Always export `FIN_BP_PROJECT_ROOT` explicitly when running
+   reparse. Always export `BIZ_BP_PROJECT_ROOT` explicitly when running
    on this host.
 
 ---

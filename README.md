@@ -71,8 +71,8 @@ from the business-line registry (idempotent — only runs when `users` is empty)
 | `viewer` | — (set via API) | `viewer` | everything, read-only |
 | `bp-<line>` | `bp123456` | `bp:<line>` | only that line |
 
-Change these defaults in production via `FIN_BP_BOOTSTRAP_ADMIN_PASSWORD` /
-`FIN_BP_BOOTSTRAP_BP_PASSWORD` env vars or via
+Change these defaults in production via `BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD` /
+`BIZ_BP_BOOTSTRAP_BP_PASSWORD` env vars or via
 `PATCH /api/auth/users/{id}/roles` after first boot.
 
 Key endpoints:
