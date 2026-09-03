@@ -12,7 +12,8 @@ export async function POST(request: NextRequest) {
   try {
     const res = await fetch(`${base}/api/scrapers/run-all`, {
       method: "POST",
-      cache: "no-store",
+      headers: { cookie: request.headers.get("cookie") ?? "" },
+            cache: "no-store",
     });
     const text = await res.text();
     let data: unknown = null;

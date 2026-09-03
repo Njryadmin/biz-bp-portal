@@ -7,8 +7,7 @@ import type { NextRequest } from "next/server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function DELETE(
-  _req: Request,
+export async function DELETE(request: NextRequest,
   { params }: { params: { alert_id: string } },
 ) {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8769";
@@ -16,7 +15,8 @@ export async function DELETE(
   try {
     const res = await fetch(`${base}/api/alerts/${aid}`, {
       method: "DELETE",
-      cache: "no-store",
+      headers: { cookie: request.headers.get("cookie") ?? "" },
+            cache: "no-store",
     });
     const text = await res.text();
     let data: unknown = null;

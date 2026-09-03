@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8769";
   try {
     const res = await fetch(`${base}/api/copilot/health`, {
-      cache: "no-store",
+      headers: { cookie: request.headers.get("cookie") ?? "" },
+            cache: "no-store",
     });
     if (!res.ok) {
       return NextResponse.json(
