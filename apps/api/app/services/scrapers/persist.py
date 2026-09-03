@@ -33,10 +33,16 @@ logger = get_logger(__name__)
 async def persist_scraper_rows(
     source_id: str,
     rows: list[dict[str, Any]],
+    run_status: str = "ok",
 ) -> str | None:
     """Insert one row into ``raw.uploads`` for a scraper run.
 
     Returns the generated ``upload_id`` or None when no rows / on error.
+
+    ``run_status`` is one of ``ok`` / ``degraded`` / ``error`` and is
+    stored in the new ``raw.uploads.run_status`` column so the
+    dashboard tile can distinguish a clean live run from one that
+    had to fall back to mock data.
     """
     if not rows:
         return None
@@ -54,10 +60,10 @@ async def persist_scraper_rows(
                     """
                     INSERT INTO raw.uploads
                         (upload_id, filename, upload_type, row_count,
-                         source, fetched_at, payload)
+                         source, fetched_at, run_status, payload)
                     VALUES
                         (:upload_id, :filename, :upload_type, :row_count,
-                         :source, NOW(), CAST(:payload AS JSONB))
+                         :source, NOW(), :run_status, CAST(:payload AS JSONB))
                     """
                 ),
                 {
@@ -66,6 +72,7 @@ async def persist_scraper_rows(
                     "upload_type": "scraper",
                     "row_count": len(rows),
                     "source": source_id,
+                    "run_status": run_status,
                     "payload": payload_json,
                 },
             )
@@ -84,7 +91,7 @@ async def scraper_history(source_id: str, limit: int = 10) -> list[dict[str, Any
     """
     sql = text(
         """
-        SELECT upload_id, filename, row_count, uploaded_at
+        SELECT upload_id, filename, row_count, uploaded_at, run_status
         FROM raw.uploads
         WHERE upload_id LIKE :pattern
         ORDER BY uploaded_at DESC
@@ -107,6 +114,7 @@ async def scraper_history(source_id: str, limit: int = 10) -> list[dict[str, Any
             "filename": r["filename"],
             "row_count": r["row_count"],
             "uploaded_at": r["uploaded_at"].isoformat() if r["uploaded_at"] else None,
+            "run_status": r.get("run_status"),
         }
         for r in rows
     ]
@@ -116,7 +124,7 @@ async def last_scraper_run(source_id: str) -> dict[str, Any] | None:
     """Return the single most recent run for a source_id (or None)."""
     sql = text(
         """
-        SELECT upload_id, filename, row_count, uploaded_at
+        SELECT upload_id, filename, row_count, uploaded_at, run_status
         FROM raw.uploads
         WHERE upload_id LIKE :pattern
         ORDER BY uploaded_at DESC
@@ -140,4 +148,5 @@ async def last_scraper_run(source_id: str) -> dict[str, Any] | None:
         "filename": row["filename"],
         "row_count": row["row_count"],
         "uploaded_at": row["uploaded_at"].isoformat() if row["uploaded_at"] else None,
+        "run_status": row.get("run_status"),
     }

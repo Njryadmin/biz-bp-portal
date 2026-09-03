@@ -52,9 +52,13 @@ router = APIRouter(prefix="/api/scrapers", tags=["scrapers"])
 
 
 def _to_summary(s: Any, last: dict[str, Any] | None) -> ScraperSummary:
+    # ``last_status`` is read from the actual run row (ok / degraded /
+    # error). Legacy uploads before the column existed have run_status
+    # == None; treat those as "ok" since they used to be the only
+    # path that ever wrote a row.
     last_status: str | None = None
-    if last and last.get("row_count") is not None:
-        last_status = "ok"
+    if last is not None:
+        last_status = (last.get("run_status") or "ok") if last.get("row_count") else None
     return ScraperSummary(
         source_id=getattr(s, "source_id", ""),
         name=getattr(s, "name", ""),

@@ -205,7 +205,19 @@ async def run_one(
                     rows = []
         landing_rows = [scraper.to_landing_row(r) for r in rows]
         try:
-            upload_id = await scraper.persist(landing_rows)
+            # Persist with the run's real status so the dashboard can
+            # distinguish a clean live run from a degraded one that
+            # had to fall back to mock data. ``result.status`` is the
+            # ScraperRunResult.status string ('ok' / 'degraded' /
+            # 'error'); we map 'error' → 'degraded' on persist because
+            # the rows that made it to the DB are still valid (fallback).
+            persist_status = "ok"
+            rs = getattr(result, "status", None)
+            if rs == "degraded":
+                persist_status = "degraded"
+            elif rs == "error" and rows:
+                persist_status = "degraded"
+            upload_id = await scraper.persist(landing_rows, run_status=persist_status)
         except Exception as exc:  # noqa: BLE001
             logger.warning("persist failed for %s: %s", source_id, exc)
             upload_id = None

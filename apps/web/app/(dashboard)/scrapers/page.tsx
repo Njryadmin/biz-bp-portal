@@ -155,7 +155,7 @@ export default function ScrapersPage() {
     setRunError(null);
     try {
       const res = await fetch(
-        `/api/scrapers/run/${encodeURIComponent(sourceId)}`,
+        `/api/scrapers/${encodeURIComponent(sourceId)}/run`,
         { method: "POST", cache: "no-store" },
       );
       if (!res.ok) {
@@ -275,6 +275,33 @@ export default function ScrapersPage() {
             style={{ marginTop: 12 }}
           />
         ) : null}
+        {lastRunResults && lastRunResults.length > 0 && !runError ? (
+          (() => {
+            const ok = lastRunResults.filter((r) => r.status === "ok").length;
+            const degraded = lastRunResults.filter((r) => r.status === "degraded").length;
+            const errored = lastRunResults.filter((r) => r.status === "error").length;
+            if (degraded === 0 && errored === 0) return null;
+            if (errored > 0) {
+              return (
+                <AntAlert
+                  type="error"
+                  showIcon
+                  message={`本次运行: ${ok} 成功 · ${degraded} 降级(已用 mock 兜底) · ${errored} 失败`}
+                  style={{ marginTop: 12 }}
+                />
+              );
+            }
+            return (
+              <AntAlert
+                type="warning"
+                showIcon
+                message={`本次运行: ${ok} 成功 · ${degraded} 降级(已用 mock 兜底)`}
+                description="上游数据源不可达,但 mock 数据已写入 DBT marts,前端展示不受影响。"
+                style={{ marginTop: 12 }}
+              />
+            );
+          })()
+        ) : null}
       </Card>
 
       {/* ── Scraper cards ── */}
@@ -332,7 +359,12 @@ export default function ScrapersPage() {
                     </Text>
                     <Space>
                       <Badge
-                        status={s.last_status === "ok" ? "success" : "default"}
+                        status={
+                          s.last_status === "ok" ? "success"
+                          : s.last_status === "degraded" ? "warning"
+                          : s.last_status === "error" ? "error"
+                          : "default"
+                        }
                       />
                       <Text style={{ fontSize: 12 }}>
                         上次:&nbsp;
@@ -340,6 +372,9 @@ export default function ScrapersPage() {
                           ? `${s.last_run.row_count} 行 @ ${s.last_run.uploaded_at.slice(0, 16).replace("T", " ")}`
                           : "尚未运行"}
                       </Text>
+                      {s.last_status === "degraded" ? (
+                        <Tag color="orange" style={{ fontSize: 11, margin: 0 }}>已降级</Tag>
+                      ) : null}
                     </Space>
                     {detail && detail.history.length > 0 ? (
                       <Text type="secondary" style={{ fontSize: 12 }}>

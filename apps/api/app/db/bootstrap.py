@@ -59,6 +59,7 @@ SCHEMA_DDL: list[str] = [
     # legacy rows remain valid.
     "ALTER TABLE raw.uploads ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMPTZ",
     "ALTER TABLE raw.uploads ADD COLUMN IF NOT EXISTS source TEXT",
+    "ALTER TABLE raw.uploads ADD COLUMN IF NOT EXISTS run_status TEXT",
     # The original CHECK constraint excludes 'scraper'. Postgres does
     # not support modifying a CHECK in place, so drop and re-create it
     # in a DO block that swallows "constraint does not exist" errors.

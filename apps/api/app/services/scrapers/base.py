@@ -205,10 +205,13 @@ class BaseScraper(ABC):
 
     # ---- Persistence helper -------------------------------------------
 
-    async def persist(self, rows: list[dict[str, Any]]) -> str | None:
+    async def persist(self, rows: list[dict[str, Any]], run_status: str = "ok") -> str | None:
         """Insert the parsed rows into ``raw.uploads`` as a single JSONB payload.
 
         Returns the generated ``upload_id`` (or None if no rows).
+
+        ``run_status`` is propagated into ``raw.uploads.run_status`` so
+        the dashboard tile can colour-code degraded runs vs clean ones.
 
         The router wraps this in a try/except and never lets a DB failure
         bubble up to the user; this method does the same.
@@ -216,7 +219,7 @@ class BaseScraper(ABC):
         if not rows:
             return None
         from .persist import persist_scraper_rows  # local import to avoid cycle
-        return await persist_scraper_rows(self.source_id, rows)
+        return await persist_scraper_rows(self.source_id, rows, run_status=run_status)
 
 
 # ─────────────────────────────────────────────────────────────────────────
