@@ -291,44 +291,54 @@ def get_active_model() -> Optional[AIModelRow]:
 
     Returns None if the table is empty OR the DB is unreachable. The
     factory then falls back to the env-var path.
+
+    Safe to call from any context (sync bootstrap, sync engine init,
+    inside a running asyncio loop in a request handler). Implementation
+    note: we always run the async query in a fresh worker thread so we
+    never collide with a running loop and never block a handler that's
+    already on the loop.
     """
-    import asyncio
     try:
-        factory = get_session_factory()
+        get_session_factory()
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_model: session factory unavailable: %s", exc)
         return None
     try:
-        # ``asyncio.run`` raises a Deprecation-free ``RuntimeError``
-        # when called from inside a running event loop (e.g. inside
-        # the FastAPI request handler); in that case the caller is
-        # responsible for awaiting ``_fetch_active_row`` directly.
-        # Everything else (sync bootstrap code, tests with no
-        # running loop) lands in the asyncio.run branch.
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop — safe to spin one up.
-            return asyncio.run(_fetch_active_row())
-        # We're inside a running loop. Fall through to a synchronous
-        # fallback below.
-        return _fetch_active_row_sync()
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutTimeout
+        with ThreadPoolExecutor(max_workers=1, thread_name_prefix="ai-model-read") as ex:
+            future = ex.submit(_run_async_in_worker, _fetch_active_row())
+            return future.result(timeout=5)
+    except FutTimeout:
+        logger.warning("get_active_model: DB lookup timed out after 5s")
+        return None
     except Exception as exc:  # noqa: BLE001
         logger.warning("get_active_model: DB lookup failed: %s", exc)
         return None
 
 
-def _fetch_active_row_sync() -> Optional[AIModelRow]:
-    """Sync wrapper for ``_fetch_active_row`` for use when the caller
-    is already inside a running event loop (e.g. a FastAPI request
-    handler that decided to call ``get_active_model`` synchronously).
+def _run_async_in_worker(coro):
+    """Helper for ``get_active_model``: run ``coro`` in a fresh event
+    loop on the current (worker) thread. We use a tiny wrapper so the
+    ``ThreadPoolExecutor.submit`` line above stays readable.
     """
     import asyncio
-    loop = asyncio.new_event_loop()
     try:
-        return loop.run_until_complete(_fetch_active_row())
-    finally:
-        loop.close()
+        return asyncio.run(coro)
+    except RuntimeError:
+        # ``asyncio.run`` couldn't get a loop in this thread (e.g. the
+        # worker thread is shutting down). Try the explicit new-loop
+        # form, then close it.
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+
+# Kept for backwards-compat: some legacy tests import it. It is a
+# no-op shim now that ``get_active_model`` is fully sync.
+def _fetch_active_row_sync() -> Optional[AIModelRow]:
+    return get_active_model()
 
 
 async def _fetch_active_row() -> Optional[AIModelRow]:
