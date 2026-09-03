@@ -155,7 +155,7 @@ export default function ScrapersPage() {
     setRunError(null);
     try {
       const res = await fetch(
-        `/api/scrapers/${encodeURIComponent(sourceId)}/run`,
+        `/api/scrapers/run/${encodeURIComponent(sourceId)}`,
         { method: "POST", cache: "no-store" },
       );
       if (!res.ok) {
