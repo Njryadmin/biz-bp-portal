@@ -1,5 +1,9 @@
 # Biz-BP Portal
 
+> **仓库地址**：<https://github.com/Njryadmin/biz-bp-portal>（private）
+> **本地路径**：`C:\Users\mozzi\.mavis\workspace\biz-bp-portal`
+> **远程 origin**：`https://github.com/Njryadmin/biz-bp-portal.git`
+
 面向房地产咨询公司的可插拔式"业务合伙人"分析门户。整个后端围绕
 **业务线插件框架** 构建——新增一个事业部（例如 *工业地产部*）只需要
 复制一个目录并修改配置，不需要改动核心代码。

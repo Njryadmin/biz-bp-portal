@@ -1,5 +1,9 @@
 # 部署指南
 
+> **仓库地址**：<https://github.com/Njryadmin/biz-bp-portal>（private）
+> **本地路径**：`C:\Users\mozzi\.mavis\workspace\biz-bp-portal`
+> **远程 origin**：`https://github.com/Njryadmin/biz-bp-portal.git`
+
 Biz-BP Portal 以 7 服务 Docker Compose 栈的形式交付。
 本文档涵盖环境变量、部署拓扑和运维命令。
 
