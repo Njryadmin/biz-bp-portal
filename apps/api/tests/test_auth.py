@@ -352,14 +352,16 @@ def test_registry_admin_sees_all_lines(client, store_with_users):
     assert r.status_code == 200
     data = r.json()
     line_ids = {ln["id"] for ln in data["lines"]}
-    # 10 registered lines expected
-    assert len(line_ids) == 10
+    # 9 registered lines expected (my-line was removed on 2026-09-03)
+    assert len(line_ids) == 9
     for lid in [
         "residential", "retail", "valuation", "advisory",
         "office-leasing", "investment", "project-management", "industrial",
-        "retail-leasing", "my-line",
+        "retail-leasing",
     ]:
         assert lid in line_ids
+    # my-line is gone
+    assert "my-line" not in line_ids
 
 
 def test_registry_bp_sees_only_their_line(client, store_with_users):
@@ -381,7 +383,8 @@ def test_registry_viewer_sees_all_lines(client, store_with_users):
     assert r.status_code == 200
     data = r.json()
     line_ids = {ln["id"] for ln in data["lines"]}
-    assert len(line_ids) == 10
+    # 9 registered lines (my-line removed on 2026-09-03)
+    assert len(line_ids) == 9
 
 
 # ---------------------------------------------------------------------------
@@ -611,6 +614,138 @@ def test_admin_can_change_user_roles(client, store_with_users, postgres_availabl
 
 
 # ---------------------------------------------------------------------------
+# 10b) User management — extended CRUD (PATCH /lines, PATCH /{id},
+# POST /reset-password). Added 2026-09-03 for the admin UI module.
+# ---------------------------------------------------------------------------
+
+
+def _admin_uid_from_db(client) -> int:
+    """Look up the admin's uid via the admin list endpoint (no DB loop juggling).
+
+    The PATCH endpoints hit the real DB, but the admin list endpoint
+    is also DB-backed and accessible to admins, so the cleanest way
+    to get a real-DB user id is to ask the API itself. This avoids
+    the "got Future attached to a different loop" error that the
+    TestClient + a fresh ``asyncio.run`` would otherwise trigger.
+    """
+    r = client.get("/api/auth/users")
+    if r.status_code != 200:
+        raise RuntimeError(
+            f"admin list endpoint returned {r.status_code} — "
+            f"DB likely not seeded yet: {r.text[:200]}"
+        )
+    for u in r.json().get("users", []):
+        if u["username"] == "admin":
+            return int(u["id"])
+    raise RuntimeError("admin user not in /api/auth/users response")
+
+
+def _uid_by_username(client, username: str) -> int:
+    """Look up a user's id by username via the admin list endpoint."""
+    r = client.get("/api/auth/users")
+    assert r.status_code == 200, r.text
+    for u in r.json().get("users", []):
+        if u["username"] == username:
+            return int(u["id"])
+    raise RuntimeError(f"user {username!r} not found")
+
+
+def test_admin_can_update_user_display_name(client, store_with_users, postgres_available):
+    client.post(
+        "/api/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    uid = _admin_uid_from_db(client)
+    r = client.patch(
+        f"/api/auth/users/{uid}",
+        json={"display_name": "Test Administrator"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["display_name"] == "Test Administrator"
+
+
+def test_admin_can_toggle_user_active(client, store_with_users, postgres_available):
+    """is_active toggle: BP user deactivated then re-activated.
+
+    We deactivate + re-activate so the test is idempotent (no
+    fixture-scope ordering issues).
+    """
+    client.post(
+        "/api/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    target = _uid_by_username(client, "bp-retail")
+    # 1) deactivate
+    r = client.patch(f"/api/auth/users/{target}", json={"is_active": False})
+    assert r.status_code == 200, r.text
+    assert r.json()["is_active"] is False
+    # 2) re-activate
+    r = client.patch(f"/api/auth/users/{target}", json={"is_active": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["is_active"] is True
+
+
+def test_admin_can_reset_user_password(client, store_with_users, postgres_available):
+    """POST /users/{id}/reset-password rotates the hash.
+
+    Verifies the API response shape (new_password echoed, ok=True). A
+    follow-up /login would need a real-DB login (the test's in-memory
+    fake_store keeps the original hash), so we don't try to re-login
+    here; the e2e smoke test in apps/api/_smoke_test.py covers the
+    full login-after-rotate path against a real DB.
+    """
+    client.post(
+        "/api/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    target = _uid_by_username(client, "bp-residential")
+    r = client.post(
+        f"/api/auth/users/{target}/reset-password",
+        json={"new_password": "rotated-pw-1", "reveal": True},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["new_password"] == "rotated-pw-1"
+    # And the reveal=False path doesn't echo the secret
+    r2 = client.post(
+        f"/api/auth/users/{target}/reset-password",
+        json={"new_password": "another-pw", "reveal": False},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["new_password"] is None
+
+
+def test_admin_can_replace_user_lines(client, store_with_users, postgres_available):
+    """PATCH /users/{id}/lines replaces accessible_lines; bp: roles
+    keep contributing their implied line so the union is preserved."""
+    client.post(
+        "/api/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    target = _uid_by_username(client, "bp-residential")
+    r = client.patch(
+        f"/api/auth/users/{target}/lines",
+        json={"accessible_lines": ["retail", "valuation"]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # The bp:residential role was kept, so residential is still in
+    # the union alongside the explicit retail + valuation.
+    assert "residential" in body["accessible_lines"]
+    assert "retail" in body["accessible_lines"]
+    assert "valuation" in body["accessible_lines"]
+
+
+def test_non_admin_cannot_update_user(client, store_with_users):
+    client.post(
+        "/api/auth/login", json={"username": "viewer", "password": "viewer123"}
+    )
+    r = client.patch(
+        "/api/auth/users/1",
+        json={"display_name": "Hacked"},
+    )
+    assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
 # 11) Accessible lines endpoint
 # ---------------------------------------------------------------------------
 
@@ -623,8 +758,9 @@ def test_accessible_lines_for_bp(client, store_with_users):
     assert r.status_code == 200
     data = r.json()
     assert data["lines"] == ["residential"]
-    # all 10 are reported so the UI can grey out the rest
-    assert len(data["all_lines"]) == 10
+    # all 9 are reported so the UI can grey out the rest.
+    # (my-line was removed from the registry on 2026-09-03.)
+    assert len(data["all_lines"]) == 9
 
 
 # ---------------------------------------------------------------------------
@@ -662,10 +798,11 @@ def test_audit_log_admin_can_read(client, store_with_users, postgres_available):
 
 @pytest.mark.asyncio
 async def test_bootstrap_creates_admin_and_bp_users(monkeypatch, tmp_path):
-    """Simulate the very first boot: empty users table, 10 registry lines.
+    """Simulate the very first boot: empty users table, 9 registry lines
+    (my-line was removed on 2026-09-03).
 
     We patch _users_empty to True (so seed runs), patch load_registry
-    to return 10 fake lines, and verify the insert path is hit.
+    to return 9 fake lines, and verify the insert path is hit.
     """
     from app.db import seed_users
 
@@ -692,7 +829,6 @@ async def test_bootstrap_creates_admin_and_bp_users(monkeypatch, tmp_path):
         line_ids = [
             "residential", "retail", "retail-leasing", "valuation", "advisory",
             "office-leasing", "investment", "project-management", "industrial",
-            "my-line",
         ]
         from app.core.registry import RegistryEntry, BusinessLine
         return [
@@ -710,19 +846,18 @@ async def test_bootstrap_creates_admin_and_bp_users(monkeypatch, tmp_path):
     monkeypatch.setattr(seed_users, "_insert_user", _fake_insert_user)
     monkeypatch.setattr(seed_users, "load_registry", _fake_registry)
     summary = await seed_users.seed_initial_users()
-    assert summary == {"admin": 1, "bp_users": 10}
-    assert len(inserted) == 11
+    assert summary == {"admin": 1, "bp_users": 9}
+    assert len(inserted) == 10
     # admin is the first row
     assert inserted[0]["username"].startswith("admin")
     assert inserted[0]["role"] == "admin"
-    # 10 BP users, one per line
+    # 9 BP users, one per line
     bp_rows = [r for r in inserted if r["role"].startswith("bp:")]
-    assert len(bp_rows) == 10
+    assert len(bp_rows) == 9
     assert {r["role"] for r in bp_rows} == {
         f"bp:{lid}" for lid in [
             "residential", "retail", "retail-leasing", "valuation", "advisory",
             "office-leasing", "investment", "project-management", "industrial",
-            "my-line",
         ]
     }
 

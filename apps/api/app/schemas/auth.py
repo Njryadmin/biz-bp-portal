@@ -52,6 +52,65 @@ class UpdateUserRolesRequest(BaseModel):
     )
 
 
+class UpdateUserRequest(BaseModel):
+    """Update a user's profile fields (display_name, email, is_active, password).
+
+    All fields are optional — the caller passes only the ones that need
+    changing.  When ``password`` is provided the new value is hashed with
+    bcrypt before being written; the plain text is never logged.
+    """
+
+    display_name: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    email: Optional[EmailStr] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = Field(
+        default=None,
+        min_length=6,
+        max_length=256,
+        description="plaintext password; hashed before persistence",
+    )
+
+
+class UpdateUserLinesRequest(BaseModel):
+    """Replace a user's accessible_lines without touching roles.
+
+    This is a thin, single-purpose endpoint so the admin UI can
+    toggle the line list without the dance of having to re-send the
+    full role set.
+    """
+
+    accessible_lines: list[str] = Field(
+        default_factory=list,
+        description="full new accessible_lines list (replaces existing)",
+    )
+
+
+class ResetPasswordRequest(BaseModel):
+    """Admin-initiated password reset.
+
+    The caller (an admin) supplies a fresh plaintext password; the API
+    hashes it and writes it to ``users.password_hash``. The plaintext is
+    echoed back in the response so the admin can communicate it to the
+    user out-of-band (or just NOT show it — see the ``reveal`` flag).
+    """
+
+    new_password: str = Field(..., min_length=6, max_length=256)
+    reveal: bool = Field(
+        default=False,
+        description=(
+            "If true, the response includes the plaintext password so the "
+            "admin can copy it. Defaults to false (response omits the "
+            "secret)."
+        ),
+    )
+
+
+class ResetPasswordResponse(BaseModel):
+    ok: bool = True
+    message: str
+    new_password: Optional[str] = None
+
+
 class UserListItem(BaseModel):
     id: int
     username: str
@@ -101,6 +160,10 @@ __all__ = [
     "CurrentUserResponse",
     "LoginRequest",
     "LogoutResponse",
+    "ResetPasswordRequest",
+    "ResetPasswordResponse",
+    "UpdateUserLinesRequest",
+    "UpdateUserRequest",
     "UpdateUserRolesRequest",
     "UserListItem",
     "UserListResponse",

@@ -58,6 +58,28 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     return _session_factory
 
 
+def reset_engine() -> None:
+    """Drop the cached engine + session factory.
+
+    Useful for tests that spawn multiple event loops (e.g. an outer
+    ``TestClient`` loop plus an inner ``asyncio.run`` helper). Calling
+    this between loops forces the next ``engine()`` to construct a
+    fresh pool bound to the new loop, avoiding "got Future attached
+    to a different loop" errors.
+    """
+    global _engine, _session_factory
+    if _engine is not None:
+        try:
+            # Best-effort: dispose the pool. If the loop is already
+            # closed, swallow the warning — the engine is about to be
+            # garbage-collected anyway.
+            _engine.sync_engine.pool.dispose()
+        except Exception:  # noqa: BLE001
+            pass
+    _engine = None
+    _session_factory = None
+
+
 @asynccontextmanager
 async def get_session() -> AsyncIterator[AsyncSession]:
     factory = get_session_factory()

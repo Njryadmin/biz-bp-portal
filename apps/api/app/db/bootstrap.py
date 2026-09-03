@@ -162,3 +162,21 @@ async def ensure_raw_schema() -> None:
             await conn.execute(text(stmt))
         for stmt in AUTH_DDL:
             await conn.execute(text(stmt))
+        # One-off cleanup: the ``bp-my-line`` user was created when the
+        # ``my-line`` test line was still in the registry. The line has
+        # since been removed, so the user is orphaned (no business line
+        # matches ``bp:my-line``) and would never be auto-reaped. Drop
+        # it on every boot so dev environments converge to a clean
+        # 1 admin + 9 BP-users set.
+        await conn.execute(
+            text(
+                "DELETE FROM user_business_lines "
+                "WHERE user_id IN (SELECT id FROM users WHERE username = 'bp-my-line')"
+            )
+        )
+        await conn.execute(
+            text("DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE username = 'bp-my-line')")
+        )
+        await conn.execute(
+            text("DELETE FROM users WHERE username = 'bp-my-line'")
+        )

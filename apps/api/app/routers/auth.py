@@ -5,15 +5,18 @@ Authentication + user-management HTTP endpoints.
 
 Routes
 ------
-POST   /api/auth/login                — body {username, password} → set cookie + me
-POST   /api/auth/logout               — clear cookie
-GET    /api/auth/me                   — current user (id/username/roles/lines)
-GET    /api/auth/accessible-lines     — accessible business line ids
-GET    /api/auth/users                — admin: list all users
-POST   /api/auth/users                — admin: create a user
-PATCH  /api/auth/users/{id}/roles     — admin: replace a user's roles + lines
-DELETE /api/auth/users/{id}           — admin: deactivate a user
-GET    /api/auth/audit-log            — admin/auditor: query the audit log
+POST   /api/auth/login                       — body {username, password} → set cookie + me
+POST   /api/auth/logout                      — clear cookie
+GET    /api/auth/me                          — current user (id/username/roles/lines)
+GET    /api/auth/accessible-lines            — accessible business line ids
+GET    /api/auth/users                       — admin: list all users
+POST   /api/auth/users                       — admin: create a user
+PATCH  /api/auth/users/{id}                  — admin: update display_name/email/password/is_active
+PATCH  /api/auth/users/{id}/roles            — admin: replace a user's roles + lines
+PATCH  /api/auth/users/{id}/lines            — admin: replace a user's accessible_lines only
+POST   /api/auth/users/{id}/reset-password   — admin: rotate a user's password
+DELETE /api/auth/users/{id}                  — admin: deactivate a user (soft delete)
+GET    /api/auth/audit-log                   — admin/auditor: query the audit log
 """
 from __future__ import annotations
 
@@ -49,6 +52,10 @@ from ..schemas.auth import (
     CurrentUserResponse,
     LoginRequest,
     LogoutResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+    UpdateUserLinesRequest,
+    UpdateUserRequest,
     UpdateUserRolesRequest,
     UserListItem,
     UserListResponse,
@@ -413,6 +420,234 @@ async def update_user_roles(
             detail=f"user not found: {user_id}",
         )
     return item
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/auth/users/{id}  — general field updates
+# ---------------------------------------------------------------------------
+
+
+@router.patch(
+    "/users/{user_id}",
+    response_model=UserListItem,
+    summary="Admin: update a user's profile (display_name, email, is_active, password)",
+)
+async def update_user(
+    user_id: int,
+    body: UpdateUserRequest,
+    user: CurrentUser = Depends(require_admin_dep),
+) -> UserListItem:
+    """Edit a single user's profile fields. Empty body = no-op (still 200).
+
+    Does NOT touch roles or accessible_lines — use
+    ``PATCH /users/{id}/roles`` or ``PATCH /users/{id}/lines`` for those.
+    """
+    if all(
+        v is None
+        for v in (body.display_name, body.email, body.is_active, body.password)
+    ):
+        # Nothing to do — return current state so the UI can re-fetch cheaply.
+        item = await _load_user_with_perms(user_id)
+        if item is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"user not found: {user_id}",
+            )
+        return item
+
+    # Last-admin protection: refuse self-deactivation (operators can
+    # always use ``DELETE /users/{id}`` instead, which has the same
+    # guard). If the admin is deactivating ANOTHER admin and that
+    # admin is the last one, refuse.
+    if body.is_active is False:
+        if user_id == user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="cannot deactivate yourself",
+            )
+        factory = get_session_factory()
+        async with factory() as session:
+            target_roles = set(
+                (
+                    await session.execute(
+                        text("SELECT role FROM user_roles WHERE user_id = :uid"),
+                        {"uid": user_id},
+                    )
+                ).scalars().all()
+            )
+        if "admin" in target_roles:
+            async with factory() as session:
+                other_admins = (
+                    await session.execute(
+                        text(
+                            "SELECT COUNT(DISTINCT user_id) FROM user_roles "
+                            "WHERE role = 'admin' AND user_id <> :uid"
+                        ),
+                        {"uid": user_id},
+                    )
+                ).scalar_one()
+            if int(other_admins) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="cannot deactivate the last admin",
+                )
+
+    set_clauses: list[str] = []
+    params: dict[str, object] = {"uid": user_id}
+    if body.display_name is not None:
+        set_clauses.append("display_name = :display_name")
+        params["display_name"] = body.display_name
+    if body.email is not None:
+        set_clauses.append("email = :email")
+        params["email"] = body.email
+    if body.is_active is not None:
+        set_clauses.append("is_active = :is_active")
+        params["is_active"] = bool(body.is_active)
+    if body.password is not None:
+        set_clauses.append("password_hash = :password_hash")
+        params["password_hash"] = hash_password(body.password)
+        logger.info("update_user: admin=%s rotated password for uid=%s", user.username, user_id)
+    if not set_clauses:
+        # Defensive — should be unreachable because of the early-return above
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="no updatable fields supplied",
+        )
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(
+            text(
+                f"UPDATE users SET {', '.join(set_clauses)} WHERE id = :uid"
+            ),
+            params,
+        )
+        if result.rowcount == 0:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"user not found: {user_id}",
+            )
+        await session.commit()
+    item = await _load_user_with_perms(user_id)
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"user not found: {user_id}",
+        )
+    return item
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/auth/users/{id}/lines  — accessible_lines only
+# ---------------------------------------------------------------------------
+
+
+@router.patch(
+    "/users/{user_id}/lines",
+    response_model=UserListItem,
+    summary="Admin: replace a user's accessible_lines (roles untouched)",
+)
+async def update_user_lines(
+    user_id: int,
+    body: UpdateUserLinesRequest,
+    user: CurrentUser = Depends(require_admin_dep),
+) -> UserListItem:
+    """Single-purpose endpoint so the admin UI can edit the line list
+    without re-sending the full role set.
+
+    Implementation note: ``accessible_lines`` is always derived as the
+    union of (a) the explicit ``user_business_lines`` rows and (b) the
+    lines implied by the user's ``bp:<line>`` roles. We therefore keep
+    the existing ``bp:`` roles intact and only replace the explicit
+    rows.
+    """
+    factory = get_session_factory()
+    async with factory() as session:
+        # Reject unknown user (FK would also reject, but the 404 message
+        # is friendlier).
+        target_exists = (
+            await session.execute(
+                text("SELECT 1 FROM users WHERE id = :uid"),
+                {"uid": user_id},
+            )
+        ).first()
+        if not target_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"user not found: {user_id}",
+            )
+        derived = {
+            r[3:]
+            for r in (
+                await session.execute(
+                    text(
+                        "SELECT role FROM user_roles "
+                        "WHERE user_id = :uid AND role LIKE 'bp:%'"
+                    ),
+                    {"uid": user_id},
+                )
+            ).scalars().all()
+        }
+        explicit = set(body.accessible_lines or [])
+        merged = sorted(explicit | derived)
+        await session.execute(
+            text("DELETE FROM user_business_lines WHERE user_id = :uid"),
+            {"uid": user_id},
+        )
+        for line in merged:
+            await session.execute(
+                text(
+                    "INSERT INTO user_business_lines (user_id, line_id) "
+                    "VALUES (:uid, :line_id) ON CONFLICT DO NOTHING"
+                ),
+                {"uid": user_id, "line_id": line},
+            )
+        await session.commit()
+    item = await _load_user_with_perms(user_id)
+    assert item is not None
+    return item
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/users/{id}/reset-password  — admin-initiated password rotate
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/users/{user_id}/reset-password",
+    response_model=ResetPasswordResponse,
+    summary="Admin: rotate a user's password",
+)
+async def reset_user_password(
+    user_id: int,
+    body: ResetPasswordRequest,
+    user: CurrentUser = Depends(require_admin_dep),
+) -> ResetPasswordResponse:
+    factory = get_session_factory()
+    new_hash = hash_password(body.new_password)
+    async with factory() as session:
+        result = await session.execute(
+            text(
+                "UPDATE users SET password_hash = :h WHERE id = :uid"
+            ),
+            {"h": new_hash, "uid": user_id},
+        )
+        if result.rowcount == 0:
+            await session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"user not found: {user_id}",
+            )
+        await session.commit()
+    logger.info(
+        "reset_user_password: admin=%s rotated password for uid=%s reveal=%s",
+        user.username, user_id, body.reveal,
+    )
+    return ResetPasswordResponse(
+        ok=True,
+        message=f"password rotated for user {user_id}",
+        new_password=body.new_password if body.reveal else None,
+    )
 
 
 @router.delete(

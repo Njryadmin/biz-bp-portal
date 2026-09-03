@@ -127,3 +127,7 @@ htmlcov/
 next-env.d.ts
 .tsbuildinfo
 *.tsbuildinfo
+
+# Local embedded Postgres data dir (pgserver_runner.py)
+.pgdata/
+
