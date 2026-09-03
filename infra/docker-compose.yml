@@ -1,10 +1,16 @@
 # infra/docker-compose.yml
-# One-shot deployment for the Fin BP Portal — infra (5 services) + apps (2 services).
+# Biz-BP Portal 一键部署栈 — 基础设施（5 服务）+ 应用（2 服务）。
 #
-# Usage:
-#   cp .env.example .env       # edit secrets
+# 使用方法：
+#   cp .env.example .env       # 编辑密钥
 #   docker compose -f infra/docker-compose.yml --env-file .env up -d --build
-#   open http://localhost:3000
+#   浏览器访问 http://localhost:3000
+#
+# 容器命名沿用历史 "finbp-" 前缀，与代码内 service_token / 数据库用户名保持一致。
+# 如需一并改名为 "bizbp-"，请同步修改：
+#   1. 本文件全部 container_name / image 字段
+#   2. infra/airflow/dags/*.py 里读 POSTGRES_* 的部分
+#   3. .env.example 里的 POSTGRES_USER / CLICKHOUSE_USER / MINIO_ROOT_USER
 #
 # Ports (host → container):
 #   3000 → web      (Next.js production server)
@@ -53,8 +59,16 @@ services:
       JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-24}
       BIZ_BP_BOOTSTRAP_ADMIN_USERNAME: ${BIZ_BP_BOOTSTRAP_ADMIN_USERNAME:-admin}
       BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD: ${BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+      BIZ_BP_BOOTSTRAP_BP_PASSWORD: ${BIZ_BP_BOOTSTRAP_BP_PASSWORD:-bp123456}
       BIZ_BP_COOKIE_SECURE: ${BIZ_BP_COOKIE_SECURE:-false}
       BIZ_BP_COOKIE_NAME: ${BIZ_BP_COOKIE_NAME:-finbp_token}
+      # 进程内 mock 引擎调用 API 的服务间令牌
+      # （apps/api/app/services/llm/mock_helpers.py:42-44 + auth.py:378-388）
+      BIZ_BP_SERVICE_TOKEN: ${BIZ_BP_SERVICE_TOKEN:-internal-svc-token-CHANGE-ME-IN-PROD}
+      # Fernet 加密 ai_models.api_key 列的密钥
+      # 不设则 api_key 明文存储；生产环境必须设置
+      # 生成方式：python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      BIZ_BP_AI_SECRET_KEY: ${BIZ_BP_AI_SECRET_KEY:-}
     ports:
       - "8000:8000"
     volumes:
