@@ -87,7 +87,7 @@ function LoginInner() {
       >
         <div style={{ textAlign: "center", marginBottom: 24 }}>
           <Title level={3} style={{ margin: 0 }}>
-            Fin BP Portal
+            Biz-BP Portal
           </Title>
           <Text type="secondary">登录以访问业务线数据</Text>
         </div>

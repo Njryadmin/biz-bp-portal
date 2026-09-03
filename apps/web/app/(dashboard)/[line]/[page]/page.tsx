@@ -23,8 +23,8 @@ import {
   Tag,
   Typography,
 } from "antd";
-import { EmptyState, UniversalChart, UniversalKpiCard } from "@fin-bp/ui";
-import type { BusinessLine } from "@fin-bp/types";
+import { EmptyState, UniversalChart, UniversalKpiCard } from "@biz-bp/ui";
+import type { BusinessLine } from "@biz-bp/types";
 import {
   buildLinePageConfig,
   getPageSpec,

@@ -1,5 +1,5 @@
 {
-  "name": "@fin-bp/ui",
+  "name": "@biz-bp/ui",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",

@@ -1,6 +1,6 @@
 # Deployment Guide
 
-The Fin BP Portal is delivered as a 7-service Docker Compose stack.
+The Biz-BP Portal is delivered as a 7-service Docker Compose stack.
 This document covers environment variables, deployment topology, and
 operational commands.
 

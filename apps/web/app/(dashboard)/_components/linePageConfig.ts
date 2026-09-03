@@ -19,7 +19,7 @@
 // This rewrite makes the table data-driven so the 6 new lines (and
 // any future ones) get rendered for free.
 
-import type { BusinessLine } from "@fin-bp/types";
+import type { BusinessLine } from "@biz-bp/types";
 
 export type PageKind =
   | "line-overview"

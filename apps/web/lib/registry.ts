@@ -1,5 +1,5 @@
 // apps/web/lib/registry.ts
-import type { BusinessLine } from "@fin-bp/types";
+import type { BusinessLine } from "@biz-bp/types";
 
 export interface RegistryResponse {
   lines: BusinessLine[];

@@ -40,7 +40,7 @@ import {
   Typography,
 } from "antd";
 import { LineChartOutlined, ReloadOutlined } from "@ant-design/icons";
-import { EmptyState, UniversalChart } from "@fin-bp/ui";
+import { EmptyState, UniversalChart } from "@biz-bp/ui";
 
 const { Title, Paragraph, Text } = Typography;
 

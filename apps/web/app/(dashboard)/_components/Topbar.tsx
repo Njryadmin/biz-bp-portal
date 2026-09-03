@@ -10,8 +10,8 @@
 
 import { Avatar, Dropdown, Space } from "antd";
 import * as Icons from "@ant-design/icons";
-import { RoleSwitcher } from "@fin-bp/ui";
-import type { BusinessLine } from "@fin-bp/types";
+import { RoleSwitcher } from "@biz-bp/ui";
+import type { BusinessLine } from "@biz-bp/types";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCallback } from "react";

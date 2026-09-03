@@ -5,7 +5,7 @@ import { ConfigProvider } from "antd";
 import "antd/dist/reset.css";
 
 export const metadata = {
-  title: "Fin BP Portal",
+  title: "Biz-BP Portal",
   description: "Financial Business Performance Portal",
 };
 

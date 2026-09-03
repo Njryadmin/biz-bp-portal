@@ -1,4 +1,4 @@
-# Fin BP Portal
+# Biz-BP Portal
 
 A pluggable financial-business-partner analysis portal for real-estate
 consulting firms. The whole backend is built around a **business-line plugin

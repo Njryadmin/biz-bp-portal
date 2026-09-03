@@ -64,8 +64,8 @@ import {
   CloseCircleTwoTone,
   WarningOutlined,
 } from "@ant-design/icons";
-import { UniversalChart } from "@fin-bp/ui";
-import type { BusinessLine } from "@fin-bp/types";
+import { UniversalChart } from "@biz-bp/ui";
+import type { BusinessLine } from "@biz-bp/types";
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;

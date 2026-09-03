@@ -42,7 +42,7 @@ import {
   ShopOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { EmptyState } from "@fin-bp/ui";
+import { EmptyState } from "@biz-bp/ui";
 
 const { Title, Paragraph, Text } = Typography;
 

@@ -16,8 +16,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Card, Col, Row, Skeleton, Space, Spin, Typography } from "antd";
-import { EmptyState, UniversalKpiCard } from "@fin-bp/ui";
-import type { BusinessLine, Indicator } from "@fin-bp/types";
+import { EmptyState, UniversalKpiCard } from "@biz-bp/ui";
+import type { BusinessLine, Indicator } from "@biz-bp/types";
 import {
   buildLinePageConfig,
   getPageSpec,

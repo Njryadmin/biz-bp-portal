@@ -16,8 +16,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
-      "@fin-bp/types": ["../../packages/types/src/index.ts"],
-      "@fin-bp/ui": ["../../packages/ui/src/index.ts"]
+      "@biz-bp/types": ["../../packages/types/src/index.ts"],
+      "@biz-bp/ui": ["../../packages/ui/src/index.ts"]
     },
     "plugins": [{ "name": "next" }]
   },

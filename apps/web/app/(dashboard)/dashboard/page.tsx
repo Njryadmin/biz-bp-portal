@@ -14,8 +14,8 @@ import { Card, Col, Row, Typography, Statistic, Space, Spin } from "antd";
 import * as Icons from "@ant-design/icons";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { EmptyState } from "@fin-bp/ui";
-import type { BusinessLine } from "@fin-bp/types";
+import { EmptyState } from "@biz-bp/ui";
+import type { BusinessLine } from "@biz-bp/types";
 
 const { Title, Paragraph } = Typography;
 

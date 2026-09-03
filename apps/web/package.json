@@ -1,5 +1,5 @@
 {
-  "name": "@fin-bp/web",
+  "name": "@biz-bp/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -16,8 +16,8 @@
     "antd": "5.20.0",
     "@ant-design/icons": "5.4.0",
     "@ant-design/nextjs-registry": "1.0.0",
-    "@fin-bp/types": "*",
-    "@fin-bp/ui": "*",
+    "@biz-bp/types": "*",
+    "@biz-bp/ui": "*",
     "echarts": "5.5.1",
     "echarts-for-react": "3.0.2",
     "ag-grid-community": "32.1.0",

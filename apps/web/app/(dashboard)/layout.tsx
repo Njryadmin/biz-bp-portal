@@ -15,7 +15,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { BusinessLine } from "@fin-bp/types";
+import type { BusinessLine } from "@biz-bp/types";
 
 import { SidebarMenu } from "./_components/SidebarMenu";
 import { Topbar } from "./_components/Topbar";
@@ -103,7 +103,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span style={{ fontSize: 18, fontWeight: 600 }}>Fin BP Portal</span>
+          <span style={{ fontSize: 18, fontWeight: 600 }}>Biz-BP Portal</span>
           <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 12 }}>
             registry v{version} · {lines.length}/{allLines.length || lines.length} business line
             {lines.length === 1 ? "" : "s"}

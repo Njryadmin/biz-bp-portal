@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["@fin-bp/ui", "@fin-bp/types"],
+  transpilePackages: ["@biz-bp/ui", "@biz-bp/types"],
   experimental: {
     optimizePackageImports: ["antd", "@ant-design/icons"],
   },

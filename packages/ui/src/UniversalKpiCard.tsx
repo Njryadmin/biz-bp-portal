@@ -7,7 +7,7 @@
 
 import { Card, Skeleton, Tooltip } from "antd";
 import type { CSSProperties } from "react";
-import type { IndicatorFormat } from "@fin-bp/types";
+import type { IndicatorFormat } from "@biz-bp/types";
 
 export interface UniversalKpiIndicator {
   id: string;

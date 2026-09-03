@@ -13,7 +13,7 @@ import { usePathname } from "next/navigation";
 import { Tooltip } from "antd";
 import * as Icons from "@ant-design/icons";
 import Link from "next/link";
-import type { BusinessLine } from "@fin-bp/types";
+import type { BusinessLine } from "@biz-bp/types";
 
 type IconName = keyof typeof Icons;
 

@@ -42,7 +42,7 @@ import {
   Typography,
 } from "antd";
 import { ExperimentOutlined, ReloadOutlined } from "@ant-design/icons";
-import { EmptyState, UniversalChart } from "@fin-bp/ui";
+import { EmptyState, UniversalChart } from "@biz-bp/ui";
 
 const { Title, Paragraph, Text } = Typography;
 
