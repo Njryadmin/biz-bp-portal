@@ -1,0 +1,63 @@
+# infra/docker-compose.override.yml
+# Biz-BP / InsightBP 部署端口偏移 — 给已部署服务的机器用.
+#
+# 锁定日期: 2026-09-04
+# 引用:    .routex-handoff/INSIGHTBP-DISCUSSION-SUMMARY.md §7
+#
+# 用法:   docker compose -f infra/docker-compose.yml -f infra/docker-compose.override.yml up -d --build
+# 默认端口冲突机器 (主人 iStoreOS):
+#   3000 → moontv-core (Web)
+#   18789 / 18793 → OpenClaw gateway / web PTY
+#   6666 → moontv-kvrocks
+#   8050 → pdfcraft
+#   8444 → stirling-pdf
+# MVP 阶段关掉 clickhouse + airflow (仅在 profiles: ["full"] 启用)
+#
+# 入口:  http://<host>:13000  (Web)
+#        http://<host>:18000  (API)
+#
+# 不破坏: 原始 infra/docker-compose.yml 一字不动. 此文件仅在用 -f 同时引用时生效.
+
+services:
+  # ---------------------------------------------------------------------------
+  # 应用服务
+  # ---------------------------------------------------------------------------
+
+  api:
+    ports:
+      - "18000:8000"   # FastAPI: 8000 → 18000
+
+  web:
+    ports:
+      - "13000:3000"   # Next.js: 3000 → 13000 (避 moontv-core)
+    environment:
+      # BFF proxy 在容器内仍指向原 api:8000 (Docker network 内部)
+      NEXT_PUBLIC_API_BASE_URL: http://api:8000
+
+  # ---------------------------------------------------------------------------
+  # 基础设施服务
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    ports:
+      - "15432:5432"   # PG: 5432 → 15432
+
+  redis:
+    ports:
+      - "16379:6379"   # Redis: 6379 → 16379
+
+  clickhouse:
+    profiles: ["full"]    # MVP 阶段默认关掉, 仅 profiles=["full"] 启用
+    ports:
+      - "18123:8123"     # HTTP: 8123 → 18123
+      - "19100:9000"     # native: 9100 → 19100
+
+  minio:
+    ports:
+      - "19000:9000"     # S3: 9000 → 19000
+      - "19001:9001"     # console: 9001 → 19001
+
+  airflow:
+    profiles: ["full"]    # MVP 阶段默认关掉
+    ports:
+      - "18080:8080"     # webserver: 8080 → 18080
