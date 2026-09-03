@@ -1,0 +1,86 @@
+# business_lines/_template/manifest.yaml.v2.example
+# Biz-BP / InsightBP v2 manifest 模板.
+# 复制到 business_lines/<line_id>/manifest.yaml 后编辑.
+# Schema 由 API 端 apps/api/app/core/registry.py 解析 (Pydantic 校验) + Web 端共用.
+#
+# v1 → v2 增量字段 (这 4 块是新增, v1 字段全部保留):
+#   - data_scope.domains:        本业务线涵盖哪些数据域 (5 选 N)
+#   - owner_role_assignments:    本业务线的角色绑定 (finance_bp / hr_bp / line_owner)
+#   - access_matrix:             域 × 角色的访问矩阵 (用于 UI 过滤)
+#   - kpis:                      KPI 列表 (fin_view / hr_view / shared_view 三类)
+#
+# 向后兼容: 旧 manifest 缺这 4 块时, v2 解析器应当给出默认值
+# (data_scope.domains=[business], access_matrix 全开放, kpis={}).
+# 本次只动模板 + project-management, 其他 8 条业务线后续按需升级.
+
+# ---------------------------------------------------------------------------
+# v1 字段 (全部保留)
+# ---------------------------------------------------------------------------
+id: change-me                    # url-safe slug, 必须与目录名一致
+name: Change Me                   # 中文显示名
+version: 0.1.0
+description: "模板业务线, 替换为真实描述."
+owner: "you@example.com"
+
+icon: "AppstoreOutlined"          # @ant-design/icons 名
+
+nav:                              # Web 端导航
+  - path: "/change-me"
+    title: "概览"
+
+api_prefix: "/api/lines/change-me"  # API 挂载点, 必须以 / 开头
+
+warehouse:
+  schema: "raw_change_me"
+  dbt_schema: "stg_change_me"
+  mart_schema: "mart_change_me"
+
+refresh:
+  schedule: "0 2 * * *"
+  enabled: true
+
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true
+
+# ---------------------------------------------------------------------------
+# v2 新增字段 — 必填
+# ---------------------------------------------------------------------------
+
+# 本业务线涵盖的数据域 (5 选 N)
+# 5 域: business / finance / hr / client / project
+# 例: 纯财务咨询业务线只填 [business, finance, project]
+#     代建项目业务线填全部 5 个
+data_scope:
+  domains: [business, finance, hr, client, project]
+
+# 本业务线的角色绑定 (用户名 → v2 role + 业务线 id)
+# 这些用户在 admin 后台会自动获得对应 v2 角色
+# 格式: "<role_id>:<line_id>" (与 .routex-handoff/rbac_v2.py:Role 枚举对齐)
+owner_role_assignments:
+  finance_bp: "fin_bp:change-me"     # 本线 FINBP
+  hr_bp: "hr_bp:change-me"           # 本线 HRBP
+  line_owner: "line_owner:change-me" # 本线总监 / 合伙人
+
+# 域 × 角色的访问矩阵
+# 列出每种 v2 角色可访问的域 (用于 UI 过滤 + 后端 require_domain_access 双重保护)
+# 集团角色 (admin/auditor/viewer/fin_bp_global/hr_bp_global) 不在此列, 始终全开
+access_matrix:
+  fin_bp:      [business, finance, project]   # FINBP 看不到 hr/client
+  hr_bp:       [business, hr, client]         # HRBP 看不到 finance/project
+  line_owner:  [business, finance, hr, client, project]  # 业务线全权
+  line_member: [business, project, client]    # 普通员工只读
+
+# KPI 列表 (三类视角, 互不重复)
+# 字段: id (url-safe), title (中文), source (mart 表名, 可选), formula (派生指标公式, 可选)
+# formula 用 Jinja-like 语法, 例如 "monthly_revenue / headcount_fte"
+kpis:
+  fin_view:                       # FINBP 视角关注的财务 KPI
+    - { id: monthly_revenue, title: "月度营收", source: "mart_change_me.fct_revenue" }
+    - { id: gross_margin, title: "毛利率" }
+  hr_view:                        # HRBP 视角关注的人力 KPI
+    - { id: headcount_fte, title: "在职 FTE" }
+    - { id: attrition_rate, title: "季度流失率" }
+  shared_view:                    # FIN+HR 共同关注
+    - { id: revenue_per_fte, title: "人均营收", formula: "monthly_revenue / headcount_fte" }

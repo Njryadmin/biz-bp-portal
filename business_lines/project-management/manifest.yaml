@@ -2,6 +2,9 @@
 # 地产项目管理部业务线 manifest.
 # 数据模型: 代建项目 + 合同 + 里程碑 + 团队.
 # 核心指标: 项目数 / 合同额 / 进度偏差 / 预算偏差 / 客户满意度 / 续约率.
+#
+# v2 升级 — 2026-09-04 — 保留 v1 全部字段, 追加 data_scope/owner_role_assignments/access_matrix/kpis.
+# MVP 第一个示范业务线, 用于端到端跑通 8 角色 RBAC + 5 数据域 + FIN/HR 物理隔离.
 
 id: project-management
 name: 地产项目管理部
@@ -38,3 +41,45 @@ features:
   universal_kpi: true
   universal_chart: true
   ag_grid: true
+
+# ---------------------------------------------------------------------------
+# v2 新增字段
+# ---------------------------------------------------------------------------
+
+# 代建项目涉及合同/客户/项目/财务/人力, 5 域全开
+data_scope:
+  domains: [business, finance, hr, client, project]
+
+# 复用现有 v1 种子用户 bp-project-management 的角色绑定
+# 实际 user → role 映射在 DB (user_roles 表) 中, 此处只声明本线应有哪些角色
+# 格式 "<role_id>:<line_id>" 与 .routex-handoff/rbac_v2.py:Role 枚举对齐
+owner_role_assignments:
+  finance_bp: "fin_bp:project-management"     # 本线 FINBP
+  hr_bp: "hr_bp:project-management"           # 本线 HRBP
+  line_owner: "line_owner:project-management" # 本线总监 / 合伙人
+
+# 域 × 角色访问矩阵 — 沿用 v2 模板默认值
+# 集团角色 (admin/auditor/viewer/fin_bp_global/hr_bp_global) 不在此列, 始终全开
+# FIN ↔ HR 物理隔离铁律: fin_bp 看不到 hr/client, hr_bp 看不到 finance/project
+access_matrix:
+  fin_bp:      [business, finance, project]   # FINBP 看不到 hr/client
+  hr_bp:       [business, hr, client]         # HRBP 看不到 finance/project
+  line_owner:  [business, finance, hr, client, project]  # 业务线全权
+  line_member: [business, project, client]    # 普通员工只读
+
+# PM 业务线 KPI 列表 — 分散到三类视角
+#   - fin_view:    FINBP 关注的财务指标 (合同额 / 预算 / 在管项目数)
+#   - hr_view:     HRBP 关注的人力指标 (FTE / 团队产能)
+#   - shared_view: FIN + HR 共同关注 (进度 / 客户 / 续约 / 按时交付)
+kpis:
+  fin_view:
+    - { id: monthly_contract_value, title: "月度代建合同额", source: "mart_pm.fct_contract_value" }
+    - { id: budget_variance, title: "预算偏差率", source: "mart_pm.fct_budget_variance" }
+    - { id: project_count, title: "在管项目数", source: "mart_pm.fct_project_count" }
+  hr_view:
+    - { id: headcount_fte, title: "PM 在职 FTE", source: "mart_pm.fct_headcount_fte" }
+    - { id: team_utilization, title: "团队产能利用率", source: "mart_pm.fct_team_utilization" }
+  shared_view:
+    - { id: schedule_variance, title: "进度偏差率", source: "mart_pm.fct_schedule_variance" }
+    - { id: client_satisfaction, title: "客户满意度", source: "mart_pm.fct_client_satisfaction" }
+    - { id: renewal_rate, title: "续约率", source: "mart_pm.fct_renewal_rate" }
