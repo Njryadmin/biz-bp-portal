@@ -35,6 +35,114 @@ business_lines/<line>/         ← 每个业务线一个目录
 
 ---
 
+## 架构总览
+
+### 一、组件拓扑
+
+```mermaid
+flowchart TB
+    subgraph EXT["外部"]
+        User([🌐 浏览器<br/>admin / bp-* / viewer])
+        LLM_EXT["DeepSeek / Ollama<br/>LLM 提供方"]
+        LIA[/链家 bj/sh/sz/gz<br/>ershoufang/]
+        MOH[/mohurd.gov.cn<br/>政策主页/]
+        NBS[/stats.gov.cn<br/>70 城房价/]
+    end
+
+    subgraph WEB["Next.js :3000 — apps/web/"]
+        direction TB
+        Pages["Ant Design 页面<br/>(dashboard) / [line] / admin / copilot / alerts / scrapers / forecast / sensitivity"]
+        BFF["BFF 通配代理 /api/*<br/>apps/web/app/api/"]
+        Pages -->|"fetch 相对 URL"| BFF
+    end
+
+    subgraph API["FastAPI :8769 — apps/api/app/"]
+        direction TB
+        MW["中间件<br/>Audit → raw.audit_log<br/>(失败重试一次)"]
+        Routers["Routers<br/>auth · ai_models · registry<br/>forecast · sensitivity · alerts<br/>copilot · upload · scrapers<br/>+ business_lines/* 动态挂载"]
+        Engines["通用引擎<br/>LLM Factory (DeepSeek/Ollama/Mock)<br/>Scraper Registry · Alert Engine<br/>Copilot Engine · Sensitivity Engine<br/>Forecast Engine"]
+        Schemas["Pydantic v2 Schemas<br/>apps/api/app/schemas/"]
+        Routers --> MW
+        Engines --> Routers
+        Routers --> Schemas
+    end
+
+    subgraph DATA["数据层"]
+        PG[("PostgreSQL 16<br/>users · user_roles · user_business_lines<br/>ai_models · raw.uploads · raw.audit_log")]
+        PGS["pgserver_runner.py<br/>(dev 嵌入 pg)"]
+        PG -.dev only.-> PGS
+    end
+
+    subgraph PLUGINS["业务线插件 — business_lines/"]
+        direction LR
+        T["_template/<br/>manifest + indicators<br/>+ sensitivity/forecast/alerts"]
+        L1["residential /<br/>9 business lines"]
+        L2["retail /"]
+        L3["valuation /"]
+        L4["...6 more"]
+        T -.示例.-> L1
+    end
+
+    User -->|"HTTPS + httpOnly cookie"| Pages
+    BFF -->|"forward cookie"| Routers
+    Engines <-->|"in-process HTTP<br/>X-Service-Token"| Routers
+    Engines -->|"SQLAlchemy async"| PG
+    Schemas -.shape.-> Pages
+    PLUGINS -.importlib 启动发现.-> Routers
+    Engines -->|"HTTPS (LLM)"| LLM_EXT
+    Engines -->|"HTTPS (scraper)"| LIA
+    Engines -->|"HTTPS (scraper)"| MOH
+    Engines -->|"HTTPS (scraper)"| NBS
+```
+
+### 二、一次典型请求的生命周期
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 浏览器
+    participant NX as Next.js<br/>(BFF proxy)
+    participant FA as FastAPI<br/>(Router)
+    participant SV as 业务服务
+    participant DB as PostgreSQL
+    participant EX as 外部 (LLM/scraper)
+
+    U->>NX: GET /api/copilot/ask<br/>(finbp_token cookie)
+    NX->>FA: POST http://api:8000/api/copilot/ask<br/>+ cookie header
+    FA->>FA: get_current_user<br/>(cookie → JWT 解码)
+    FA->>SV: CopilotEngine.ask()
+    SV->>FA: in-process HTTP via X-Service-Token<br/>GET /api/lines/{line}/projects
+    FA-->>SV: 业务数据
+    SV->>EX: HTTPS (DeepSeek/Ollama)
+    EX-->>SV: LLM 响应
+    SV-->>FA: CopilotResponse (with citations)
+    FA->>DB: INSERT raw.audit_log<br/>(retry once on failure)
+    FA-->>NX: 200 + JSON
+    NX-->>U: 渲染回答 + 引用
+```
+
+### 三、为什么"业务线插件"对核心零侵入
+
+```mermaid
+flowchart LR
+    subgraph CORE["apps/ 核心代码"]
+        Engines["engines/<br/>LLM · Scraper · Copilot<br/>Sensitivity · Forecast · Alerts"]
+    end
+    subgraph PLUGINS["business_lines/ 插件目录"]
+        Yaml["manifest.yaml<br/>indicators.yaml<br/>sensitivity.yaml<br/>forecast.yaml<br/>alerts.yaml"]
+        Router["api/router.py<br/>(FastAPI Router)"]
+    end
+    Engines -->|"启动时 importlib<br/>扫描 registry.yaml"| Router
+    Engines -.读取 YAML.-> Yaml
+    style CORE fill:#fef3c7
+    style PLUGINS fill:#dcfce7
+```
+
+引擎**永远不** `import business_lines/*`（这是核心约束）。新业务线
+= 复制 `_template/` + 改 manifest + 加 routers，零行核心代码修改。
+
+---
+
 ## 快速开始（Docker）
 
 ```bash
