@@ -106,46 +106,73 @@ async def _write_audit_row(
     background tasks in the event loop (which would block the next
     request in the TestClient). The DB has its own 2s connect timeout;
     we add 1s for the actual insert.
-    """
-    try:
-        async def _do_write() -> None:
-            factory = get_session_factory()
-            async with factory() as session:
-                await session.execute(
-                    text(
-                        """
-                        INSERT INTO raw.audit_log
-                            (user_id, username, method, path, query,
-                             status_code, duration_ms, ip, user_agent)
-                        VALUES
-                            (:user_id, :username, :method, :path, :query,
-                             :status_code, :duration_ms, :ip, :user_agent)
-                        """
-                    ),
-                    {
-                        "user_id": user_id,
-                        "username": username,
-                        "method": method,
-                        "path": path,
-                        "query": query[:1000] if query else None,
-                        "status_code": int(status_code),
-                        "duration_ms": int(duration_ms),
-                        "ip": ip[:64] if ip else None,
-                        "user_agent": user_agent[:512] if user_agent else None,
-                    },
-                )
-                await session.commit()
 
-        await asyncio.wait_for(_do_write(), timeout=3.0)
-    except asyncio.TimeoutError:
-        logger.warning(
-            "audit_log write timed out for %s %s (DB unreachable?)", method, path
-        )
-    except Exception as exc:  # noqa: BLE001
-        # Defensive: a failing audit MUST NOT take down the API.
-        # The DB may be down (most common case) or the table may not
-        # exist yet. In any case, log and move on.
-        logger.warning("audit_log write failed for %s %s: %s", method, path, exc)
+    On the first connection-level failure (the cached engine's pool
+    can hold a connection whose asyncpg protocol has been torn down —
+    e.g. after the DB container was bounced or after a fast restart
+    of this process), we dispose the cached engine and retry once
+    with a fresh pool. We do not retry a second time: a persistent
+    failure means the DB is down, and we should not pile up retries
+    in the event loop.
+    """
+    from ..db import session as _db_session  # local to avoid circular at import
+    payload = {
+        "user_id": user_id,
+        "username": username,
+        "method": method,
+        "path": path,
+        "query": query[:1000] if query else None,
+        "status_code": int(status_code),
+        "duration_ms": int(duration_ms),
+        "ip": ip[:64] if ip else None,
+        "user_agent": user_agent[:512] if user_agent else None,
+    }
+    insert_sql = text(
+        """
+        INSERT INTO raw.audit_log
+            (user_id, username, method, path, query,
+             status_code, duration_ms, ip, user_agent)
+        VALUES
+            (:user_id, :username, :method, :path, :query,
+             :status_code, :duration_ms, :ip, :user_agent)
+        """
+    )
+
+    for attempt in (1, 2):
+        try:
+            async def _do_write() -> None:
+                factory = get_session_factory()
+                async with factory() as session:
+                    await session.execute(insert_sql, payload)
+                    await session.commit()
+
+            await asyncio.wait_for(_do_write(), timeout=3.0)
+            return
+        except asyncio.TimeoutError:
+            logger.warning(
+                "audit_log write timed out for %s %s (DB unreachable?)", method, path
+            )
+            return
+        except Exception as exc:  # noqa: BLE001
+            if attempt == 1:
+                # Likely a stale connection in the cached pool. Reset
+                # the engine so the next call gets a fresh one, then
+                # retry once. The error string includes the classic
+                # 'NoneType' has no attribute 'send' (asyncpg's
+                # Protocol.send) or 'connection has been closed in the
+                # middle of operation'.
+                logger.warning(
+                    "audit_log write failed for %s %s (attempt 1/2, will reset engine and retry): %s",
+                    method, path, exc,
+                )
+                try:
+                    _db_session.reset_engine()
+                except Exception:  # noqa: BLE001
+                    pass
+                continue
+            # Final failure: log and move on. NEVER raise.
+            logger.warning("audit_log write failed for %s %s: %s", method, path, exc)
+            return
 
 
 def _schedule_audit_row(**kwargs) -> None:
