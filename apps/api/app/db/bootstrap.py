@@ -256,11 +256,13 @@ async def ensure_raw_schema() -> None:
         await conn.execute(
             text("DELETE FROM users WHERE username = 'bp-my-line'")
         )
-        # Seed the MockBackend row. ON CONFLICT DO NOTHING so a partial
-        # seed (the row was deleted but the table was kept) is repaired
-        # on the next restart. We always force this row to
-        # is_default=TRUE so the factory has a known-good fallback even
-        # if the operator later deletes every other row.
+        # Seed the MockBackend row. The unique constraint is on
+        # ``name``; we additionally guard with a WHERE NOT EXISTS
+        # so the seed is a no-op when an operator renamed the
+        # original "Mock (built-in)" to something else (e.g.
+        # "Deepseel") and then deleted it. Without the guard we
+        # would re-seed a fresh row on every restart, leaving a
+        # confusing trail of stale mock rows behind.
         await conn.execute(
             text(
                 """
@@ -268,10 +270,12 @@ async def ensure_raw_schema() -> None:
                     (name, provider, model_name, base_url, api_key,
                      enabled, is_default, is_active,
                      last_test_status)
-                VALUES
-                    ('Mock (built-in)', 'mock', 'mock-1', NULL, NULL,
-                     TRUE, TRUE, TRUE, 'untested')
-                ON CONFLICT (name) DO NOTHING
+                SELECT
+                    'Mock (built-in)', 'mock', 'mock-1', NULL, NULL,
+                    TRUE, TRUE, TRUE, 'untested'
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM ai_models WHERE provider = 'mock' AND is_active = TRUE
+                )
                 """
             )
         )
