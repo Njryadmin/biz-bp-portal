@@ -174,19 +174,35 @@ async def run_one(
     result = await scraper.run()
     payload: dict[str, Any] = result.to_dict()
     if persist:
-        try:
-            # Re-derive rows by re-running the pipeline. ``run()`` already
-            # returned; we need the actual rows for persistence.
-            raw = await scraper.fetch()
-        except Exception:
-            raw = []
-        if not raw:
-            # Fallback path was used (or fetch is permanently broken).
+        # Re-derive rows for persistence. We only re-run fetch+parse if
+        # the live fetch is expected to work; if ``run()`` already had
+        # to fall back, ``scraper.fallback()`` returns already-validated
+        # rows and re-parsing them (as if they were raw HTML) drops
+        # them all on the floor. lianjia is the worst offender: its
+        # fallback rows are plain dicts with no ``_html`` field, so
+        # ``parse([])`` returns ``[]`` and ``persist`` is silently
+        # skipped → ``last_run`` is None even though the run produced
+        # 6 mock rows. We now branch on ``used_fallback``.
+        rows: list[dict[str, Any]] = []
+        if getattr(result, "used_fallback", False):
             try:
-                raw = scraper.fallback()
+                rows = scraper.fallback()
             except Exception:
-                raw = []
-        rows = scraper.validate(scraper.parse(raw))
+                rows = []
+            rows = scraper.validate(rows)
+        else:
+            try:
+                raw = await scraper.fetch()
+                if raw:
+                    rows = scraper.validate(scraper.parse(raw))
+            except Exception:
+                rows = []
+            if not rows:
+                # Live fetch succeeded but produced nothing usable.
+                try:
+                    rows = scraper.validate(scraper.fallback())
+                except Exception:
+                    rows = []
         landing_rows = [scraper.to_landing_row(r) for r in rows]
         try:
             upload_id = await scraper.persist(landing_rows)
