@@ -374,11 +374,31 @@ async def get_current_user(
     """Resolve the current user from the httpOnly cookie.
 
     Order of precedence:
+      0. ``X-Service-Token`` header (internal service-to-service auth).
+         Matched against ``FIN_BP_SERVICE_TOKEN`` env var. The synthetic
+         user has ``admin`` role and access to every line. Used by the
+         Copilot mock engine which makes in-process HTTP calls to fetch
+         data and therefore cannot supply a per-user cookie.
       1. ``finbp_token`` cookie (primary — httpOnly, XSS-resistant).
       2. ``Authorization: Bearer <jwt>`` header (curl / API clients).
 
     Raises 401 on missing / invalid / expired tokens.
     """
+    # 0. Service-token (in-process service-to-service)
+    service_token = os.environ.get("FIN_BP_SERVICE_TOKEN")
+    if service_token:
+        supplied = request.headers.get("x-service-token")
+        if supplied and supplied == service_token:
+            return CurrentUser(
+                id=0,
+                username="__service__",
+                display_name="Internal Service",
+                email=None,
+                is_active=True,
+                roles=["admin", "auditor"],
+                accessible_lines=[],  # admin role grants all anyway
+            )
+
     token = finbp_token
     if not token:
         auth = request.headers.get("authorization") or request.headers.get("Authorization")

@@ -41,6 +41,67 @@ INTENT_CONFIDENCE: dict[str, float] = {
 
 API_BASE = os.environ.get("FIN_BP_API_BASE", "http://127.0.0.1:8769")
 HTTP_TIMEOUT = float(os.environ.get("FIN_BP_COPILOT_HTTP_TIMEOUT", "2.0"))
+SERVICE_TOKEN = os.environ.get("FIN_BP_SERVICE_TOKEN", "")
+
+# ---------------------------------------------------------------------------
+# Per-line endpoint conventions
+# ---------------------------------------------------------------------------
+#
+# The mock engine uses these names to call the correct line-specific
+# endpoints. The "list" path is the route that returns the line's primary
+# collection of items (projects / properties / funds / ...). Add an
+# entry here whenever a new business line is added.
+#
+# A line is also given an `id_field` so the mock can pluck a stable
+# identifier from each item and build the per-item "detail" path.
+LINE_ENDPOINTS: dict[str, dict[str, str]] = {
+    "residential":         {"list": "projects",          "id_field": "project_id"},
+    "retail":              {"list": "properties",        "id_field": "property_id"},
+    "retail-leasing":      {"list": "properties",        "id_field": "property_id"},
+    "valuation":          {"list": "reports",           "id_field": "report_id"},
+    "advisory":            {"list": "projects",          "id_field": "project_id"},
+    "office-leasing":      {"list": "deals",             "id_field": "deal_id"},
+    "investment":          {"list": "funds",             "id_field": "fund_id"},
+    "project-management":  {"list": "projects",          "id_field": "project_id"},
+    "industrial":          {"list": "properties",        "id_field": "property_id"},
+    "my-line":             {"list": "info",              "id_field": "id"},
+}
+
+
+def _list_endpoint(line: str) -> str | None:
+    """Return the list path for `line` (e.g. ``projects``), or None."""
+    spec = LINE_ENDPOINTS.get(line)
+    return spec["list"] if spec else None
+
+
+def _id_field(line: str) -> str | None:
+    """Return the id field name for `line` (e.g. ``project_id``), or None."""
+    spec = LINE_ENDPOINTS.get(line)
+    return spec["id_field"] if spec else None
+
+
+def _fetch_list(line: str) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch the line's list endpoint.
+
+    Returns ``(items, error_tag)``. ``error_tag`` is a short token used
+    in the answer text on failure (e.g. ``"projects"``).
+    """
+    plural = _list_endpoint(line) or "projects"
+    data = _http_json(f"/api/lines/{line}/{plural}")
+    if not data:
+        return [], plural
+    # The list may be under various keys depending on the line. Look for the
+    # first list-like value.
+    for k in (
+        "projects", "properties", "reports", "deals", "funds",
+        "items", "list", "data", "results",
+    ):
+        if isinstance(data.get(k), list):
+            return data[k], plural
+    # Maybe the response is itself a list
+    if isinstance(data, list):
+        return data, plural
+    return [], plural
 
 
 # ---------------------------------------------------------------------------
@@ -53,10 +114,22 @@ def _http_json(path: str, base: str | None = None) -> dict[str, Any] | None:
 
     Short timeout — copilot should degrade gracefully if a line API is
     down. Errors are logged at debug level by the engine caller.
+
+    The mock engine runs INSIDE the API process, so it cannot carry the
+    user's cookie. When a service token is configured (``FIN_BP_SERVICE_TOKEN``
+    must be set on the API server AND in this process), we send it as
+    ``X-Service-Token`` so the API grants admin-equivalent access to the
+    internal caller. Without a configured service token, the call is
+    unauthenticated and the API returns 401 — the mock will then return
+    its "no data" fallback text.
     """
     base = base or API_BASE
+    headers: dict[str, str] = {}
+    if SERVICE_TOKEN:
+        headers["X-Service-Token"] = SERVICE_TOKEN
     try:
-        with urllib.request.urlopen(f"{base}{path}", timeout=HTTP_TIMEOUT) as resp:
+        req = urllib.request.Request(f"{base}{path}", headers=headers)
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None
@@ -118,21 +191,21 @@ def intent_residential_irr_top(line: str, top_n: int, **_: Any) -> MockAnswer:
     """IRR top N — works for any line that has a /projects or /<plural> endpoint."""
     if not line:
         line = "residential"  # 唯一保留的 default：没指定业务线时按住宅处理
-    data = _http_json(f"/api/lines/{line}/projects")
-    if not data or not data.get("projects"):
+    items, _plural = _fetch_list(line)
+    if not items:
         return MockAnswer(
             answer=f"未能从{_line_label(line)}线 /projects 端点获取项目数据。请确认 API 正在运行。",
             intent="irr_top",
             confidence=_confidence("irr_top") * 0.5,
         )
-    projects = data["projects"]
+    projects = items
     # Compute IRR for each project by calling its dynamic-pl endpoint
     rows: list[dict[str, Any]] = []
     for p in projects:
-        pid = p.get("project_id")
+        pid = p.get(_id_field(line) or "id")
         if not pid:
             continue
-        pl = _http_json(f"/api/lines/{line}/projects/{pid}/dynamic-pl")
+        pl = _http_json(f"/api/lines/{line}/{_list_endpoint(line) or "items"}/{pid}/dynamic-pl")
         if not pl:
             continue
         rows.append(
@@ -165,7 +238,7 @@ def intent_residential_irr_top(line: str, top_n: int, **_: Any) -> MockAnswer:
         )
         citations.append(
             _c(
-                source=f"business_lines/{line}/api/router.py:GET /projects/{r['project_id']}/dynamic-pl",
+                source=f"business_lines/{line}/api/router.py:GET /{_list_endpoint(line) or 'items'}/{r[_id_field(line) or 'id']}/dynamic-pl",
                 title=f"{r['project_id']} {r['name']}",
                 snippet=f"IRR={irr_pct:.2f}%, 净利率={(r.get('net_margin') or 0)*100:.2f}%",
                 url=f"/{line}/dynamic-pl?focus={r['project_id']}",
@@ -192,20 +265,20 @@ def intent_residential_payment_low(line: str, top_n: int, **_: Any) -> MockAnswe
     """回款完成率低的 N 个项目（适用于任何业务线）。"""
     if not line:
         line = "residential"
-    data = _http_json(f"/api/lines/{line}/projects")
-    if not data or not data.get("projects"):
+    items, _plural = _fetch_list(line)
+    if not items:
         return MockAnswer(
             answer=f"未能从{_line_label(line)}线 /projects 端点获取项目数据。",
             intent="payment_low",
             confidence=_confidence("payment_low") * 0.5,
         )
-    projects = data["projects"]
+    projects = items
     rows: list[dict[str, Any]] = []
     for p in projects:
-        pid = p.get("project_id")
+        pid = p.get(_id_field(line) or "id")
         if not pid:
             continue
-        pay = _http_json(f"/api/lines/{line}/projects/{pid}/payment")
+        pay = _http_json(f"/api/lines/{line}/{_list_endpoint(line) or "items"}/{pid}/payment")
         if not pay:
             continue
         rows.append(
@@ -239,7 +312,7 @@ def intent_residential_payment_low(line: str, top_n: int, **_: Any) -> MockAnswe
         )
         citations.append(
             _c(
-                source=f"business_lines/{line}/api/router.py:GET /projects/{r['project_id']}/payment",
+                source=f"business_lines/{line}/api/router.py:GET /{_list_endpoint(line) or 'items'}/{r[_id_field(line) or 'id']}/payment",
                 title=f"{r['project_id']} {r['name']}",
                 snippet=f"回款完成率={pc:.2f}%, 当月回款/计划={(r.get('monthly_vs_plan') or 0)*100:.2f}%",
                 url=f"/{line}/payment?focus={r['project_id']}",
@@ -269,20 +342,20 @@ def intent_residential_redlines(line: str, top_n: int, **_: Any) -> MockAnswer:
     """三道红线触发情况（适用于任何业务线）。"""
     if not line:
         line = "residential"
-    data = _http_json(f"/api/lines/{line}/projects")
-    if not data or not data.get("projects"):
+    items, _plural = _fetch_list(line)
+    if not items:
         return MockAnswer(
             answer=f"未能从{_line_label(line)}线 /projects 端点获取项目数据。",
             intent="redlines",
             confidence=_confidence("redlines") * 0.5,
         )
-    projects = data["projects"]
+    projects = items
     rows: list[dict[str, Any]] = []
     for p in projects:
-        pid = p.get("project_id")
+        pid = p.get(_id_field(line) or "id")
         if not pid:
             continue
-        rd = _http_json(f"/api/lines/{line}/projects/{pid}/redlines")
+        rd = _http_json(f"/api/lines/{line}/{_list_endpoint(line) or "items"}/{pid}/redlines")
         if not rd:
             continue
         rows.append(
@@ -323,7 +396,7 @@ def intent_residential_redlines(line: str, top_n: int, **_: Any) -> MockAnswer:
         )
         citations.append(
             _c(
-                source=f"business_lines/{line}/api/router.py:GET /projects/{r['project_id']}/redlines",
+                source=f"business_lines/{line}/api/router.py:GET /{_list_endpoint(line) or 'items'}/{r[_id_field(line) or 'id']}/redlines",
                 title=f"{r['project_id']} {r['name']}",
                 snippet=(
                     f"alr={r.get('alr')}, ndr={r.get('ndr')}, csd={r.get('csd')}, "
@@ -363,20 +436,20 @@ def intent_residential_dedup_low(line: str, top_n: int, **_: Any) -> MockAnswer:
     """去化速度（月度去化率）最低的 N 个项目（适用于任何业务线）。"""
     if not line:
         line = "residential"
-    data = _http_json(f"/api/lines/{line}/projects")
-    if not data or not data.get("projects"):
+    items, _plural = _fetch_list(line)
+    if not items:
         return MockAnswer(
             answer=f"未能从{_line_label(line)}线 /projects 端点获取项目数据。",
             intent="dedup_low",
             confidence=_confidence("dedup_low") * 0.5,
         )
-    projects = data["projects"]
+    projects = items
     rows: list[dict[str, Any]] = []
     for p in projects:
-        pid = p.get("project_id")
+        pid = p.get(_id_field(line) or "id")
         if not pid:
             continue
-        pl = _http_json(f"/api/lines/{line}/projects/{pid}/dynamic-pl")
+        pl = _http_json(f"/api/lines/{line}/{_list_endpoint(line) or "items"}/{pid}/dynamic-pl")
         if not pl:
             continue
         rows.append(
@@ -404,7 +477,7 @@ def intent_residential_dedup_low(line: str, top_n: int, **_: Any) -> MockAnswer:
         )
         citations.append(
             _c(
-                source=f"business_lines/{line}/api/router.py:GET /projects/{r['project_id']}/dynamic-pl",
+                source=f"business_lines/{line}/api/router.py:GET /{_list_endpoint(line) or 'items'}/{r[_id_field(line) or 'id']}/dynamic-pl",
                 title=f"{r['project_id']} {r['name']}",
                 snippet=f"monthly_dedup_rate={d}",
                 url=f"/{line}/dedup-forecast?focus={r['project_id']}",
@@ -440,14 +513,14 @@ def intent_retail_noi_top(line: str, top_n: int, **_: Any) -> MockAnswer:
     """零售 NOI top N 物业。"""
     if line != "retail":
         line = "retail"
-    data = _http_json(f"/api/lines/{line}/properties")
-    if not data or not data.get("items"):
+    items, _plural = _fetch_list(line)
+    if not items:
         return MockAnswer(
             answer="未能从零售线 /properties 端点获取物业数据。",
             intent="noi_top",
             confidence=_confidence("noi_top") * 0.5,
         )
-    items = data["items"]
+    items, _ = _fetch_list(line)
     rows = [
         {
             "property_id": p.get("property_id"),
@@ -482,7 +555,7 @@ def intent_retail_noi_top(line: str, top_n: int, **_: Any) -> MockAnswer:
         )
         citations.append(
             _c(
-                source=f"business_lines/{line}/api/router.py:GET /properties/{r['property_id']}/noi-waterfall",
+                source=f"business_lines/{line}/api/router.py:GET /{_list_endpoint(line) or 'items'}/{r[_id_field(line) or 'id']}/noi-waterfall",
                 title=f"{r['property_id']} {r['name']}",
                 snippet=f"NOI={noi} 万元, 坪效={eff} 元/㎡/月",
                 url=f"/{line}/noi?focus={r['property_id']}",
@@ -512,20 +585,20 @@ def intent_retail_renovation(line: str, top_n: int, **_: Any) -> MockAnswer:
     """零售调改 NPV 为正的项目。"""
     if line != "retail":
         line = "retail"
-    data = _http_json(f"/api/lines/{line}/properties")
-    if not data or not data.get("items"):
+    items, _plural = _fetch_list(line)
+    if not items:
         return MockAnswer(
             answer="未能从零售线 /properties 端点获取物业数据。",
             intent="renovation",
             confidence=_confidence("renovation") * 0.5,
         )
-    items = data["items"]
+    items, _ = _fetch_list(line)
     rows: list[dict[str, Any]] = []
     for p in items:
         pid = p.get("property_id")
         if not pid:
             continue
-        rn = _http_json(f"/api/lines/{line}/properties/{pid}/renovation-npv")
+        rn = _http_json(f"/api/lines/{line}/{_list_endpoint(line) or "items"}/{pid}/renovation-npv")
         if not rn:
             continue
         delta = (rn.get("delta") or {}).get("npv_wan")
@@ -561,7 +634,7 @@ def intent_retail_renovation(line: str, top_n: int, **_: Any) -> MockAnswer:
         )
         citations.append(
             _c(
-                source=f"business_lines/{line}/api/router.py:GET /properties/{r['property_id']}/renovation-npv",
+                source=f"business_lines/{line}/api/router.py:GET /{_list_endpoint(line) or 'items'}/{r[_id_field(line) or 'id']}/renovation-npv",
                 title=f"{r['property_id']} {r['name']}",
                 snippet=f"调改 NPV={rnpv}, 差额 NPV={d}, 调改 IRR={rirr}",
                 url=f"/{line}/renovation-npv?focus={r['property_id']}",
@@ -599,14 +672,14 @@ def intent_retail_collection(line: str, top_n: int, threshold: float | None, **_
     if line != "retail":
         line = "retail"
     th = threshold if threshold is not None else 0.95
-    data = _http_json(f"/api/lines/{line}/properties")
-    if not data or not data.get("items"):
+    items, _plural = _fetch_list(line)
+    if not items:
         return MockAnswer(
             answer="未能从零售线 /properties 端点获取物业数据。",
             intent="collection",
             confidence=_confidence("collection") * 0.5,
         )
-    items = data["items"]
+    items, _ = _fetch_list(line)
     rows = [
         {
             "property_id": p.get("property_id"),
@@ -634,7 +707,7 @@ def intent_retail_collection(line: str, top_n: int, threshold: float | None, **_
         )
         citations.append(
             _c(
-                source=f"business_lines/{line}/api/router.py:GET /properties/{r['property_id']}/collection-rate",
+                source=f"business_lines/{line}/api/router.py:GET /{_list_endpoint(line) or 'items'}/{r[_id_field(line) or 'id']}/collection-rate",
                 title=f"{r['property_id']} {r['name']}",
                 snippet=f"当前收缴率={cr:.2f}%, 阈值={th*100:.0f}%",
                 url=f"/{line}/collection?focus={r['property_id']}",
@@ -671,14 +744,14 @@ def intent_leasing_vacancy(line: str, top_n: int, **_: Any) -> MockAnswer:
     """零售租赁空置期 top N (空置最长的业主)。"""
     if line != "retail-leasing":
         line = "retail-leasing"
-    data = _http_json(f"/api/lines/{line}/properties")
-    if not data or not data.get("items"):
+    items, _plural = _fetch_list(line)
+    if not items:
         return MockAnswer(
             answer="未能从零售租赁线 /properties 端点获取物业数据。",
             intent="vacancy",
             confidence=_confidence("vacancy") * 0.5,
         )
-    items = data["items"]
+    items, _ = _fetch_list(line)
     rows = [
         {
             "property_id": p.get("property_id"),
@@ -739,13 +812,13 @@ def intent_leasing_benchmark(line: str, top_n: int, **_: Any) -> MockAnswer:
     if line != "retail-leasing":
         line = "retail-leasing"
     data = _http_json(f"/api/lines/{line}/market-benchmark")
-    if not data or not data.get("items"):
+    if not items:
         return MockAnswer(
             answer="未能从零售租赁线 /market-benchmark 端点获取对标数据。",
             intent="benchmark",
             confidence=_confidence("benchmark") * 0.5,
         )
-    items = data["items"]
+    items, _ = _fetch_list(line)
     rows = [
         {
             "property_id": p.get("property_id"),
