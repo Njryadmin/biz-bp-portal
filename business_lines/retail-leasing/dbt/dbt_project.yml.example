@@ -1,0 +1,23 @@
+# business_lines/_template/dbt/dbt_project.yml.example
+# Template DBT project. Copy to business_lines/<line_id>/dbt/dbt_project.yml
+
+name: 'change_me'
+version: '1.0.0'
+config-version: 2
+
+profile: 'change_me'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+
+models:
+  change_me:
+    +materialized: table

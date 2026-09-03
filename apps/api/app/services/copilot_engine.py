@@ -1,0 +1,501 @@
+"""
+apps/api/app/services/copilot_engine.py
+
+The Copilot Engine — turns a free-form Finance BP question into a
+structured answer with citations pointing at real data.
+
+ARCHITECTURE
+============
+
+    ┌──────────────┐    ┌──────────────────────────┐    ┌────────────────────┐
+    │ CopilotReq   │ -> │ CopilotEngine.ask()      │ -> │ CopilotResponse    │
+    │  question    │    │  1. pick LLM backend     │    │  answer            │
+    │  line_id?    │    │  2. mock: dispatch       │    │  citations[]       │
+    │  ctx_lines?  │    │  3. real: prompt+complete │    │  chart_data?       │
+    └──────────────┘    │  4. wrap in response     │    │  intent,confidence │
+                        └──────────────────────────┘    │  backend,debug     │
+                                                        │  used_fallback?    │
+                                                        └────────────────────┘
+
+The engine is INTENTIONALLY GENERIC: it does NOT import any
+``business_lines/*`` code. It works exclusively through:
+
+- ``apps.api.app.core.registry.load_registry()`` for line metadata.
+- HTTP calls to the running API (e.g. ``GET /api/lines/{line}/projects``).
+  The base URL is ``FIN_BP_API_BASE`` (default http://localhost:8769).
+- The mock backend's helper functions, which do the same HTTP calls.
+
+A new business line that exposes ``/projects`` (or ``/properties``) and
+``/indicators`` will be discovered automatically by the suggestions
+endpoint and answered by the mock engine — no code change required.
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+import re
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from ..core.logging import get_logger
+from ..core.registry import load_registry
+from .llm import (
+    FallbackBackend,
+    MockBackend,
+    configured_backend_name,
+    get_llm_backend,
+    get_primary_backend,
+)
+from .llm.mock import parse_question
+from .llm.prompts import build_prompt
+
+logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# DTOs
+# ---------------------------------------------------------------------------
+
+
+class Citation(BaseModel):
+    """A traceable reference to a real data source.
+
+    The frontend renders one card per citation. ``url`` is optional and
+    points back to a UI page in the dashboard.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str  # e.g. "business_lines/residential/api/router.py:GET /projects"
+    title: str  # e.g. "PRJ-001 上海·绿城黄浦江"
+    snippet: str  # 1-2 line excerpt
+    url: str | None = None
+
+
+class CopilotRequest(BaseModel):
+    """POST body for /api/copilot/ask."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Allow empty string here; the router validates and returns 400 with
+    # a friendly message. Pydantic's min_length=1 would surface as 422
+    # which is less useful for end users.
+    question: str = Field(..., max_length=2000)
+    line_id: str | None = None  # optional: restrict to one business line
+    context_lines: list[str] | None = None  # optional: restrict to a subset
+    # UI toggle: True = try to use the real (deepseek/ollama) backend,
+    # False = force mock. None = use whatever the factory picked from
+    # env. Honored only when the relevant env var is set; otherwise the
+    # factory is the source of truth.
+    prefer_real_llm: bool | None = None
+
+
+class CopilotResponse(BaseModel):
+    """Full response of /api/copilot/ask."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str
+    answer: str
+    citations: list[Citation] = Field(default_factory=list)
+    chart_data: dict[str, Any] | None = None
+    intent: str
+    confidence: float
+    backend: str
+    # Resolved line id (from question parsing or request). Always populated
+    # so the frontend can read `response.line_id` directly.
+    line_id: str | None = None
+    # New fields (additive, all Optional with defaults — old clients
+    # still work).
+    used_fallback: bool = False
+    fallback_reason: str | None = None
+    model: str | None = None
+    debug: dict[str, Any] | None = None
+
+
+class CopilotHealth(BaseModel):
+    """GET /api/copilot/health response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    backend: str
+    available_lines: list[str]
+    api_base: str
+    # New fields
+    configured_backend: str  # the backend env says we should use
+    deepseek_key_present: bool = False
+    ollama_url: str | None = None
+    model: str | None = None
+    temperature: float | None = None
+    used_fallback: bool = False
+    last_call_status: str | None = None  # "ok" | "error" | "timeout" | None
+    last_error: str | None = None
+    last_latency_ms: int | None = None
+    call_count: int = 0
+    success_count: int = 0
+    primary_stats: dict[str, Any] | None = None
+
+
+class CopilotSuggestions(BaseModel):
+    """GET /api/copilot/suggestions response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    by_line: dict[str, list[str]]  # line_id -> list of suggested questions
+    common: list[str]  # cross-line suggestions
+
+
+# ---------------------------------------------------------------------------
+# Pre-defined suggestions
+# ---------------------------------------------------------------------------
+#
+# These are the "starter" questions shown in the UI. The engine does not
+# try to be exhaustive — the goal is to demonstrate the breadth of
+# intents the mock backend understands.
+# ---------------------------------------------------------------------------
+
+
+COMMON_SUGGESTIONS: list[str] = [
+    "三业务线 KPI 概览对比",
+    "做一份敏感性分析",
+    "全公司有哪些业务线",
+]
+
+
+LINE_SUGGESTIONS: dict[str, list[str]] = {
+    "residential": [
+        "住宅 IRR 最高的 3 个项目",
+        "本月回款下降的项目有哪些?",
+        "三道红线触发情况",
+        "去化速度最低的项目",
+    ],
+    "retail": [
+        "NOI 最高的 3 个物业",
+        "调改 NPV 为正的项目",
+        "收缴率低于 95% 的物业",
+        "空置率最高的物业",
+    ],
+    "retail-leasing": [
+        "空置期最长的业主",
+        "竞品基准差最大的商铺",
+        "续约率低于 60% 的物业",
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+
+def validate_question(q: str) -> str | None:
+    """Return a short error message if the question is invalid, else None.
+
+    Empty / whitespace-only → "question is required".
+    Excessive length → caught by Pydantic max_length=2000; we keep this
+    function as a single source of truth.
+    """
+    if q is None:
+        return "question is required"
+    q = q.strip()
+    if not q:
+        return "question is required"
+    if len(q) > 2000:
+        return "question exceeds 2000 chars"
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Engine
+# ---------------------------------------------------------------------------
+
+
+class CopilotEngine:
+    """Top-level orchestrator. Stateless — instantiate per request.
+
+    In production a single instance is fine (no I/O at __init__), but
+    instantiating per request is also OK because the heavy HTTP work
+    happens in the backend, not here.
+    """
+
+    def __init__(self) -> None:
+        # The default backend is the env-driven factory choice. The
+        # ``prefer_real_llm`` field on each request can override this
+        # in ``ask()`` by re-picking the backend.
+        self._backend = get_llm_backend()
+
+    def _pick_backend(self, prefer_real_llm: bool | None) -> Any:
+        """Pick a backend honoring the user toggle.
+
+        Rules:
+          - ``None`` (default): use the env-driven factory choice.
+          - ``True``: try to use a real LLM. If env has DEEPSEEK_API_KEY
+            or OLLAMA_BASE_URL, return a fresh FallbackBackend. Else
+            fall back to MockBackend (toggle can't be honored).
+          - ``False``: force MockBackend, regardless of env.
+
+        Note: every call returns a fresh backend instance so per-request
+        state (used_fallback, last_error, call counters) doesn't leak
+        across requests.
+        """
+        if prefer_real_llm is False:
+            return MockBackend()
+        if prefer_real_llm is True:
+            primary = get_primary_backend()
+            if isinstance(primary, MockBackend):
+                # No real backend configured — honor is impossible.
+                return MockBackend()
+            return FallbackBackend(primary, MockBackend())
+        # None → default
+        return get_llm_backend()
+
+    # ── Public API ─────────────────────────────────────────────────────
+
+    def ask(self, req: CopilotRequest) -> CopilotResponse:
+        """Run the full ask pipeline. Returns a CopilotResponse.
+
+        For the mock backend, this is mostly synchronous (one call to
+        ``MockBackend.answer()``). For real backends, this calls the LLM
+        and parses citations from the response.
+        """
+        question = req.question.strip()
+
+        # Resolve the effective backend for this request, honoring the
+        # ``prefer_real_llm`` toggle from the UI.
+        effective_backend = self._pick_backend(req.prefer_real_llm)
+
+        # Merge optional line_id into the question so the parser sees it.
+        # This makes the same intent template work whether the line is
+        # explicit ("/residential ...") or implicit ("住宅 ...").
+        effective_question = self._maybe_inject_line(question, req.line_id)
+
+        # Pre-parse: get intent/line/top_n/threshold for debug + citation routing.
+        parsed = parse_question(effective_question)
+
+        if isinstance(effective_backend, MockBackend):
+            # Pass the explicit line_id (if any) so the mock helper can
+            # target it even if the in-question parser didn't pick it up.
+            # Example: line_id="tmp-line" + question="这个 line 的指标"
+            # → parsed.line is None, but req.line_id is "tmp-line".
+            mock_answer = effective_backend.answer(
+                effective_question,
+                line_override=req.line_id,
+            )
+            return self._build_response_from_mock(
+                question=question,
+                mock=mock_answer,
+                parsed=parsed,
+                request_line=req.line_id,
+                backend_name=effective_backend.name,
+            )
+
+        # Real backend (or FallbackBackend wrapping a real one).
+        return self._ask_real_llm(
+            req, parsed, effective_question, backend_override=effective_backend
+        )
+
+    def health(self) -> CopilotHealth:
+        entries = load_registry()
+        backend = self._backend
+        # Drill into FallbackBackend for primary stats.
+        primary = backend.primary if isinstance(backend, FallbackBackend) else backend
+        # Gather stats.
+        deepseek_key_present = bool(os.environ.get("DEEPSEEK_API_KEY"))
+        ollama_url = os.environ.get("OLLAMA_BASE_URL")
+        model = getattr(primary, "model", None)
+        temperature = getattr(primary, "temperature", None)
+        last_call_status = getattr(primary, "last_call_status", None)
+        last_error = getattr(primary, "last_error", None)
+        last_latency_ms = getattr(primary, "last_latency_ms", None)
+        call_count = getattr(primary, "call_count", 0)
+        success_count = getattr(primary, "success_count", 0)
+        primary_stats: dict[str, Any] | None = None
+        if isinstance(backend, FallbackBackend):
+            primary_stats = backend.primary_stats or None
+        return CopilotHealth(
+            backend=backend.name,
+            available_lines=[e.line.id for e in entries],
+            api_base=os.environ.get("FIN_BP_API_BASE", "http://localhost:8769"),
+            configured_backend=configured_backend_name(),
+            deepseek_key_present=deepseek_key_present,
+            ollama_url=ollama_url,
+            model=model,
+            temperature=temperature,
+            used_fallback=getattr(backend, "used_fallback", False) if isinstance(backend, FallbackBackend) else False,
+            last_call_status=last_call_status,
+            last_error=last_error,
+            last_latency_ms=last_latency_ms,
+            call_count=call_count,
+            success_count=success_count,
+            primary_stats=primary_stats,
+        )
+
+    def suggestions(self) -> CopilotSuggestions:
+        # Only return suggestions for lines that are actually registered.
+        entries = load_registry()
+        registered = {e.line.id for e in entries}
+        by_line: dict[str, list[str]] = {}
+        for lid, qs in LINE_SUGGESTIONS.items():
+            if lid in registered:
+                by_line[lid] = qs
+        return CopilotSuggestions(by_line=by_line, common=COMMON_SUGGESTIONS)
+
+    # ── Internals ──────────────────────────────────────────────────────
+
+    def _build_response_from_mock(
+        self,
+        *,
+        question: str,
+        mock: Any,  # MockAnswer, but we type loosely
+        parsed: dict[str, Any],
+        request_line: str | None,
+        backend_name: str | None = None,
+    ) -> CopilotResponse:
+        citations: list[Citation] = []
+        for c in (mock.citations or []):
+            try:
+                citations.append(Citation(**c))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("skipping bad citation: %s (%s)", c, exc)
+        return CopilotResponse(
+            question=question,
+            answer=mock.answer,
+            citations=citations,
+            chart_data=mock.chart_data,
+            intent=mock.intent,
+            confidence=float(mock.confidence),
+            backend=backend_name or self._backend.name,
+            line_id=parsed.get("line") or request_line,
+            used_fallback=False,
+            model=None,
+            debug={
+                "parsed": parsed,
+                "request_line": request_line,
+                **(mock.debug or {}),
+            },
+        )
+
+    async def _ask_real_llm_async(
+        self,
+        req: CopilotRequest,
+        parsed: dict[str, Any],
+        effective_question: str,
+        backend_override: Any | None = None,
+    ) -> CopilotResponse:
+        """Async path for real LLM backends (DeepSeek, Ollama) and FallbackBackend."""
+        backend = backend_override or self._backend
+        prompt = self._build_prompt(req, parsed, effective_question)
+        try:
+            raw = await backend.complete(prompt, max_tokens=1024)
+        except Exception as exc:  # noqa: BLE001 — defensive; FallbackBackend shouldn't raise
+            raw = f"[LLM 后端调用失败: {exc}]"
+
+        # Was this a FallbackBackend? If so, it may have a structured
+        # MockAnswer in `last_answer` that we can use for citations + chart.
+        citations: list[Citation] = []
+        chart_data: dict[str, Any] | None = None
+        used_fallback = False
+        fallback_reason: str | None = None
+        if isinstance(backend, FallbackBackend):
+            used_fallback = backend.used_fallback
+            fallback_reason = backend.last_error
+            if used_fallback and backend.last_answer is not None:
+                mock = backend.last_answer
+                chart_data = mock.chart_data
+                for c in (mock.citations or []):
+                    try:
+                        citations.append(Citation(**c))
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug("skipping fallback citation: %s (%s)", c, exc)
+        # Real LLMs: attach a generic citation pointing at the registry
+        # so the user has a place to click (unless we already have richer
+        # ones from a fallback).
+        if not citations:
+            citations = [
+                Citation(
+                    source="business_lines/registry.yaml",
+                    title="业务线清单",
+                    snippet="点击查看所有业务线",
+                    url="/dashboard",
+                )
+            ]
+        # Pull model name from primary if available.
+        primary = (
+            backend.primary
+            if isinstance(backend, FallbackBackend)
+            else backend
+        )
+        model = getattr(primary, "model", None)
+        return CopilotResponse(
+            question=req.question.strip(),
+            answer=raw,
+            citations=citations,
+            chart_data=chart_data,
+            intent=parsed.get("intent", "fallback_unknown"),
+            confidence=max(0.5, float(parsed.get("confidence") or 0.5)),
+            backend=backend.name,
+            line_id=parsed.get("line") or req.line_id,
+            used_fallback=used_fallback,
+            fallback_reason=fallback_reason,
+            model=model,
+            debug={"parsed": parsed, "prompt_chars": len(prompt)},
+        )
+
+    def _ask_real_llm(
+        self,
+        req: CopilotRequest,
+        parsed: dict[str, Any],
+        effective_question: str,
+        backend_override: Any | None = None,
+    ) -> CopilotResponse:
+        """Sync wrapper for real LLMs. We use asyncio to drive the async
+        backend.complete() — but only if there is an event loop available.
+        In a sync FastAPI handler we can use anyio.from_thread.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is None:
+            return asyncio.run(
+                self._ask_real_llm_async(
+                    req, parsed, effective_question, backend_override
+                )
+            )
+        # If we're already inside an event loop (rare for FastAPI sync
+        # endpoints, but possible in tests), use the loop directly.
+        return loop.run_until_complete(
+            self._ask_real_llm_async(
+                req, parsed, effective_question, backend_override
+            )
+        )
+
+    def _build_prompt(
+        self, req: CopilotRequest, parsed: dict[str, Any], effective_question: str
+    ) -> str:
+        """Build the *user-side* prompt for real LLMs.
+
+        System prompt is added by the backend itself; here we just
+        construct the user message using the prompts.build_prompt()
+        factory. The mock_helpers data is NOT fetched here — that's the
+        mock backend's job. The real LLM is given the question and the
+        line context, and is expected to know how to interpret the
+        endpoint catalog baked into its system prompt.
+        """
+        return build_prompt(
+            question=effective_question,
+            line_id=req.line_id,
+            context_data=None,  # real LLM is self-sufficient; mock_helpers is mock-only
+        )
+
+    @staticmethod
+    def _maybe_inject_line(question: str, line_id: str | None) -> str:
+        """If a line_id is given and the question doesn't already mention
+        it, prepend the line name so the parser picks it up.
+        """
+        if not line_id:
+            return question
+        if re.search(re.escape(line_id), question, re.IGNORECASE):
+            return question
+        return f"{line_id} {question}"

@@ -1,0 +1,51 @@
+# business_lines/retail-leasing/forecast.yaml
+#
+# Rolling Forecast profile for the retail-leasing (零售租赁与市场报告) line.
+# Driver: deal-side KPIs — occupancy, deal rent, benchmark gap, renewal rate.
+
+line_id: retail-leasing
+line_name: "零售租赁与市场报告"
+
+series:
+  - indicator_id: occupancy_rate
+    name: 商铺出租率
+    frequency: monthly
+    method: ema
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: avg_deal_rent
+    name: 平均成交租金
+    frequency: monthly
+    method: linear_trend
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: benchmark_gap_pct
+    name: 竞品基准对标差
+    frequency: monthly
+    method: sma
+    sma_window: 3
+    horizon_months: 12
+    historical_periods: 12
+
+  - indicator_id: renewal_rate
+    name: 续约率
+    frequency: monthly
+    method: seasonal_naive
+    horizon_months: 12
+    historical_periods: 24
+
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [商圈空置率, 竞品定价, 行业景气]
+  - id: deal
+    name: 交易因素
+    drivers: [主力店谈判, 免租期, 中介渠道]
+  - id: tenant
+    name: 租户因素
+    drivers: [品牌入驻, 业态调整, 退租风险]
+  - id: ops
+    name: 招商运营因素
+    drivers: [招商人员, 推介覆盖, 业主配合度]

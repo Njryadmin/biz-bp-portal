@@ -1,0 +1,29 @@
+# business_lines/_template/indicators.yaml.example
+# Indicator definitions for this business line.
+# Consumed by packages/ui UniversalKpiCard + the API /indicators endpoint.
+
+indicators:
+  - id: gmv_daily
+    title: "Daily GMV"
+    unit: "CNY"
+    format: "currency"          # currency | number | percent | ratio
+    aggregation: "sum"
+    source: "mart_change_me.daily_gmv"
+    description: "Gross merchandise value per day."
+
+  - id: active_users
+    title: "Active Users"
+    unit: "users"
+    format: "number"
+    aggregation: "count_distinct"
+    source: "mart_change_me.daily_active_users"
+    description: "Distinct active users per day."
+
+charts:
+  - id: gmv_trend
+    title: "GMV Trend"
+    type: "line"                # line | bar | pie | area
+    x: "date"
+    y: ["gmv_daily"]
+    source: "mart_change_me.daily_gmv"
+    description: "Daily GMV over the last 90 days."

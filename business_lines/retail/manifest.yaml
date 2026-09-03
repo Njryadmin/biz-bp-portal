@@ -1,0 +1,50 @@
+# business_lines/retail/manifest.yaml
+# 零售分析业务线 manifest.
+# 数据模型: 物业 + 租户 + 租约 (而非住宅的 项目+户型+回款).
+# 核心指标: NOI (而非住宅的 IRR).
+# 时间维度: 租约周期 3/5/8/10 年 (而非住宅的销售周期).
+
+id: retail
+name: 零售分析
+version: 0.1.0
+description: "购物中心与街铺的资产运营分析,围绕 NOI、坪效、品牌组合、调改 NPV 与收缴率展开。"
+owner: "retail-bp@fin-bp-portal.local"
+
+# Visual: icon name from @ant-design/icons
+icon: "ShopOutlined"
+
+# Left navigation in apps/web/app/(dashboard)/layout.tsx
+# path is RELATIVE to the dashboard root, maps to business_lines/retail/web/pages/<file>.tsx
+nav:
+  - path: "/retail"
+    title: "概览"
+  - path: "/retail/noi"
+    title: "NOI 瀑布"
+  - path: "/retail/efficiency"
+    title: "坪效仪表盘"
+  - path: "/retail/brand-mix"
+    title: "品牌组合"
+  - path: "/retail/renovation-npv"
+    title: "调改 NPV"
+  - path: "/retail/collection"
+    title: "收缴率"
+
+# Auto-mounted under this prefix by apps/api/app/routers/registry.py
+api_prefix: "/api/lines/retail"
+
+# DBT / warehouse schemas (raw -> stg -> mart)
+warehouse:
+  schema: "raw_retail"
+  dbt_schema: "stg_retail"
+  mart_schema: "mart_retail"
+
+# Default refresh cadence for this line's data
+refresh:
+  schedule: "0 3 * * *"
+  enabled: true
+
+# Feature flags consumed by the UI
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

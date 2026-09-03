@@ -1,0 +1,92 @@
+# business_lines/valuation/sensitivity.yaml
+#
+# Sensitivity profile for the valuation (估价部) business line.
+#
+# Drives report_count, per_capita_output, valuation_bias_rate, client_satisfaction.
+# 估价部最大杠杆: 单报告均价 × 报告数;报告数主要由估价师人头数驱动;
+# 偏差率主要由估价师经验与抽样合规决定。
+# Coefficients are approximate but directionally correct for a typical
+# 银行抵押 + 司法征收 + 课税 valuation firm.
+
+line_id: valuation
+line_name: "估价部"
+
+inputs:
+  - id: avg_report_size
+    name: "单报告均价"
+    unit: "元/份"
+    base_value_ref: "report.avg_fee_yuan"
+    default_range: [-0.15, 0.15]
+    default_step: 0.03
+    description: "单份报告的平均收费。"
+
+  - id: headcount
+    name: "估价师人头数"
+    unit: "人"
+    base_value_ref: "report.appraiser_count"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "可独立出报告的估价师人数(含高级 + 助理)。"
+
+  - id: report_count
+    name: "月度报告数"
+    unit: "份"
+    base_value_ref: "report.report_count"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "月度出具的报告份数(交付口径)。"
+
+  - id: collection_days
+    name: "回款周期"
+    unit: "天"
+    base_value_ref: "report.collection_days"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "从交付到回款的平均天数;负向=回款加速。"
+
+outputs:
+  - id: per_capita_output
+    name: "人均产值"
+    unit: "万元/人/月"
+    base_value_ref: "kpi.per_capita_output"
+    # 人均产值 ≈ (报告数 × 单价) / 人头
+    # Δoutput ≈ (avg_size * Δreport + report * Δavg_size) / head - report*avg_size*Δhead/head^2
+    # 编码为线性近似: 报告数正向 +, 单价 +, 人头反向 -, 回款无直接影响
+    coefficients:
+      avg_report_size: +0.06
+      headcount: -0.8
+      report_count: +0.35
+      collection_days: +0.0
+
+  - id: valuation_amount
+    name: "估价总额"
+    unit: "万元"
+    base_value_ref: "kpi.valuation_amount"
+    # 估价总额主要随报告数正相关;单价影响实际收费而非标的额
+    coefficients:
+      avg_report_size: +0.0
+      headcount: +12000.0
+      report_count: +550.0
+      collection_days: +0.0
+
+  - id: valuation_bias_rate
+    name: "重估偏差率"
+    unit: "%"
+    base_value_ref: "kpi.valuation_bias_rate"
+    # 偏差率: 人头多→经验多→偏差低;报告数多→赶工→偏差升;回款快→客户关系好→复核更严
+    coefficients:
+      avg_report_size: +0.0
+      headcount: -0.3
+      report_count: +0.6
+      collection_days: +0.05
+
+  - id: client_satisfaction
+    name: "客户满意度"
+    unit: "0-100"
+    base_value_ref: "kpi.client_satisfaction"
+    # 满意度: 单价上升(高质量客户)↑;人头↑交付更快↑;报告数太多→质量↓
+    coefficients:
+      avg_report_size: +5.0
+      headcount: +3.0
+      report_count: -2.0
+      collection_days: -2.0

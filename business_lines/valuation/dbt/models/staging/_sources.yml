@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw_valuation
+    description: "Raw landing zone for the valuation business line. Populated by ingestion from valuation report management system (VRM / 自研). Includes bank mortgage, judicial, taxation, and expropriation reports."
+    schema: raw_valuation
+    tables:
+      - name: valuation_reports
+        description: "Master data for each valuation report."
+        columns:
+          - name: report_id
+            tests:
+              - unique
+              - not_null

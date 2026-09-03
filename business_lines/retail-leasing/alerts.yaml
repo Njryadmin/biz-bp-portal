@@ -1,0 +1,81 @@
+# business_lines/retail-leasing/alerts.yaml
+#
+# Alert rules for the retail-leasing (零售租赁与市场报告) line.
+# Driver: deal-side metrics — occupancy, vacancy, renewal, benchmark gap.
+
+line_id: retail-leasing
+line_name: "零售租赁与市场报告"
+
+rules:
+  - id: occupancy_below
+    name: 出租率低于 80%
+    indicator_id: occupancy_rate
+    operator: "<"
+    threshold: 0.80
+    severity: high
+    message_template: "{property} 出租率 {value:.2%}，低于 80% 阈值"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+  - id: vacancy_days_high
+    name: 业主空置期超过 60 天
+    indicator_id: owner_vacancy_days
+    operator: ">"
+    threshold: 60
+    severity: medium
+    message_template: "{property} 业主空置期 {value:.0f} 天，超过 60 天警戒"
+    enabled: true
+    channels: [in_app]
+    scope: property
+
+  - id: renewal_drop
+    name: 续约率环比下降
+    indicator_id: renewal_rate
+    operator: change_pct
+    threshold: -0.05
+    severity: medium
+    message_template: "{property} 续约率环比 {delta_pct:.2%}，需排查续约策略"
+    enabled: true
+    channels: [in_app]
+    scope: property
+
+  - id: benchmark_gap_negative
+    name: 成交租金低于竞品基准 10%
+    indicator_id: benchmark_gap_pct
+    operator: "<"
+    threshold: -0.10
+    severity: high
+    message_template: "{property} 成交租金低于竞品基准 {value:.2%}，议价能力不足"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+  - id: renewal_consecutive_low
+    name: 连续 2 月续约率 < 50%
+    indicator_id: renewal_rate
+    operator: "<"
+    threshold: 0.50
+    consecutive: 2
+    severity: high
+    message_template: "{property} 连续 {n} 月续约率 < 50%，需调整续约条款"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [商圈空置率, 竞品定价, 行业景气]
+  - id: deal
+    name: 交易因素
+    drivers: [主力店谈判, 免租期, 中介渠道]
+  - id: tenant
+    name: 租户因素
+    drivers: [品牌入驻, 业态调整, 退租风险]
+  - id: ops
+    name: 招商运营因素
+    drivers: [招商人员, 推介覆盖, 业主配合度]

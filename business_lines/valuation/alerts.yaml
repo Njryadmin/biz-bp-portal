@@ -1,0 +1,81 @@
+# business_lines/valuation/alerts.yaml
+#
+# Alert rules for the valuation (估价部) business line.
+# 关注偏差率上升、回款拖延、产能异常.
+
+line_id: valuation
+line_name: "估价部"
+
+rules:
+  - id: bias_above_threshold
+    name: 重估偏差率 > 3%
+    indicator_id: valuation_bias_rate
+    operator: ">"
+    threshold: 0.03
+    severity: high
+    message_template: "{report} 复估偏差率 {value:.2%}，超过 3% 银行复核警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: report
+
+  - id: bias_consecutive_high
+    name: 连续 3 月重估偏差率 > 2.5%
+    indicator_id: valuation_bias_rate
+    operator: ">"
+    threshold: 0.025
+    consecutive: 3
+    severity: critical
+    message_template: "{report} 连续 {n} 月偏差率 > 2.5%，建议触发估价师复训"
+    enabled: true
+    channels: [in_app, email]
+    scope: report
+
+  - id: collection_overdue
+    name: 回款周期 > 90 天
+    indicator_id: collection_days
+    operator: ">"
+    threshold: 90
+    severity: medium
+    message_template: "{report} 回款周期 {value:.0f} 天，超过 90 天账期警戒"
+    enabled: true
+    channels: [in_app]
+    scope: report
+
+  - id: revision_spike
+    name: 退改率 > 10%
+    indicator_id: report_revision_rate
+    operator: ">"
+    threshold: 0.10
+    severity: high
+    message_template: "{report} 退改率 {value:.2%}，超过 10% 合规警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: report
+
+  - id: satisfaction_drop
+    name: 客户满意度环比下降 5pt
+    indicator_id: client_satisfaction
+    operator: change_pct
+    threshold: -0.05
+    severity: medium
+    message_template: "{report} 客户满意度环比 {delta_pct:.2%}，需排查服务流程"
+    enabled: true
+    channels: [in_app]
+    scope: report
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [银行抵押规模, 二手房成交, 司法拍卖量]
+  - id: capacity
+    name: 产能因素
+    drivers: [估价师入职, 培训认证, 工时利用率]
+  - id: compliance
+    name: 合规因素
+    drivers: [估价规范更新, 监管检查, 内审通过率]
+  - id: client
+    name: 客户因素
+    drivers: [客户付款周期, 续约谈判, 投诉处理]

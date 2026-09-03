@@ -1,0 +1,21 @@
+lines:
+- id: residential
+  manifest: business_lines/residential/manifest.yaml
+- id: retail
+  manifest: business_lines/retail/manifest.yaml
+- id: retail-leasing
+  manifest: business_lines/retail-leasing/manifest.yaml
+- id: my-line
+  manifest: business_lines/my-line/manifest.yaml
+- id: valuation
+  manifest: business_lines/valuation/manifest.yaml
+- id: advisory
+  manifest: business_lines/advisory/manifest.yaml
+- id: office-leasing
+  manifest: business_lines/office-leasing/manifest.yaml
+- id: investment
+  manifest: business_lines/investment/manifest.yaml
+- id: project-management
+  manifest: business_lines/project-management/manifest.yaml
+- id: industrial
+  manifest: business_lines/industrial/manifest.yaml

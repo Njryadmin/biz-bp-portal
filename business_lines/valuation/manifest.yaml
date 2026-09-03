@@ -1,0 +1,47 @@
+# business_lines/valuation/manifest.yaml
+# 估价部业务线 manifest.
+# 数据模型: 估价报告 + 客户委托 + 估价师.
+# 核心指标: 报告数 / 估价额 / 重估偏差率 / 回款及时率 / 人均产值.
+# 时间维度: 委托周期 3-15 工作日 (银行/司法/征收).
+
+id: valuation
+name: 估价部
+version: 0.1.0
+description: "房地产抵押、交易、征收、课税等估价业务的全流程分析,围绕报告数、估价额、重估偏差、回款及时率与人均产值展开。"
+owner: "valuation-bp@fin-bp-portal.local"
+
+# Visual: icon name from @ant-design/icons
+icon: "ProfileOutlined"
+
+# Left navigation in apps/web/app/(dashboard)/layout.tsx
+nav:
+  - path: "/valuation"
+    title: "概览"
+  - path: "/valuation/reports"
+    title: "报告明细"
+  - path: "/valuation/accuracy"
+    title: "估价偏差"
+  - path: "/valuation/collection"
+    title: "回款及时率"
+  - path: "/valuation/appraiser"
+    title: "估价师人均产值"
+
+# Auto-mounted under this prefix by apps/api/app/routers/registry.py
+api_prefix: "/api/lines/valuation"
+
+# DBT / warehouse schemas (raw -> stg -> mart)
+warehouse:
+  schema: "raw_valuation"
+  dbt_schema: "stg_valuation"
+  mart_schema: "mart_valuation"
+
+# Default refresh cadence for this line's data
+refresh:
+  schedule: "0 4 * * *"
+  enabled: true
+
+# Feature flags consumed by the UI
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

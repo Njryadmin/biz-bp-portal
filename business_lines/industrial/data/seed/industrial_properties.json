@@ -1,0 +1,149 @@
+[
+  {
+    "property_id": "IND-2024-001",
+    "property_name": "上海·嘉定菜鸟物流园 A 区",
+    "property_type": "仓库",
+    "city": "上海",
+    "region": "嘉定",
+    "total_area_sqm": 85000,
+    "leased_area_sqm": 78200,
+    "occupancy_rate": 0.92,
+    "avg_rent_yuan_per_sqm_per_month": 1.55,
+    "tenant_count": 6,
+    "cap_rate": 0.058,
+    "is_in_logistics_park": true,
+    "renewal_rate_12m": 0.85,
+    "tenants": [
+      {"tenant_id": "T-001", "tenant_name": "菜鸟供应链", "industry": "电商", "area_sqm": 28000, "monthly_rent_yuan_per_sqm": 1.50, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-002", "tenant_name": "京东物流", "industry": "电商", "area_sqm": 18000, "monthly_rent_yuan_per_sqm": 1.55, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-003", "tenant_name": "顺丰冷运", "industry": "冷链", "area_sqm": 12000, "monthly_rent_yuan_per_sqm": 1.85, "term_years": 5, "is_key_client": true, "is_new": true},
+      {"tenant_id": "T-004", "tenant_name": "德邦物流", "industry": "快递", "area_sqm": 11000, "monthly_rent_yuan_per_sqm": 1.45, "term_years": 3, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-005", "tenant_name": "安得智联", "industry": "快递", "area_sqm": 6000, "monthly_rent_yuan_per_sqm": 1.40, "term_years": 3, "is_key_client": false, "is_new": false},
+      {"tenant_id": "T-006", "tenant_name": "韵达快运", "industry": "快递", "area_sqm": 3200, "monthly_rent_yuan_per_sqm": 1.35, "term_years": 3, "is_key_client": false, "is_new": true}
+    ]
+  },
+  {
+    "property_id": "IND-2023-001",
+    "property_name": "苏州·昆山万纬物流园",
+    "property_type": "仓库",
+    "city": "苏州",
+    "region": "昆山",
+    "total_area_sqm": 120000,
+    "leased_area_sqm": 102000,
+    "occupancy_rate": 0.85,
+    "avg_rent_yuan_per_sqm_per_month": 1.30,
+    "tenant_count": 9,
+    "cap_rate": 0.060,
+    "is_in_logistics_park": true,
+    "renewal_rate_12m": 0.78,
+    "tenants": [
+      {"tenant_id": "T-101", "tenant_name": "万纬供应链", "industry": "物流", "area_sqm": 35000, "monthly_rent_yuan_per_sqm": 1.25, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-102", "tenant_name": "美的电器", "industry": "制造", "area_sqm": 22000, "monthly_rent_yuan_per_sqm": 1.20, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-103", "tenant_name": "比亚迪零部件", "industry": "制造", "area_sqm": 15000, "monthly_rent_yuan_per_sqm": 1.35, "term_years": 5, "is_key_client": true, "is_new": true},
+      {"tenant_id": "T-104", "tenant_name": "SHEIN 跨境", "industry": "电商", "area_sqm": 12000, "monthly_rent_yuan_per_sqm": 1.45, "term_years": 3, "is_key_client": true, "is_new": true},
+      {"tenant_id": "T-105", "tenant_name": "安克创新", "industry": "电商", "area_sqm": 9000, "monthly_rent_yuan_per_sqm": 1.40, "term_years": 3, "is_key_client": true, "is_new": false}
+    ]
+  },
+  {
+    "property_id": "IND-2024-002",
+    "property_name": "广州·增城冷链产业园",
+    "property_type": "冷库",
+    "city": "广州",
+    "region": "增城",
+    "total_area_sqm": 45000,
+    "leased_area_sqm": 36000,
+    "occupancy_rate": 0.80,
+    "avg_rent_yuan_per_sqm_per_month": 2.20,
+    "tenant_count": 5,
+    "cap_rate": 0.055,
+    "is_in_logistics_park": true,
+    "renewal_rate_12m": 0.75,
+    "tenants": [
+      {"tenant_id": "T-201", "tenant_name": "盒马鲜生", "industry": "生鲜", "area_sqm": 12000, "monthly_rent_yuan_per_sqm": 2.10, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-202", "tenant_name": "美团买菜", "industry": "生鲜", "area_sqm": 9000, "monthly_rent_yuan_per_sqm": 2.20, "term_years": 5, "is_key_client": true, "is_new": true},
+      {"tenant_id": "T-203", "tenant_name": "永辉超市", "industry": "超市", "area_sqm": 8000, "monthly_rent_yuan_per_sqm": 2.05, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-204", "tenant_name": "顺丰冷运", "industry": "冷链", "area_sqm": 7000, "monthly_rent_yuan_per_sqm": 2.45, "term_years": 3, "is_key_client": true, "is_new": false}
+    ]
+  },
+  {
+    "property_id": "IND-2022-001",
+    "property_name": "天津·武清经济开发区厂房",
+    "property_type": "厂房",
+    "city": "天津",
+    "region": "武清",
+    "total_area_sqm": 60000,
+    "leased_area_sqm": 42000,
+    "occupancy_rate": 0.70,
+    "avg_rent_yuan_per_sqm_per_month": 0.85,
+    "tenant_count": 8,
+    "cap_rate": 0.072,
+    "is_in_logistics_park": false,
+    "renewal_rate_12m": 0.55,
+    "tenants": [
+      {"tenant_id": "T-301", "tenant_name": "长城汽车零部件", "industry": "汽车", "area_sqm": 15000, "monthly_rent_yuan_per_sqm": 0.90, "term_years": 8, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-302", "tenant_name": "海康威视", "industry": "电子", "area_sqm": 10000, "monthly_rent_yuan_per_sqm": 0.95, "term_years": 5, "is_key_client": true, "is_new": true},
+      {"tenant_id": "T-303", "tenant_name": "三一重工", "industry": "机械", "area_sqm": 8000, "monthly_rent_yuan_per_sqm": 0.80, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-304", "tenant_name": "中芯国际", "industry": "电子", "area_sqm": 6000, "monthly_rent_yuan_per_sqm": 1.00, "term_years": 5, "is_key_client": true, "is_new": true}
+    ]
+  },
+  {
+    "property_id": "IND-2023-002",
+    "property_name": "成都·新都龙泉物流园",
+    "property_type": "仓库",
+    "city": "成都",
+    "region": "新都",
+    "total_area_sqm": 55000,
+    "leased_area_sqm": 44000,
+    "occupancy_rate": 0.80,
+    "avg_rent_yuan_per_sqm_per_month": 0.95,
+    "tenant_count": 6,
+    "cap_rate": 0.065,
+    "is_in_logistics_park": true,
+    "renewal_rate_12m": 0.70,
+    "tenants": [
+      {"tenant_id": "T-401", "tenant_name": "京东物流", "industry": "电商", "area_sqm": 14000, "monthly_rent_yuan_per_sqm": 0.95, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-402", "tenant_name": "一汽大众", "industry": "汽车", "area_sqm": 11000, "monthly_rent_yuan_per_sqm": 0.85, "term_years": 8, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-403", "tenant_name": "通达快递", "industry": "快递", "area_sqm": 8000, "monthly_rent_yuan_per_sqm": 0.90, "term_years": 3, "is_key_client": true, "is_new": true}
+    ]
+  },
+  {
+    "property_id": "IND-2024-003",
+    "property_name": "杭州·萧山保税仓",
+    "property_type": "仓库",
+    "city": "杭州",
+    "region": "萧山",
+    "total_area_sqm": 32000,
+    "leased_area_sqm": 30400,
+    "occupancy_rate": 0.95,
+    "avg_rent_yuan_per_sqm_per_month": 1.85,
+    "tenant_count": 4,
+    "cap_rate": 0.052,
+    "is_in_logistics_park": true,
+    "renewal_rate_12m": 0.92,
+    "tenants": [
+      {"tenant_id": "T-501", "tenant_name": "阿里国际站", "industry": "跨境电商", "area_sqm": 12000, "monthly_rent_yuan_per_sqm": 1.85, "term_years": 5, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-502", "tenant_name": "TikTok Shop", "industry": "跨境电商", "area_sqm": 9000, "monthly_rent_yuan_per_sqm": 1.95, "term_years": 5, "is_key_client": true, "is_new": true},
+      {"tenant_id": "T-503", "tenant_name": "SHEIN 杭州", "industry": "跨境电商", "area_sqm": 6000, "monthly_rent_yuan_per_sqm": 1.90, "term_years": 3, "is_key_client": true, "is_new": false}
+    ]
+  },
+  {
+    "property_id": "IND-2023-003",
+    "property_name": "南京·江宁开发区厂房",
+    "property_type": "厂房",
+    "city": "南京",
+    "region": "江宁",
+    "total_area_sqm": 48000,
+    "leased_area_sqm": 33600,
+    "occupancy_rate": 0.70,
+    "avg_rent_yuan_per_sqm_per_month": 1.10,
+    "tenant_count": 7,
+    "cap_rate": 0.070,
+    "is_in_logistics_park": false,
+    "renewal_rate_12m": 0.62,
+    "tenants": [
+      {"tenant_id": "T-601", "tenant_name": "上汽集团", "industry": "汽车", "area_sqm": 12000, "monthly_rent_yuan_per_sqm": 1.15, "term_years": 8, "is_key_client": true, "is_new": false},
+      {"tenant_id": "T-602", "tenant_name": "博世电气", "industry": "电子", "area_sqm": 9000, "monthly_rent_yuan_per_sqm": 1.20, "term_years": 5, "is_key_client": true, "is_new": true},
+      {"tenant_id": "T-603", "tenant_name": "蔚来汽车", "industry": "汽车", "area_sqm": 7000, "monthly_rent_yuan_per_sqm": 1.25, "term_years": 5, "is_key_client": true, "is_new": true}
+    ]
+  }
+]

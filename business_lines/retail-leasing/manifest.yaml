@@ -1,0 +1,47 @@
+# business_lines/retail-leasing/manifest.yaml
+# 第三条业务线: 零售租赁与市场报告.
+# 与 retail(资产级 NOI 运营)不同,这里以"交易视角"为主:
+#   关注商铺出租率、成交租金、竞品对标、业主空置期、季度市场报告.
+# 时间维度: 季度/年度(交易频次远低于零售运营).
+
+id: retail-leasing
+name: 零售租赁与市场报告
+display_name: 零售租赁与市场报告
+version: 0.1.0
+description: "商铺租赁成交跟踪 + 竞品对标 + 市场基准;围绕出租率、成交租金、业主空置期与季度市场报告展开。"
+owner: "retail-leasing-bp@fin-bp-portal.local"
+
+# Visual: icon name from @ant-design/icons
+icon: "LineChartOutlined"
+
+# Left navigation in apps/web/app/(dashboard)/layout.tsx
+# path is RELATIVE to the dashboard root, maps to business_lines/retail-leasing/web/pages/<file>.tsx
+nav:
+  - path: "/retail-leasing"
+    title: "概览"
+  - path: "/retail-leasing/market-report"
+    title: "市场报告"
+  - path: "/retail-leasing/vacancy-alert"
+    title: "空置预警"
+  - path: "/retail-leasing/leasing-kpi"
+    title: "租赁 KPI"
+
+# Auto-mounted under this prefix by apps/api/app/routers/registry.py
+api_prefix: "/api/lines/retail-leasing"
+
+# DBT / warehouse schemas (raw -> stg -> mart)
+warehouse:
+  schema: "raw_retail_leasing"
+  dbt_schema: "stg_retail_leasing"
+  mart_schema: "mart_retail_leasing"
+
+# Default refresh cadence for this line's data
+refresh:
+  schedule: "0 3 * * *"
+  enabled: true
+
+# Feature flags consumed by the UI
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

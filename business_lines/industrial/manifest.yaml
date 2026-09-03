@@ -1,0 +1,40 @@
+# business_lines/industrial/manifest.yaml
+# 工业地产部业务线 manifest.
+# 数据模型: 厂房/仓库 + 租户 + 租约 + 物流园.
+# 核心指标: 成交面积 / 出租率 / 平均租金 / 客户行业分布 / 新增大客户数.
+
+id: industrial
+name: 工业地产部
+version: 0.1.0
+description: "厂房、仓储物流地产业务的全流程分析,围绕厂房成交面积、出租率、平均租金、客户行业分布与新增大客户数展开。"
+owner: "industrial-bp@fin-bp-portal.local"
+
+icon: "FactoryOutlined"
+
+nav:
+  - path: "/industrial"
+    title: "概览"
+  - path: "/industrial/properties"
+    title: "物业池"
+  - path: "/industrial/occupancy"
+    title: "出租率仪表盘"
+  - path: "/industrial/tenants"
+    title: "租户行业分布"
+  - path: "/industrial/key-clients"
+    title: "大客户管理"
+
+api_prefix: "/api/lines/industrial"
+
+warehouse:
+  schema: "raw_industrial"
+  dbt_schema: "stg_industrial"
+  mart_schema: "mart_industrial"
+
+refresh:
+  schedule: "0 4 * * *"
+  enabled: true
+
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

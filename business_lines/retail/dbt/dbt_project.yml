@@ -1,0 +1,30 @@
+# business_lines/retail/dbt/dbt_project.yml
+# 零售分析 DBT 项目.
+name: 'retail'
+version: '1.0.0'
+config-version: 2
+
+profile: 'retail'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+
+models:
+  retail:
+    staging:
+      +materialized: view
+      +schema: stg
+    intermediate:
+      +materialized: view
+      +schema: int
+    marts:
+      +materialized: table
+      +schema: mart

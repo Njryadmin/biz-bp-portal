@@ -1,0 +1,40 @@
+# business_lines/advisory/manifest.yaml
+# 地产顾问部业务线 manifest.
+# 数据模型: 顾问项目 + 顾问合同 + 顾问团队 + 客户.
+# 核心指标: 项目数 / 合同金额 / 续约率 / 人均产能 / 客户行业分布 / 项目成功率.
+
+id: advisory
+name: 地产顾问部
+version: 0.1.0
+description: "投资顾问、可行性研究、拿地顾问业务的全流程分析,围绕项目数、合同金额、续约率、人均产能与项目成功率展开。"
+owner: "advisory-bp@fin-bp-portal.local"
+
+icon: "SolutionOutlined"
+
+nav:
+  - path: "/advisory"
+    title: "概览"
+  - path: "/advisory/projects"
+    title: "项目明细"
+  - path: "/advisory/renewal"
+    title: "续约分析"
+  - path: "/advisory/team"
+    title: "团队产能"
+  - path: "/advisory/clients"
+    title: "客户行业分布"
+
+api_prefix: "/api/lines/advisory"
+
+warehouse:
+  schema: "raw_advisory"
+  dbt_schema: "stg_advisory"
+  mart_schema: "mart_advisory"
+
+refresh:
+  schedule: "0 5 * * *"
+  enabled: true
+
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

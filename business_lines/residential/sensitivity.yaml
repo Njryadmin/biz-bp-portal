@@ -1,0 +1,94 @@
+# business_lines/residential/sensitivity.yaml
+#
+# Sensitivity profile for the residential (住宅) business line.
+#
+# The Sensitivity Engine reads this file and computes how each output KPI
+# changes when the listed input factors are perturbed. Coefficients are
+# linear approximations around the current base values — accurate enough
+# for "which knob moves the needle most" analysis.
+#
+# Conventions:
+#   - `default_range` and `default_step` are RELATIVE perturbations, e.g.
+#     default_range: [-0.10, 0.10] means the engine sweeps from -10% to +10%
+#     of the base value.
+#   - `coefficients` map input_id -> output delta in ABSOLUTE units per
+#     +1.0 relative change. e.g. avg_price: +1.5 means "if avg_price goes
+#     up 1%, dynamic_irr goes up 1.5 percentage points".
+#   - This file is the contract between the universal engine
+#     (`apps/api/app/services/sensitivity_engine.py`) and the residential
+#     business line. The engine does NOT import any residential code — it
+#     only reads this YAML.
+
+line_id: residential
+line_name: "住宅分析"
+
+# ─────────────────────────────────────────────────────────────────────────
+# INPUT FACTORS (the "knobs" the user can turn)
+# ─────────────────────────────────────────────────────────────────────────
+inputs:
+  - id: avg_price
+    name: "平均售价"
+    unit: "元/㎡"
+    base_value_ref: "project.avg_price_per_sqm"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "项目可售面积的加权平均售价。"
+
+  - id: dedup_speed
+    name: "去化速度"
+    unit: "倍"
+    base_value_ref: "project.dedup_history_avg"
+    default_range: [-0.20, 0.20]
+    default_step: 0.05
+    description: "月度去化率历史均值(乘子, 1.0 = 当前水平)。"
+
+  - id: construction_cost
+    name: "建安成本"
+    unit: "亿元"
+    base_value_ref: "project.dynamic_cost_yi"
+    default_range: [-0.05, 0.05]
+    default_step: 0.01
+    description: "项目动态建安成本(亿元)。"
+
+  - id: channel_fee_rate
+    name: "渠道费率"
+    unit: "%"
+    base_value_ref: "project.channel_fee_ratio"
+    default_range: [-0.30, 0.30]
+    default_step: 0.05
+    description: "渠道费占签约金额的比例。"
+
+# ─────────────────────────────────────────────────────────────────────────
+# OUTPUT KPIs (the metrics we want to watch move)
+# ─────────────────────────────────────────────────────────────────────────
+outputs:
+  - id: dynamic_irr
+    name: "动态 IRR"
+    unit: "%"
+    base_value_ref: "kpi.dynamic_irr"
+    # 售价/去化正向推升 IRR;建安/渠道费反向拖累。
+    coefficients:
+      avg_price: +1.5
+      dedup_speed: +0.3
+      construction_cost: -0.8
+      channel_fee_rate: -0.2
+
+  - id: dynamic_net_margin
+    name: "动态净利率"
+    unit: "%"
+    base_value_ref: "kpi.dynamic_net_margin"
+    coefficients:
+      avg_price: +0.6
+      dedup_speed: +0.1
+      construction_cost: -0.4
+      channel_fee_rate: -0.1
+
+  - id: payment_completion
+    name: "回款完成率"
+    unit: "%"
+    base_value_ref: "kpi.payment_completion"
+    coefficients:
+      avg_price: +0.0
+      dedup_speed: +0.4
+      construction_cost: -0.0
+      channel_fee_rate: -0.0

@@ -1,0 +1,31 @@
+indicators:
+  - id: hello_kpi
+    title: "你好 KPI"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_my_line.demo"
+    description: "插件测试 KPI 1"
+  - id: my_count
+    title: "我的计数"
+    unit: ""
+    format: "number"
+    aggregation: "sum"
+    source: "mart_my_line.demo"
+    description: "插件测试 KPI 2"
+  - id: my_revenue
+    title: "我的收入"
+    unit: "万元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_my_line.demo"
+    description: "插件测试 KPI 3"
+
+charts:
+  - id: hello_trend
+    title: "Hello Trend"
+    type: "line"
+    x: "date"
+    y: ["hello_kpi"]
+    source: "mart_my_line.demo"
+    description: "插件测试折线图"

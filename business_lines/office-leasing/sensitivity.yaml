@@ -1,0 +1,87 @@
+# business_lines/office-leasing/sensitivity.yaml
+#
+# Sensitivity profile for the office-leasing (写字楼租赁) business line.
+#
+# Drives commission_revenue, deal_area, avg_deal_cycle, per_broker_output.
+# 写字楼租赁部最大杠杆: 佣金费率 × 月租;经纪人数与空置率影响成交速度.
+
+line_id: office-leasing
+line_name: "写字楼租赁部"
+
+inputs:
+  - id: avg_commission_rate
+    name: "平均佣金费率"
+    unit: "%"
+    base_value_ref: "deal.commission_rate"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "佣金/月租的费率。"
+
+  - id: broker_count
+    name: "经纪人人数"
+    unit: "人"
+    base_value_ref: "deal.broker_count"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "当月活跃经纪人人数。"
+
+  - id: vacancy_rate
+    name: "市场空置率"
+    unit: "%"
+    base_value_ref: "deal.vacancy_rate"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "重点楼宇的市场空置率。"
+
+  - id: deal_cycle_days
+    name: "成交周期"
+    unit: "天"
+    base_value_ref: "deal.deal_cycle_days"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "从委托到签约的平均天数。"
+
+outputs:
+  - id: commission_revenue
+    name: "佣金收入"
+    unit: "万元"
+    base_value_ref: "kpi.commission_revenue"
+    # 佣金 ≈ 成交面积 × 月租 × 佣金费率;空置率高→议价空间↑→佣金率↓
+    coefficients:
+      avg_commission_rate: +8500.0
+      broker_count: +12.0
+      vacancy_rate: -300.0
+      deal_cycle_days: -8.0
+
+  - id: deal_area
+    name: "成交面积"
+    unit: "㎡"
+    base_value_ref: "kpi.deal_area"
+    # 成交面积: 经纪人多→覆盖多;空置高→抢手→快成交;周期越短→单位时间成交越多
+    coefficients:
+      avg_commission_rate: +0.0
+      broker_count: +450.0
+      vacancy_rate: +1500.0
+      deal_cycle_days: -120.0
+
+  - id: per_broker_output
+    name: "人均产能"
+    unit: "万元/人/月"
+    base_value_ref: "kpi.per_broker_output"
+    # 人均产能 = 佣金 / 经纪人数
+    coefficients:
+      avg_commission_rate: +0.08
+      broker_count: -0.6
+      vacancy_rate: +0.5
+      deal_cycle_days: -0.05
+
+  - id: renewal_rate
+    name: "续约率"
+    unit: "%"
+    base_value_ref: "kpi.renewal_rate"
+    # 续约率: 经纪人对客户关系;佣金率高→激励足;空置低→客户不轻易搬
+    coefficients:
+      avg_commission_rate: +5.0
+      broker_count: +3.0
+      vacancy_rate: -8.0
+      deal_cycle_days: -2.0

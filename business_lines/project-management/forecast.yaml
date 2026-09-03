@@ -1,0 +1,50 @@
+# business_lines/project-management/forecast.yaml
+#
+# Rolling Forecast profile for the project-management business line.
+
+line_id: project-management
+line_name: "地产项目管理部"
+
+series:
+  - indicator_id: contract_value
+    name: 代建合同额
+    frequency: monthly
+    method: linear_trend
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: progress_deviation
+    name: 进度偏差率
+    frequency: monthly
+    method: ema
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: cost_deviation
+    name: 预算偏差率
+    frequency: monthly
+    method: sma
+    sma_window: 3
+    horizon_months: 12
+    historical_periods: 12
+
+  - indicator_id: client_satisfaction
+    name: 客户满意度
+    frequency: monthly
+    method: seasonal_naive
+    horizon_months: 12
+    historical_periods: 24
+
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [代建市场规模, 国央企代建需求, 政府代建]
+  - id: capacity
+    name: 产能因素
+    drivers: [PM 招聘, 培训体系, 团队稳定性]
+  - id: execution
+    name: 执行因素
+    drivers: [施工方管理, 设计变更, 招标节奏]
+  - id: client
+    name: 客户因素
+    drivers: [业主决策效率, 验收标准, 续约谈判]

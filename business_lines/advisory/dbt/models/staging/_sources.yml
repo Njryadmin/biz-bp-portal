@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw_advisory
+    description: "Raw landing zone for the advisory business line."
+    schema: raw_advisory
+    tables:
+      - name: advisory_projects
+        description: "Master data for each advisory project (feasibility / land / investment / refinancing)."
+        columns:
+          - name: project_id
+            tests:
+              - unique
+              - not_null

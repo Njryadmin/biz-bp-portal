@@ -1,0 +1,206 @@
+# infra/docker-compose.yml
+# One-shot deployment for the Fin BP Portal — infra (5 services) + apps (2 services).
+#
+# Usage:
+#   cp .env.example .env       # edit secrets
+#   docker compose -f infra/docker-compose.yml --env-file .env up -d --build
+#   open http://localhost:3000
+#
+# Ports (host → container):
+#   3000 → web      (Next.js production server)
+#   8000 → api      (FastAPI / uvicorn)
+#   8080 → airflow  (Airflow webserver)
+#   5432 → postgres
+#   6379 → redis
+#   8123 → clickhouse (HTTP)
+#   9100 → clickhouse (native)
+#   9000 → minio (S3)
+#   9001 → minio (console)
+
+services:
+  # -------------------------------------------------------------------------
+  # Application services
+  # -------------------------------------------------------------------------
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: finbp/api:0.1.0
+    container_name: finbp-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PYTHONUNBUFFERED: "1"
+      FIN_BP_PROJECT_ROOT: /app
+      FIN_BP_API_BASE: http://api:8000
+      FIN_BP_COPILOT_HTTP_TIMEOUT: "2.0"
+      FIN_BP_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # AI Copilot LLM
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      DEEPSEEK_TIMEOUT: ${DEEPSEEK_TIMEOUT:-30}
+      DEEPSEEK_TEMPERATURE: ${DEEPSEEK_TEMPERATURE:-0.3}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-30}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount business lines + landing data so edits outside the image take effect
+      - ../business_lines:/app/business_lines
+      - ../data:/app/data
+      - ../docs:/app/docs:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/registry/lines"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    image: finbp/web:0.1.0
+    container_name: finbp-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      # The BFF proxies under /api/* forward to this URL.
+      # In Docker, the api service is reachable by container name.
+      NEXT_PUBLIC_API_BASE_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # -------------------------------------------------------------------------
+  # Infrastructure services
+  # -------------------------------------------------------------------------
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: finbp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-finbp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-finbp}
+      POSTGRES_DB: ${POSTGRES_DB:-finbp}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-finbp} -d ${POSTGRES_DB:-finbp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: finbp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: finbp-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-finbp}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-finbp}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-finbp}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8123:8123"
+      - "9100:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  minio:
+    image: minio/minio:latest
+    container_name: finbp-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-finbp}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-finbp12345}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow:
+    image: apache/airflow:2.8-python11
+    container_name: finbp-airflow
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-finbp}:${POSTGRES_PASSWORD:-finbp}@postgres:5432/${POSTGRES_DB:-finbp}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY:-ZmRidmZ4amJ4c2t0dmZ4amJ4c2t0dmZ4amJ4c2t0dmY=}
+      AIRFLOW__CORE__LOAD_EXAMPLES: ${AIRFLOW__CORE__LOAD_EXAMPLES:-False}
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: ${AIRFLOW__WEBSERVER__EXPOSE_CONFIG:-True}
+      AIRFLOW_ADMIN_USERNAME: ${AIRFLOW_ADMIN_USERNAME:-admin}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      AIRFLOW_ADMIN_EMAIL: ${AIRFLOW_ADMIN_EMAIL:-admin@example.com}
+      DBT_HOST: postgres
+      DBT_PORT: "5432"
+      DBT_USER: ${POSTGRES_USER:-finbp}
+      DBT_PASSWORD: ${POSTGRES_PASSWORD:-finbp}
+      DBT_DBNAME: ${POSTGRES_DB:-finbp}
+      PYTHONPATH: /opt/airflow/dags
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./dbt:/opt/airflow/dbt
+      - ../data:/data:ro
+      - ../business_lines:/opt/airflow/business_lines:ro
+    command: >
+      bash -c "
+        airflow db migrate &&
+        (airflow users create --username $${AIRFLOW_ADMIN_USERNAME:-admin} --password $${AIRFLOW_ADMIN_PASSWORD:-admin} --firstname Admin --lastname User --role Admin --email $${AIRFLOW_ADMIN_EMAIL:-admin@example.com} || true) &&
+        airflow webserver --port 8080 &
+        airflow scheduler
+      "
+
+volumes:
+  postgres-data:
+  clickhouse-data:
+  minio-data:
+  airflow-dags:
+  airflow-logs:
+
+networks:
+  default:
+    name: finbp-net

@@ -1,0 +1,87 @@
+# business_lines/industrial/sensitivity.yaml
+#
+# Sensitivity profile for the industrial (工业地产) business line.
+#
+# Drives deal_area, occupancy_rate, avg_rent, new_key_clients.
+# 工业地产最大杠杆: 物业数 × 出租率;租金主要由地段 + 客户行业决定.
+
+line_id: industrial
+line_name: "工业地产部"
+
+inputs:
+  - id: avg_rent
+    name: "平均租金"
+    unit: "元/㎡/月"
+    base_value_ref: "property.avg_rent_yuan_per_sqm_per_month"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "按面积加权的平均月租金。"
+
+  - id: occupancy_rate
+    name: "出租率"
+    unit: "%"
+    base_value_ref: "property.occupancy_rate"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "已租面积/总可租面积。"
+
+  - id: warehouse_count
+    name: "在管物业数"
+    unit: "个"
+    base_value_ref: "property.warehouse_count"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "在管厂房/仓库数。"
+
+  - id: tenant_industry_diversity
+    name: "租户行业多样性"
+    unit: "0-1"
+    base_value_ref: "property.tenant_industry_diversity"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "租户行业 Shannon 熵归一化。"
+
+outputs:
+  - id: deal_area
+    name: "成交面积"
+    unit: "㎡"
+    base_value_ref: "kpi.deal_area"
+    # 成交面积: 物业多→池子大;出租率高→快成交;租金低→招租快→成交大
+    coefficients:
+      avg_rent: -8000.0
+      occupancy_rate: +15000.0
+      warehouse_count: +20000.0
+      tenant_industry_diversity: +5000.0
+
+  - id: avg_rent_out
+    name: "平均租金(输出)"
+    unit: "元/㎡/月"
+    base_value_ref: "kpi.avg_rent"
+    # 租金: 多样性高→能签不同行业→综合租金↑
+    coefficients:
+      avg_rent: +1.0
+      occupancy_rate: +0.5
+      warehouse_count: +0.0
+      tenant_industry_diversity: +0.8
+
+  - id: new_key_clients
+    name: "新增大客户数"
+    unit: "个"
+    base_value_ref: "kpi.new_key_clients"
+    # 大客户: 物业多(选择多);出租率高(已成熟);多样性高(行业覆盖广)
+    coefficients:
+      avg_rent: -0.0
+      occupancy_rate: +5.0
+      warehouse_count: +8.0
+      tenant_industry_diversity: +3.0
+
+  - id: cap_rate
+    name: "资本化率"
+    unit: "%"
+    base_value_ref: "kpi.cap_rate"
+    # 资本化率 ≈ 租金 / 资产估值;租金↑→cap↑;出租率↑→估值↑→cap↓
+    coefficients:
+      avg_rent: +0.8
+      occupancy_rate: -0.5
+      warehouse_count: +0.0
+      tenant_industry_diversity: +0.05

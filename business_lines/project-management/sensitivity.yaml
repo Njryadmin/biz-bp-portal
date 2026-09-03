@@ -1,0 +1,87 @@
+# business_lines/project-management/sensitivity.yaml
+#
+# Sensitivity profile for the project-management business line.
+#
+# Drives contract_value, per_pm_output, progress_deviation, client_satisfaction.
+# 代建部最大杠杆: PM 人头 × 项目数;偏差率主要由 PM 经验与项目数决定.
+
+line_id: project-management
+line_name: "地产项目管理部"
+
+inputs:
+  - id: project_count
+    name: "在管项目数"
+    unit: "个"
+    base_value_ref: "project.project_count"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "当月在管代建项目数。"
+
+  - id: pm_headcount
+    name: "PM 团队人数"
+    unit: "人"
+    base_value_ref: "project.pm_headcount"
+    default_range: [-0.15, 0.15]
+    default_step: 0.03
+    description: "在岗 PM 人数。"
+
+  - id: progress_deviation
+    name: "进度偏差率"
+    unit: "%"
+    base_value_ref: "project.progress_deviation"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "实际 vs 计划进度偏差。"
+
+  - id: cost_deviation
+    name: "预算偏差率"
+    unit: "%"
+    base_value_ref: "project.cost_deviation"
+    default_range: [-0.05, 0.05]
+    default_step: 0.01
+    description: "实际 vs 预算偏差。"
+
+outputs:
+  - id: contract_value
+    name: "代建合同额(亿元)"
+    unit: "亿元"
+    base_value_ref: "kpi.contract_value"
+    # 合同额 ≈ 项目数 × 单项目均价;PM 多→可接更多项目
+    coefficients:
+      project_count: +1.2
+      pm_headcount: +0.8
+      progress_deviation: +0.0
+      cost_deviation: +0.0
+
+  - id: per_pm_output
+    name: "PM 人均产能"
+    unit: "万元/人/月"
+    base_value_ref: "kpi.per_pm_output"
+    # 人均产能 = 合同额 / PM 人头
+    coefficients:
+      project_count: +200.0
+      pm_headcount: -250.0
+      progress_deviation: +0.0
+      cost_deviation: -50.0
+
+  - id: progress_deviation_out
+    name: "进度偏差率"
+    unit: "%"
+    base_value_ref: "kpi.progress_deviation"
+    # 偏差率: PM 多→专业分工;项目数过多→赶工→滞后;成本偏差↑往往伴随进度偏差↑
+    coefficients:
+      project_count: +1.5
+      pm_headcount: -0.8
+      progress_deviation: +1.0
+      cost_deviation: +0.4
+
+  - id: client_satisfaction
+    name: "客户满意度"
+    unit: "0-100"
+    base_value_ref: "kpi.client_satisfaction"
+    # 满意度: PM 经验足↑;偏差↑↓
+    coefficients:
+      project_count: -2.0
+      pm_headcount: +3.0
+      progress_deviation: -8.0
+      cost_deviation: -10.0

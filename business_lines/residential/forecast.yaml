@@ -1,0 +1,68 @@
+# business_lines/residential/forecast.yaml
+#
+# Rolling Forecast profile for the residential (住宅) business line.
+#
+# The Forecast Engine reads this file and computes a rolling forecast for each
+# declared `series`. Historical data is generated from the line's API
+# (mock) and projected forward using the chosen method. Engines never import
+# `business_lines/*` — they only read this YAML, so adding a new line requires
+# only this file (and a manifest + indicators.yaml).
+#
+# Method vocabulary:
+#   - sma             simple moving average over a window (default 3 months)
+#   - ema             exponential smoothing (alpha 0.3)
+#   - linear_trend    OLS linear fit, residual std → 95% confidence band
+#   - seasonal_naive  reuses the value from the same month one year ago
+
+line_id: residential
+line_name: "住宅分析"
+
+# ─────────────────────────────────────────────────────────────────────────
+# SERIES — one entry per KPI we want to forecast
+# ─────────────────────────────────────────────────────────────────────────
+series:
+  - indicator_id: dynamic_irr
+    name: 动态 IRR
+    frequency: monthly
+    method: linear_trend
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: payment_completion
+    name: 回款完成率
+    frequency: monthly
+    method: ema
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: dedup_rate
+    name: 月度去化率
+    frequency: monthly
+    method: sma
+    sma_window: 3
+    horizon_months: 12
+    historical_periods: 12
+
+  - indicator_id: channel_fee_ratio
+    name: 渠道费占比
+    frequency: monthly
+    method: seasonal_naive
+    horizon_months: 12
+    historical_periods: 24
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION — factors used to explain actual vs forecast deviation
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [竞品开盘, 政策变化, 利率变化]
+  - id: project
+    name: 项目因素
+    drivers: [施工进度, 预售节点, 推盘节奏]
+  - id: sales
+    name: 销售因素
+    drivers: [渠道投放, 案场转化, 客户结构]
+  - id: cost
+    name: 成本因素
+    drivers: [建安超支, 土地款追加, 财务费用]

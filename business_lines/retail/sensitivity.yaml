@@ -1,0 +1,92 @@
+# business_lines/retail/sensitivity.yaml
+#
+# Sensitivity profile for the retail (零售) business line.
+#
+# Drives NOI, occupancy, collection-rate, and brand-diversity analysis.
+# NOI is most sensitive to occupancy (i.e. vacancy) and rent escalation;
+# collection_rate is comparatively sticky. Coefficients are approximate
+# but directionally correct for a typical shopping-mall portfolio.
+
+line_id: retail
+line_name: "零售分析"
+
+inputs:
+  - id: avg_rent
+    name: "平均月租金"
+    unit: "元/㎡/月"
+    base_value_ref: "property.effective_rent_yuan_per_sqm_per_month"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "物业按面积加权的有效月租金(元/㎡/月)。"
+
+  - id: vacancy_rate
+    name: "空置率"
+    unit: "%"
+    base_value_ref: "property.vacancy_rate"
+    # 空置率方向特殊: 数值下降(更多出租)对 KPI 是好事。
+    # 系数已在 outputs 中按 "delta_vacancy_rate 越负, KPI 越正" 编码。
+    default_range: [-0.30, 0.30]
+    default_step: 0.05
+    description: "空置可租面积占比;负向=招租提升,正向=退租风险。"
+
+  - id: opex_ratio
+    name: "运营成本占比"
+    unit: "%"
+    base_value_ref: "property.opex_ratio"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "运营成本占有效毛收入的比例。"
+
+  - id: collection_rate
+    name: "收缴率"
+    unit: "%"
+    base_value_ref: "property.collection_rate"
+    default_range: [-0.05, 0.05]
+    default_step: 0.01
+    description: "当期应收租金中实际收回的比例。"
+
+outputs:
+  - id: noi
+    name: "NOI (净营业收入)"
+    unit: "万元"
+    base_value_ref: "kpi.noi"
+    # NOI = EGR - OpEx = gross_rent*(1-vacancy) - opex
+    # ΔNOI ≈ -gross*Δvacancy - opex*Δopex + collection*0 (collection 仅影响现金流时点)
+    coefficients:
+      avg_rent: +480.0
+      vacancy_rate: -8400.0
+      opex_ratio: -3200.0
+      collection_rate: +0.0
+
+  - id: efficiency
+    name: "坪效"
+    unit: "元/㎡/月"
+    base_value_ref: "kpi.efficiency"
+    coefficients:
+      avg_rent: +2.0
+      vacancy_rate: -10.0
+      opex_ratio: -6.0
+      collection_rate: +0.0
+
+  - id: collection_rate
+    name: "收缴率"
+    unit: "%"
+    base_value_ref: "kpi.collection_rate"
+    # collection_rate output 对 collection_rate input 强正向;
+    # 其他输入对其影响较小。
+    coefficients:
+      avg_rent: +0.0
+      vacancy_rate: -0.1
+      opex_ratio: -0.0
+      collection_rate: +1.0
+
+  - id: brand_diversity
+    name: "品牌多样性指数"
+    unit: "0-1"
+    base_value_ref: "kpi.brand_diversity"
+    # 招租带来的新业态会推高多样性;空置恶化会让单一业态占比上升。
+    coefficients:
+      avg_rent: +0.0
+      vacancy_rate: -0.05
+      opex_ratio: -0.0
+      collection_rate: +0.0

@@ -1,0 +1,40 @@
+# business_lines/project-management/manifest.yaml
+# 地产项目管理部业务线 manifest.
+# 数据模型: 代建项目 + 合同 + 里程碑 + 团队.
+# 核心指标: 项目数 / 合同额 / 进度偏差 / 预算偏差 / 客户满意度 / 续约率.
+
+id: project-management
+name: 地产项目管理部
+version: 0.1.0
+description: "全过程代建与项目管理业务的全流程分析,围绕在管项目数、代建合同额、进度偏差率、预算偏差率、客户满意度与续约率展开。"
+owner: "pm-bp@fin-bp-portal.local"
+
+icon: "ToolOutlined"
+
+nav:
+  - path: "/project-management"
+    title: "概览"
+  - path: "/project-management/projects"
+    title: "代建项目"
+  - path: "/project-management/progress"
+    title: "进度与预算"
+  - path: "/project-management/satisfaction"
+    title: "客户满意度"
+  - path: "/project-management/team"
+    title: "PM 团队产能"
+
+api_prefix: "/api/lines/project-management"
+
+warehouse:
+  schema: "raw_pm"
+  dbt_schema: "stg_pm"
+  mart_schema: "mart_pm"
+
+refresh:
+  schedule: "0 4 * * *"
+  enabled: true
+
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

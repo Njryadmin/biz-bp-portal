@@ -1,0 +1,81 @@
+# business_lines/retail/alerts.yaml
+#
+# Alert rules for the retail (零售) business line.
+# Headline: NOI drop, collection rate drop, vacancy spike.
+
+line_id: retail
+line_name: "零售分析"
+
+rules:
+  - id: noi_drop
+    name: NOI 同比下降
+    indicator_id: noi
+    operator: change_pct
+    threshold: -0.10
+    severity: high
+    message_template: "{property} NOI 同比 {delta_pct:.2%}，需排查空置/招租/续约"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+  - id: collection_below
+    name: 收缴率低于 90%
+    indicator_id: collection_rate
+    operator: "<"
+    threshold: 0.90
+    severity: high
+    message_template: "{property} 收缴率 {value:.2%}，低于 90% 阈值"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+  - id: vacancy_spike
+    name: 空置率高于 15%
+    indicator_id: vacancy_rate
+    operator: ">"
+    threshold: 0.15
+    severity: medium
+    message_template: "{property} 空置率 {value:.2%}，高于 15% 警戒线"
+    enabled: true
+    channels: [in_app]
+    scope: property
+
+  - id: vacancy_consecutive_high
+    name: 连续 3 月空置率 > 20%
+    indicator_id: vacancy_rate
+    operator: ">"
+    threshold: 0.20
+    consecutive: 3
+    severity: critical
+    message_template: "{property} 连续 {n} 月空置率 > 20%，建议触发调改评估"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+  - id: efficiency_below_band
+    name: 坪效低于 200 元/㎡/月
+    indicator_id: efficiency
+    operator: between
+    threshold: [0, 200]
+    severity: low
+    message_template: "{property} 坪效 {value:.0f} 元/㎡/月，低于 200 警戒"
+    enabled: true
+    channels: [in_app]
+    scope: property
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [商圈客流变化, 竞品调整, 季节性]
+  - id: tenant
+    name: 租户因素
+    drivers: [主力店调整, 品牌淘汰, 招租进度]
+  - id: rent
+    name: 租金因素
+    drivers: [新签租金, 续约租金, 免租期]
+  - id: opex
+    name: 运营因素
+    drivers: [能耗成本, 物业维护, 安保支出]

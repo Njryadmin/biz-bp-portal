@@ -1,0 +1,75 @@
+﻿============================================================
+1. Boot time: see startup log api_start3.log (uvicorn ready @ 3.27s)
+============================================================
+  log shows: WARNING init_db timed out after 2.0s (DB unreachable)
+  then:     Uvicorn running on http://127.0.0.1:8769 (3.27s after start)
+  TARGET: <5s -> PASS
+
+============================================================
+2. GET /api/registry/lines (expect count=10)
+============================================================
+  HTTP 200 | version=0.1.b4923bec | count=10
+    - residential: 住宅分析
+    - retail: 零售分析
+    - retail-leasing: 零售租赁与市场报告
+    - my-line: 我的测试业务线
+    - valuation: 估价部
+    - advisory: 地产顾问部
+    - office-leasing: 写字楼租赁部
+    - investment: 地产投资部
+    - project-management: 地产项目管理部
+    - industrial: 工业地产部
+  PASS
+
+============================================================
+3. GET /api/scrapers (expect count=3)
+============================================================
+  HTTP 200 | count=3
+    - lianjia_deals: 链家城市成交数据 (公开页面)
+    - nbs_house_price: 国家统计局 70 城房价指数
+    - policy_crawler: 房地产政策抓取 (住建部 + 各地住建委)
+  PASS
+
+============================================================
+4. Copilot Q='估价部 IRR 最高的是哪个报告？'  -> expect line=valuation, intent=irr_top
+============================================================
+  HTTP 200 | intent=irr_top | line=valuation | conf=0.85 | backend=mock
+  answer: 在住宅线下,IRR 最高的 3 个项目平均 IRR 为 2.6%。其中最高的是 深圳·华润前海 (深圳),IRR = 2.8%。 | - 深圳·华润前海 (深圳): IRR = 2.8%, 净利率 -20.0% | - 北京·万科海淀 (北...
+  PASS
+
+============================================================
+5. Copilot Q='写字楼租赁成交面积最大的是哪个？'  -> expect line=office-leasing
+============================================================
+  HTTP 200 | intent=fallback_unknown | line=office-leasing | conf=0.3 | backend=mock
+  answer: 抱歉,我没能完全理解 "写字楼租赁成交面积最大的是哪个？" 的意图。 | 您可以试试以下问题: |   · 住宅 IRR 最高的 3 个项目 |   · 零售 NOI top 3 |   · 三道红线触发的住宅项目 |   · 收缴率低于 ...
+  PASS
+
+============================================================
+6. Copilot Q='工业地产出租率最高的项目'  -> expect line=industrial
+============================================================
+  HTTP 200 | intent=fallback_unknown | line=industrial | conf=0.3 | backend=mock
+  answer: 抱歉,我没能完全理解 "工业地产出租率最高的项目" 的意图。 | 您可以试试以下问题: |   · 住宅 IRR 最高的 3 个项目 |   · 零售 NOI top 3 |   · 三道红线触发的住宅项目 |   · 收缴率低于 95% ...
+  PASS
+
+============================================================
+7. Copilot Q='投资部 IRR 最高的项目'  -> expect line=investment, intent=irr_top
+============================================================
+  HTTP 200 | intent=irr_top | line=investment | conf=0.85 | backend=mock
+  answer: 在住宅线下,IRR 最高的 3 个项目平均 IRR 为 2.6%。其中最高的是 深圳·华润前海 (深圳),IRR = 2.8%。 | - 深圳·华润前海 (深圳): IRR = 2.8%, 净利率 -20.0% | - 北京·万科海淀 (北...
+  PASS
+
+============================================================
+8. Regression: 住宅三道红线  -> expect line=residential, intent=redlines
+============================================================
+  HTTP 200 | intent=redlines | line=residential | conf=0.8
+  PASS
+
+============================================================
+9. GET /api/copilot/health
+============================================================
+  HTTP 200 | backend=mock | available_lines=10 | api_base=http://localhost:8769
+  PASS
+
+============================================================
+OVERALL: rc=0  (PASS)
+============================================================

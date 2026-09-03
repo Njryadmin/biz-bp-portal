@@ -1,0 +1,50 @@
+# business_lines/industrial/forecast.yaml
+#
+# Rolling Forecast profile for the industrial business line.
+
+line_id: industrial
+line_name: "工业地产部"
+
+series:
+  - indicator_id: deal_area
+    name: 成交面积
+    frequency: monthly
+    method: linear_trend
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: occupancy_rate
+    name: 出租率
+    frequency: monthly
+    method: ema
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: avg_rent
+    name: 平均租金
+    frequency: monthly
+    method: sma
+    sma_window: 3
+    horizon_months: 12
+    historical_periods: 12
+
+  - indicator_id: new_key_clients
+    name: 新增大客户数
+    frequency: monthly
+    method: seasonal_naive
+    horizon_months: 12
+    historical_periods: 24
+
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [电商需求, 制造业景气, 出口订单]
+  - id: supply
+    name: 供给因素
+    drivers: [新交付仓库, 一线城市工业用地, 改造升级]
+  - id: demand
+    name: 需求因素
+    drivers: [冷链需求, 跨境电商, 新能源配套]
+  - id: tenant
+    name: 租户因素
+    drivers: [菜鸟/京东扩张, 制造业搬迁, 退租]

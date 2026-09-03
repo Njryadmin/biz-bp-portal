@@ -1,0 +1,125 @@
+# business_lines/residential/indicators.yaml
+# Indicator definitions for the residential business line.
+# Consumed by packages/ui UniversalKpiCard + the API /indicators endpoint.
+
+indicators:
+  - id: dynamic_irr
+    title: "动态 IRR"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_dynamic_pl"
+    description: "基于动态成本/售价/去化节奏测算的项目内部收益率。"
+
+  - id: dynamic_net_margin
+    title: "动态净利率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_dynamic_pl"
+    description: "(预计结转收入 - 动态成本 - 税金 - 渠道费) / 预计结转收入。"
+
+  - id: payment_completion
+    title: "回款完成率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_payment"
+    description: "累计实际回款 / 累计计划回款。"
+
+  - id: channel_fee_ratio
+    title: "渠道费占比"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_payment"
+    description: "渠道费 / 当期签约金额。"
+
+  - id: asset_liability_ratio
+    title: "资产负债率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_redlines"
+    description: "总负债 / 总资产。三道红线之一，监管阈值 70%。"
+
+  - id: net_debt_ratio
+    title: "净负债率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_redlines"
+    description: "(有息负债 - 货币资金) / 股东权益。三道红线之一，监管阈值 100%。"
+
+  - id: cash_to_short_debt
+    title: "现金短债比"
+    unit: "x"
+    format: "ratio"
+    aggregation: "min"
+    source: "mart_residential.fct_residential_redlines"
+    description: "货币资金 / 一年内到期有息负债。三道红线之一，监管阈值 1.0x。"
+
+  - id: monthly_dedup_rate
+    title: "月度去化率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_dynamic_pl"
+    description: "当月签约面积 / 当期可售面积。"
+
+  - id: payment_vs_plan
+    title: "月度回款/计划比"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_payment"
+    description: "当月实际回款 / 当月计划回款。"
+
+  - id: project_roi
+    title: "项目级 ROI"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_residential.fct_residential_dynamic_pl"
+    description: "(项目净利润 / 累计投入资金) 含土地、建安、费用化利息。"
+
+charts:
+  - id: payment_trend
+    title: "回款 vs 计划"
+    type: "line"
+    x: "month"
+    y: ["actual", "plan"]
+    source: "mart_residential.fct_residential_payment"
+    description: "近 12 个月回款完成情况趋势。"
+
+  - id: cost_structure
+    title: "回款-佣金-渠道费联动"
+    type: "bar"
+    x: "month"
+    y: ["payment", "commission", "channel_fee"]
+    source: "mart_residential.fct_residential_payment"
+    description: "当月回款、佣金支出、渠道费支出堆叠柱状图。"
+
+  - id: redlines_radar
+    title: "三道红线雷达"
+    type: "line"
+    x: "metric"
+    y: ["current", "threshold"]
+    source: "mart_residential.fct_residential_redlines"
+    description: "资产负债率/净负债率/现金短债比当前值 vs 监管阈值雷达图。"
+
+  - id: dedup_forecast
+    title: "去化预测含置信区间"
+    type: "line"
+    x: "month"
+    y: ["forecast", "lower", "upper"]
+    source: "mart_residential.fct_residential_dynamic_pl"
+    description: "未来 12 个月去化率点预测及 80% 置信区间。"
+
+  - id: dynamic_pl_sensitivity
+    title: "动态利润敏感性"
+    type: "line"
+    x: "param"
+    y: ["irr", "net_margin"]
+    source: "mart_residential.fct_residential_dynamic_pl"
+    description: "售价/成本/去化 三个参数扰动下的 IRR 与净利率曲线。"

@@ -1,0 +1,87 @@
+# business_lines/residential/alerts.yaml
+#
+# Alert rules for the residential (住宅) business line.
+#
+# Each rule is evaluated against per-project / per-line KPI values fetched
+# from the live line API. Operators supported:
+#   >  <  >=  <=  ==          — direct value comparison
+#   between                    — threshold is a 2-element [lo, hi] list
+#   change_pct                 — compare against previous period (delta_pct)
+#   consecutive (N)            — fires when a value is sustained for N periods
+
+line_id: residential
+line_name: "住宅分析"
+
+rules:
+  - id: irr_below_threshold
+    name: 动态 IRR 低于阈值
+    indicator_id: dynamic_irr
+    operator: "<"
+    threshold: 0.10
+    severity: high
+    message_template: "{project} 动态 IRR {value:.2%}，低于阈值 10%"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+  - id: payment_drop
+    name: 回款完成率环比下降
+    indicator_id: payment_completion
+    operator: change_pct
+    threshold: -0.05
+    severity: medium
+    message_template: "{project} 回款完成率环比 {delta_pct:.2%}，需关注回款节奏"
+    enabled: true
+    channels: [in_app]
+    scope: project
+
+  - id: redline_breach
+    name: 三道红线触发
+    indicator_id: redlines
+    operator: "=="
+    threshold: "red"
+    severity: high
+    message_template: "{project} 三道红线状态 {value}，触发监管阈值"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+  - id: dedup_stall
+    name: 连续 2 月去化率 < 50%
+    indicator_id: dedup_rate
+    operator: "<"
+    threshold: 0.50
+    consecutive: 2
+    severity: medium
+    message_template: "{project} 连续 {n} 月去化率 < 50%，需提质案场转化"
+    enabled: true
+    channels: [in_app]
+    scope: project
+
+  - id: irr_between_band
+    name: 动态 IRR 处于 10%-15% 警戒带
+    indicator_id: dynamic_irr
+    operator: between
+    threshold: [0.10, 0.15]
+    severity: low
+    message_template: "{project} 动态 IRR {value:.2%} 处于 10%-15% 警戒带"
+    enabled: true
+    channels: [in_app]
+    scope: project
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION — factors used to group triggered alerts for root-cause analysis
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [竞品开盘, 政策变化, 利率变化]
+  - id: project
+    name: 项目因素
+    drivers: [施工进度, 预售节点, 推盘节奏]
+  - id: sales
+    name: 销售因素
+    drivers: [渠道投放, 案场转化, 客户结构]
+  - id: cost
+    name: 成本因素
+    drivers: [建安超支, 土地款追加, 财务费用]

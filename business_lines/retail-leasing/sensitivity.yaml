@@ -1,0 +1,89 @@
+# business_lines/retail-leasing/sensitivity.yaml
+#
+# Sensitivity profile for the retail-leasing (零售租赁) business line.
+#
+# Drivers around deal-level economics: rental price, occupancy,
+# owner-vacancy-days, brand-entry-rate, renewal-rate.
+# Coefficients approximate how a deal-side BP would reason about which
+# lever to pull to improve the next quarter.
+
+line_id: retail-leasing
+line_name: "零售租赁与市场报告"
+
+inputs:
+  - id: avg_deal_rent
+    name: "平均成交租金"
+    unit: "元/㎡/月"
+    base_value_ref: "property.deal_rent_yuan_per_sqm_per_month"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "新签租约月租金加权均值。"
+
+  - id: vacancy_rate
+    name: "空置率"
+    unit: "%"
+    base_value_ref: "property.vacancy_rate"
+    default_range: [-0.30, 0.30]
+    default_step: 0.05
+    description: "空置可租面积占比;负向=招商成果,正向=退租/空置延长。"
+
+  - id: owner_vacancy_days
+    name: "业主空置期"
+    unit: "天"
+    base_value_ref: "property.owner_vacancy_days"
+    default_range: [-0.20, 0.20]
+    default_step: 0.05
+    description: "业主从上个租约结束到新租约签约之间的空置天数。"
+
+  - id: renewal_rate
+    name: "续约率"
+    unit: "%"
+    base_value_ref: "property.renewal_rate"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "到期租约中选择续约的比例。"
+
+outputs:
+  - id: occupancy_rate
+    name: "商铺出租率"
+    unit: "%"
+    base_value_ref: "kpi.occupancy_rate"
+    # 招商去化(空置下降)显著推升出租率;空置天数过长意味着 1-vacancy 不足。
+    coefficients:
+      avg_deal_rent: +0.0
+      vacancy_rate: -1.0
+      owner_vacancy_days: -0.1
+      renewal_rate: +0.3
+
+  - id: benchmark_gap_pct
+    name: "竞品基准对标差"
+    unit: "%"
+    base_value_ref: "kpi.benchmark_gap_pct"
+    # 成交租金↑ 直接推高对标差;空置期延长会被迫降价 = 对标差缩小。
+    coefficients:
+      avg_deal_rent: +1.0
+      vacancy_rate: -0.2
+      owner_vacancy_days: -0.05
+      renewal_rate: +0.0
+
+  - id: commission_revenue
+    name: "佣金收入"
+    unit: "万元"
+    base_value_ref: "kpi.commission_revenue"
+    # 成交租金↑ 直接抬升佣金绝对额;空置↓= 交易频次↑。
+    coefficients:
+      avg_deal_rent: +24.0
+      vacancy_rate: -800.0
+      owner_vacancy_days: -10.0
+      renewal_rate: +50.0
+
+  - id: renewal_rate
+    name: "续约率"
+    unit: "%"
+    base_value_ref: "kpi.renewal_rate"
+    # 续约率 output 对续约率 input 强正向;其他输入仅弱影响。
+    coefficients:
+      avg_deal_rent: +0.0
+      vacancy_rate: -0.05
+      owner_vacancy_days: -0.05
+      renewal_rate: +1.0

@@ -1,0 +1,40 @@
+# business_lines/investment/manifest.yaml
+# 地产投资部业务线 manifest.
+# 数据模型: 基金/项目 + 投资组合 + 资本结构 + 退出记录.
+# 核心指标: AUM / IRR / DPI / TVPI / 管理费率 / 待投金额.
+
+id: investment
+name: 地产投资部
+version: 0.1.0
+description: "REITs、地产基金、收购业务的全流程分析,围绕 AUM、项目 IRR、已实现收益、待投金额、GP/LP 结构与管理费率展开。"
+owner: "investment-bp@fin-bp-portal.local"
+
+icon: "FundOutlined"
+
+nav:
+  - path: "/investment"
+    title: "概览"
+  - path: "/investment/funds"
+    title: "基金/项目"
+  - path: "/investment/portfolio"
+    title: "投资组合"
+  - path: "/investment/exits"
+    title: "退出记录"
+  - path: "/investment/fees"
+    title: "管理费率"
+
+api_prefix: "/api/lines/investment"
+
+warehouse:
+  schema: "raw_investment"
+  dbt_schema: "stg_investment"
+  mart_schema: "mart_investment"
+
+refresh:
+  schedule: "0 6 * * *"
+  enabled: true
+
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

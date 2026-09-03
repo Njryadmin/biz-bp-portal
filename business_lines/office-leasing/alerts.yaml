@@ -1,0 +1,79 @@
+# business_lines/office-leasing/alerts.yaml
+#
+# Alert rules for the office-leasing business line.
+
+line_id: office-leasing
+line_name: "写字楼租赁部"
+
+rules:
+  - id: deal_cycle_long
+    name: 成交周期 > 120 天
+    indicator_id: avg_deal_cycle
+    operator: ">"
+    threshold: 120
+    severity: high
+    message_template: "{deal} 成交周期 {value:.0f} 天，超过 120 天警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: deal
+
+  - id: vacancy_high
+    name: 市场空置率 > 25%
+    indicator_id: vacancy_rate
+    operator: ">"
+    threshold: 0.25
+    severity: medium
+    message_template: "{deal} 楼宇空置率 {value:.2%}，议价压力大"
+    enabled: true
+    channels: [in_app]
+    scope: deal
+
+  - id: renewal_below_band
+    name: 续约率 < 50%
+    indicator_id: renewal_rate
+    operator: "<"
+    threshold: 0.50
+    severity: high
+    message_template: "{deal} 续约率 {value:.2%}，低于 50% 客户黏性警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: deal
+
+  - id: per_broker_below_band
+    name: 人均产能低于 5 万元/月
+    indicator_id: per_broker_output
+    operator: "<"
+    threshold: 5
+    severity: medium
+    message_template: "{deal} 人均产能 {value:.1f} 万/月，低于 5w 警戒"
+    enabled: true
+    channels: [in_app]
+    scope: deal
+
+  - id: commission_drop
+    name: 佣金费率环比下降 10pt
+    indicator_id: avg_commission_rate
+    operator: change_pct
+    threshold: -0.10
+    severity: medium
+    message_template: "{deal} 佣金费率环比 {delta_pct:.2%}，需关注业主议价"
+    enabled: true
+    channels: [in_app]
+    scope: deal
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [写字楼空置率, 总部经济活跃度, 共享办公挤压]
+  - id: supply
+    name: 供给因素
+    drivers: [新交付楼宇, 楼宇等级, 业主报价]
+  - id: demand
+    name: 需求因素
+    drivers: [客户行业景气, 跨区搬迁, 扩租需求]
+  - id: team
+    name: 团队因素
+    drivers: [经纪人流失率, 培训覆盖, 楼宇覆盖]

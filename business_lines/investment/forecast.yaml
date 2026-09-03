@@ -1,0 +1,50 @@
+# business_lines/investment/forecast.yaml
+#
+# Rolling Forecast profile for the investment business line.
+
+line_id: investment
+line_name: "地产投资部"
+
+series:
+  - indicator_id: aum
+    name: AUM
+    frequency: quarterly
+    method: linear_trend
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: project_irr
+    name: 项目 IRR
+    frequency: quarterly
+    method: ema
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: realized_return
+    name: 已实现收益(DPI)
+    frequency: quarterly
+    method: sma
+    sma_window: 3
+    horizon_months: 12
+    historical_periods: 12
+
+  - indicator_id: dry_powder
+    name: 待投金额
+    frequency: quarterly
+    method: seasonal_naive
+    horizon_months: 12
+    historical_periods: 24
+
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [REITs 政策, 利率环境, 资产估值]
+  - id: capital
+    name: 资本因素
+    drivers: [LP 募集, 银行配资, 实缴节奏]
+  - id: operations
+    name: 运营因素
+    drivers: [项目筛选, 改造增值, 招商运营]
+  - id: exit
+    name: 退出因素
+    drivers: [REITs 上市, 协议转让, 整售]

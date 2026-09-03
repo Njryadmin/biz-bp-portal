@@ -1,0 +1,30 @@
+{
+  "project_id": "PRJ-005",
+  "name": "成都·保利天府",
+  "city": "成都",
+  "developer": "保利发展",
+  "stage": "在建",
+  "saleable_area_wan_sqm": 22.3,
+  "avg_price_per_sqm": 21500,
+  "dynamic_cost_yi": 38.6,
+  "land_cost_yi": 12.5,
+  "cumulative_payment_yi": 24.8,
+  "monthly_payment_plan_yi": [1.8, 1.9, 1.7, 1.6, 1.7, 1.8, 2.0, 2.1, 2.2, 2.0, 1.9, 1.8],
+  "monthly_payment_actual_yi": [1.7, 1.8, 1.6, 1.5, 1.6, 1.7, 1.9, 2.0, 2.1, 1.9, 1.8, 1.7],
+  "commission_wan": 980,
+  "channel_fee_wan": 1320,
+  "debt_structure": {
+    "short_term_debt_yi": 4.2,
+    "long_term_debt_yi": 18.0,
+    "cash_yi": 6.5,
+    "total_assets_yi": 58.0,
+    "total_liabilities_yi": 32.0,
+    "shareholders_equity_yi": 26.0
+  },
+  "dedup_history": [0.06, 0.07, 0.08, 0.09, 0.08, 0.07, 0.06, 0.05, 0.06, 0.07, 0.06, 0.05],
+  "dedup_forecast_median": [0.07, 0.08, 0.07, 0.06, 0.05, 0.05, 0.04, 0.04, 0.04, 0.03, 0.03, 0.02],
+  "dedup_forecast_lower": [0.05, 0.06, 0.05, 0.04, 0.03, 0.03, 0.02, 0.02, 0.02, 0.01, 0.01, 0.00],
+  "dedup_forecast_upper": [0.09, 0.10, 0.09, 0.08, 0.07, 0.07, 0.06, 0.06, 0.06, 0.05, 0.05, 0.04],
+  "start_date": "2023-08-15",
+  "expected_delivery": "2026-12-31"
+}

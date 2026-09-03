@@ -1,0 +1,46 @@
+# infra/dbt/dbt_project.yml
+# dbt project for the Fin BP Portal data-integration layer.
+#
+# Model layers (default materialization in parentheses):
+#   models/staging/      view     — light renames / type casts
+#   models/intermediate/ view     — joined / normalized entities
+#   models/marts/        table    — wide, business-facing tables
+#
+# Profile: ``finbp`` — see ./profiles.yml. In Docker, the
+# ``AIRFLOW__DATABASE__SQL_ALCHEMY_CONN`` env already points to the
+# shared postgres service so both the API and dbt can read/write the
+# same database.
+
+name: "finbp"
+version: "1.0.0"
+config-version: 2
+
+profile: "finbp"
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+seeds:
+  finbp:
+    +schema: raw          # seeds live in raw alongside raw.uploads
+    +quote_columns: true
+
+models:
+  finbp:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts

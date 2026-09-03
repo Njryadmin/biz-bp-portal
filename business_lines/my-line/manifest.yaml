@@ -1,0 +1,29 @@
+id: my-line
+name: 我的测试业务线
+version: 0.1.0
+description: "插件扩展测试 — 5 分钟新增业务线 demo"
+owner: "you@example.com"
+
+icon: "ExperimentOutlined"
+
+nav:
+  - path: "/my-line"
+    title: "概览"
+  - path: "/my-line/ping"
+    title: "Ping"
+
+api_prefix: "/api/lines/my-line"
+
+warehouse:
+  schema: "raw_my_line"
+  dbt_schema: "stg_my_line"
+  mart_schema: "mart_my_line"
+
+refresh:
+  schedule: "0 2 * * *"
+  enabled: true
+
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

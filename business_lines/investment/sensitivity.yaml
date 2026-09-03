@@ -1,0 +1,87 @@
+# business_lines/investment/sensitivity.yaml
+#
+# Sensitivity profile for the investment (地产投资) business line.
+#
+# Drives aum, mgmt_fee_revenue, project_irr, dry_powder.
+# 投资部最大杠杆: AUM × 管理费率;AUM 增长由募资 + 退出回流驱动.
+
+line_id: investment
+line_name: "地产投资部"
+
+inputs:
+  - id: aum_growth
+    name: "AUM 同比增速"
+    unit: "%"
+    base_value_ref: "fund.aum_growth"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "AUM 同比增速。"
+
+  - id: mgmt_fee_rate
+    name: "管理费率"
+    unit: "%"
+    base_value_ref: "fund.mgmt_fee_rate"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "管理费/AUM 年化费率。"
+
+  - id: exit_irr
+    name: "项目退出 IRR"
+    unit: "%"
+    base_value_ref: "fund.exit_irr"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "退出项目的加权 IRR。"
+
+  - id: dry_powder
+    name: "待投金额"
+    unit: "亿元"
+    base_value_ref: "fund.dry_powder"
+    default_range: [-0.30, 0.30]
+    default_step: 0.05
+    description: "已募集尚未投出金额。"
+
+outputs:
+  - id: aum
+    name: "AUM (亿元)"
+    unit: "亿元"
+    base_value_ref: "kpi.aum"
+    # AUM: aum_growth 正向; exit_irr 高→资金回流快→AUM 名义增速高; 待投 - 反向(尚未投出)
+    coefficients:
+      aum_growth: +150.0
+      mgmt_fee_rate: +5.0
+      exit_irr: +12.0
+      dry_powder: -1.0
+
+  - id: mgmt_fee_revenue
+    name: "管理费收入(亿元)"
+    unit: "亿元"
+    base_value_ref: "kpi.mgmt_fee_revenue"
+    # 管理费收入 ≈ AUM × 费率
+    coefficients:
+      aum_growth: +0.4
+      mgmt_fee_rate: +50.0
+      exit_irr: +0.0
+      dry_powder: +0.01
+
+  - id: project_irr
+    name: "项目 IRR (%)"
+    unit: "%"
+    base_value_ref: "kpi.project_irr"
+    # IRR: 退出 IRR 主导;管理费率升高→代理人更负责;待投高→资本效率低
+    coefficients:
+      aum_growth: +0.0
+      mgmt_fee_rate: +0.5
+      exit_irr: +1.0
+      dry_powder: -0.5
+
+  - id: capital_called
+    name: "实缴比例"
+    unit: "%"
+    base_value_ref: "kpi.capital_called"
+    # 实缴比例: 退出 IRR 高→LP 信任→实缴快;待投高→未实缴多→实缴比例虚高(注意 base)
+    coefficients:
+      aum_growth: +0.0
+      mgmt_fee_rate: +0.0
+      exit_irr: +5.0
+      dry_powder: -3.0

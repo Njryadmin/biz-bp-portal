@@ -1,0 +1,40 @@
+# business_lines/office-leasing/manifest.yaml
+# 写字楼租赁部业务线 manifest.
+# 数据模型: 成交记录 + 经纪人 + 客户 + 楼宇.
+# 核心指标: 成交面积 / 佣金 / 成交周期 / 续约率 / 跨区成交占比.
+
+id: office-leasing
+name: 写字楼租赁部
+version: 0.1.0
+description: "写字楼租售代理业务的全流程分析,围绕成交面积、佣金收入、成交周期、客户结构、续约率与跨区成交占比展开。"
+owner: "office-leasing-bp@fin-bp-portal.local"
+
+icon: "BankOutlined"
+
+nav:
+  - path: "/office-leasing"
+    title: "概览"
+  - path: "/office-leasing/deals"
+    title: "成交明细"
+  - path: "/office-leasing/buildings"
+    title: "楼宇池"
+  - path: "/office-leasing/brokers"
+    title: "经纪人产能"
+  - path: "/office-leasing/region"
+    title: "区域成交结构"
+
+api_prefix: "/api/lines/office-leasing"
+
+warehouse:
+  schema: "raw_office_leasing"
+  dbt_schema: "stg_office_leasing"
+  mart_schema: "mart_office_leasing"
+
+refresh:
+  schedule: "0 3 * * *"
+  enabled: true
+
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

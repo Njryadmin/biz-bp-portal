@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw_industrial
+    description: "Raw landing zone for the industrial business line."
+    schema: raw_industrial
+    tables:
+      - name: industrial_properties
+        description: "Master data for each industrial property (warehouse / factory / cold storage)."
+        columns:
+          - name: property_id
+            tests:
+              - unique
+              - not_null

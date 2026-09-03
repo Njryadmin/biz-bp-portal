@@ -1,0 +1,125 @@
+# business_lines/valuation/indicators.yaml
+# 估价部业务线 KPI 指标库.
+# 与住宅线(IRR 驱动)/零售线(NOI 驱动)不同,这里以报告交付与重估偏差驱动.
+
+indicators:
+  - id: report_count
+    title: "估价报告数"
+    unit: "份"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_valuation.mart_report_kpis"
+    description: "当期出具的估价报告份数(交付口径),含预评/正式/复估/复核四类。"
+
+  - id: valuation_amount
+    title: "估价总额"
+    unit: "万元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_valuation.mart_report_kpis"
+    description: "当期报告所对应的评估总价合计,衡量承接规模。"
+
+  - id: avg_report_size
+    title: "单报告均价"
+    unit: "元/份"
+    format: "currency"
+    aggregation: "avg"
+    source: "mart_valuation.mart_report_kpis"
+    description: "当期每份报告的平均收费;住宅抵押单笔 3-8k,大型征收 5-50w。"
+
+  - id: valuation_bias_rate
+    title: "重估偏差率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_valuation.mart_report_kpis"
+    description: "复估/实际成交价 vs 估价的偏差,取绝对值后平均;银行复核关心指标,2% 以内健康。"
+
+  - id: collection_days
+    title: "回款周期"
+    unit: "天"
+    format: "number"
+    aggregation: "avg"
+    source: "mart_valuation.mart_report_kpis"
+    description: "从报告交付到客户付款的平均天数;银行抵押 30-60 天,司法/征收 90-180 天。"
+
+  - id: on_time_delivery_rate
+    title: "准时交付率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_valuation.mart_report_kpis"
+    description: "在合同约定交付日 ±2 工作日内完成的比例;客户满意度核心驱动。"
+
+  - id: report_revision_rate
+    title: "退改率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_valuation.mart_report_kpis"
+    description: "因质量/合规问题被退回修改的份数占比;反映估价师产出质量。"
+
+  - id: per_capita_output
+    title: "人均产值"
+    unit: "万元/人/月"
+    format: "currency"
+    aggregation: "avg"
+    source: "mart_valuation.mart_report_kpis"
+    description: "估价师当月人均创收;高级估价师 8-15w,助理 2-5w。"
+
+  - id: client_satisfaction
+    title: "客户满意度"
+    unit: "0-100"
+    format: "number"
+    aggregation: "avg"
+    source: "mart_valuation.mart_report_kpis"
+    description: "报告交付后客户打分(0-100);85+ 为良好。"
+
+  - id: repeat_client_rate
+    title: "复购率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_valuation.mart_report_kpis"
+    description: "当期报告来自老客户(近 12 个月有合作)的比例;银行/AMC 客户复购率 50%+。"
+
+charts:
+  - id: report_count_trend
+    title: "月度报告数趋势"
+    type: "line"
+    x: "month"
+    y: ["report_count"]
+    source: "mart_valuation.mart_report_kpis"
+    description: "过去 12 个月各类报告(抵押/交易/征收)出具量趋势。"
+
+  - id: bias_distribution
+    title: "重估偏差率分布"
+    type: "bar"
+    x: "bias_band"
+    y: ["report_count"]
+    source: "mart_valuation.mart_report_kpis"
+    description: "复估样本的偏差率直方图,识别估价师系统性偏差。"
+
+  - id: appraiser_productivity
+    title: "估价师人均产值"
+    type: "bar"
+    x: "appraiser"
+    y: ["per_capita_output", "report_count"]
+    source: "mart_valuation.mart_report_kpis"
+    description: "团队内每位估价师的月度产能横向对比。"
+
+  - id: collection_aging
+    title: "回款账龄分布"
+    type: "bar"
+    x: "aging_bucket"
+    y: ["amount_wan"]
+    source: "mart_valuation.mart_report_kpis"
+    description: "未回款报告按账龄(0-30/30-60/60-90/90+ 天)分布。"
+
+  - id: purpose_mix
+    title: "报告类型结构"
+    type: "bar"
+    x: "purpose"
+    y: ["report_count", "valuation_amount"]
+    source: "mart_valuation.mart_report_kpis"
+    description: "按估价目的(抵押/交易/征收/课税/司法)分项规模与金额。"

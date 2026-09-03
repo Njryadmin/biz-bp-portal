@@ -1,0 +1,80 @@
+# business_lines/advisory/alerts.yaml
+#
+# Alert rules for the advisory (顾问部) business line.
+
+line_id: advisory
+line_name: "地产顾问部"
+
+rules:
+  - id: renewal_below_threshold
+    name: 续约率 < 40%
+    indicator_id: renewal_rate
+    operator: "<"
+    threshold: 0.40
+    severity: high
+    message_template: "{project} 续约率 {value:.2%}，低于 40% 客户黏性警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+  - id: success_rate_drop
+    name: 项目成功率环比下降 10pt
+    indicator_id: project_success_rate
+    operator: change_pct
+    threshold: -0.10
+    severity: high
+    message_template: "{project} 成功率环比 {delta_pct:.2%}，需排查交付质量"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+  - id: per_capita_below_band
+    name: 人均产能低于 15 万元/月
+    indicator_id: per_consultant_output
+    operator: "<"
+    threshold: 15
+    severity: medium
+    message_template: "{project} 人均产能 {value:.0f} 万/月，低于 15w 警戒"
+    enabled: true
+    channels: [in_app]
+    scope: project
+
+  - id: overdue_delivery
+    name: 项目超期 30 天未交付
+    indicator_id: avg_project_duration
+    operator: ">"
+    threshold: 90
+    severity: medium
+    message_template: "{project} 周期 {value:.0f} 天，超 90 天警戒"
+    enabled: true
+    channels: [in_app]
+    scope: project
+
+  - id: nps_negative
+    name: NPS 连续 2 月为负
+    indicator_id: client_nps
+    operator: "<"
+    threshold: 0
+    consecutive: 2
+    severity: high
+    message_template: "{project} 连续 {n} 月 NPS 为负，建议做客户访谈"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [土地市场热度, 开发商拿地意愿, 融资环境]
+  - id: capacity
+    name: 产能因素
+    drivers: [顾问入职率, 培训认证, 项目周转]
+  - id: client
+    name: 客户因素
+    drivers: [国央企采购周期, 民企续约, 外资项目审批]
+  - id: competition
+    name: 竞争因素
+    drivers: [五大行报价, 本土所价格战, 数字化交付]

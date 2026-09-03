@@ -1,0 +1,124 @@
+# business_lines/advisory/indicators.yaml
+# 地产顾问部业务线 KPI 指标库.
+
+indicators:
+  - id: project_count
+    title: "顾问项目数"
+    unit: "个"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_advisory.mart_project_kpis"
+    description: "当期在执行 + 交付的顾问项目数;含可研/拿地/投资/再融资四大类。"
+
+  - id: contract_amount
+    title: "合同金额"
+    unit: "万元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_advisory.mart_project_kpis"
+    description: "当期新签 + 在执行合同总金额;判断业务规模。"
+
+  - id: avg_contract
+    title: "合同均价"
+    unit: "万元/个"
+    format: "currency"
+    aggregation: "avg"
+    source: "mart_advisory.mart_project_kpis"
+    description: "单个项目的平均合同金额;可研 30-80w,拿地顾问 80-300w,再融资 100-500w。"
+
+  - id: renewal_rate
+    title: "续约率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_advisory.mart_project_kpis"
+    description: "到期客户中选择续约的比例;反映客户黏性,50%+ 为优秀。"
+
+  - id: per_consultant_output
+    title: "人均产能"
+    unit: "万元/人/月"
+    format: "currency"
+    aggregation: "avg"
+    source: "mart_advisory.mart_project_kpis"
+    description: "顾问当月人均创收;高级顾问 30-80w,助理 8-20w。"
+
+  - id: client_industry_diversity
+    title: "客户行业多样性"
+    unit: "0-1"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_advisory.mart_project_kpis"
+    description: "客户行业分布的 Shannon 熵归一化;0.7+ 表明行业分散,降低集中度风险。"
+
+  - id: project_success_rate
+    title: "项目成功率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_advisory.mart_project_kpis"
+    description: "顾问建议被客户采纳且项目落地的比例;投资类 60%+,再融资 80%+。"
+
+  - id: avg_project_duration
+    title: "平均项目周期"
+    unit: "天"
+    format: "number"
+    aggregation: "avg"
+    source: "mart_advisory.mart_project_kpis"
+    description: "签约到交付的平均天数;拿地顾问 30-60 天,可研 60-90 天。"
+
+  - id: client_nps
+    title: "客户 NPS"
+    unit: "-100~100"
+    format: "number"
+    aggregation: "avg"
+    source: "mart_advisory.mart_project_kpis"
+    description: "客户净推荐值;30+ 为行业良好。"
+
+  - id: on_time_delivery_rate
+    title: "准时交付率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_advisory.mart_project_kpis"
+    description: "按合同约定日交付的项目占比;90%+ 为目标。"
+
+charts:
+  - id: project_pipeline
+    title: "项目漏斗(签约→执行→交付)"
+    type: "bar"
+    x: "stage"
+    y: ["project_count", "contract_amount"]
+    source: "mart_advisory.mart_project_kpis"
+    description: "漏斗各阶段的项目数与金额。"
+
+  - id: industry_mix
+    title: "客户行业分布"
+    type: "bar"
+    x: "industry"
+    y: ["project_count", "contract_amount"]
+    source: "mart_advisory.mart_project_kpis"
+    description: "按客户行业(国央企/民企/外资/AMC/政府)分项。"
+
+  - id: consultant_productivity
+    title: "顾问人均产能"
+    type: "bar"
+    x: "consultant"
+    y: ["per_consultant_output", "project_count"]
+    source: "mart_advisory.mart_project_kpis"
+    description: "团队内顾问的人均产能横向对比。"
+
+  - id: renewal_trend
+    title: "续约率趋势"
+    type: "line"
+    x: "month"
+    y: ["renewal_rate"]
+    source: "mart_advisory.mart_project_kpis"
+    description: "近 12 个月到期项目的续约率变化。"
+
+  - id: type_mix
+    title: "顾问类型结构"
+    type: "bar"
+    x: "service_type"
+    y: ["project_count"]
+    source: "mart_advisory.mart_project_kpis"
+    description: "可研/拿地/投资/再融资四类项目数量与金额。"

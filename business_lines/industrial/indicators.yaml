@@ -1,0 +1,124 @@
+# business_lines/industrial/indicators.yaml
+# 工业地产部业务线 KPI 指标库.
+
+indicators:
+  - id: deal_area
+    title: "厂房/仓库成交面积"
+    unit: "㎡"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_industrial.mart_property_kpis"
+    description: "当期成交的厂房/仓库可租面积合计。"
+
+  - id: occupancy_rate
+    title: "出租率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_industrial.mart_property_kpis"
+    description: "已租面积/总可租面积;85%+ 健康。"
+
+  - id: avg_rent
+    title: "平均租金"
+    unit: "元/㎡/月"
+    format: "currency"
+    aggregation: "avg"
+    source: "mart_industrial.mart_property_kpis"
+    description: "按面积加权的平均月租金;上海仓库 1.2-1.8 元,厂房 0.8-1.5 元。"
+
+  - id: tenant_industry_diversity
+    title: "租户行业多样性"
+    unit: "0-1"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_industrial.mart_property_kpis"
+    description: "租户行业的 Shannon 熵归一化;0.6+ 为优。"
+
+  - id: new_key_clients
+    title: "新增大客户数"
+    unit: "个"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_industrial.mart_property_kpis"
+    description: "当期新签租约面积 > 5000㎡ 的客户数;大客户储备指标。"
+
+  - id: lease_renewal_rate
+    title: "续租率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_industrial.mart_property_kpis"
+    description: "到期租约续租比例;75%+ 优秀。"
+
+  - id: avg_lease_term
+    title: "平均租期"
+    unit: "年"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_industrial.mart_property_kpis"
+    description: "新签租约平均年限;仓库 3-5 年,厂房 5-10 年。"
+
+  - id: warehouse_count
+    title: "在管物业数"
+    unit: "个"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_industrial.mart_property_kpis"
+    description: "当期在管的厂房/仓库物业数。"
+
+  - id: logistics_park_coverage
+    title: "物流园覆盖度"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_industrial.mart_property_kpis"
+    description: "已入驻主流物流园区(菜鸟/京东/顺丰/万纬)的比例。"
+
+  - id: cap_rate
+    title: "资本化率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_industrial.mart_property_kpis"
+    description: "NOI / 资产估值;物流园 5-6%,厂房 6-8%。"
+
+charts:
+  - id: occupancy_distribution
+    title: "物业出租率分布"
+    type: "bar"
+    x: "occupancy_band"
+    y: ["property_count"]
+    source: "mart_industrial.mart_property_kpis"
+    description: "按出租率区间(0-50/50-70/70-85/85-100)分布。"
+
+  - id: industry_mix
+    title: "租户行业分布"
+    type: "bar"
+    x: "industry"
+    y: ["leased_area", "tenant_count"]
+    source: "mart_industrial.mart_property_kpis"
+    description: "按租户行业(电商/快递/制造/冷链/汽车)分项。"
+
+  - id: rent_trend
+    title: "平均租金趋势"
+    type: "line"
+    x: "month"
+    y: ["avg_rent"]
+    source: "mart_industrial.mart_property_kpis"
+    description: "近 12 月各物业平均租金变化。"
+
+  - id: property_type_mix
+    title: "物业类型结构"
+    type: "bar"
+    x: "property_type"
+    y: ["property_count", "total_area"]
+    source: "mart_industrial.mart_property_kpis"
+    description: "厂房 vs 仓库 vs 冷库分项。"
+
+  - id: top_clients
+    title: "Top 大客户面积"
+    type: "bar"
+    x: "tenant_name"
+    y: ["leased_area"]
+    source: "mart_industrial.mart_property_kpis"
+    description: "前 10 大客户租赁面积横向对比。"

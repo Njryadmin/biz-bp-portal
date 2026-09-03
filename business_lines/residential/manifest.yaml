@@ -1,0 +1,43 @@
+id: residential
+name: "住宅分析"
+version: 0.1.0
+description: "住宅项目业务分析：动态利润测算、回款-佣金-渠道费联动、三道红线监控、去化预测。"
+owner: "residential-bp@example.com"
+
+# Visual: icon name from @ant-design/icons (used by Web layout)
+icon: "HomeOutlined"
+
+# Navigation entry rendered by apps/web/app/(dashboard)/layout.tsx
+# path is RELATIVE to the dashboard root
+nav:
+  - path: "/residential"
+    title: "概览"
+  - path: "/residential/dynamic-pl"
+    title: "动态利润"
+  - path: "/residential/payment"
+    title: "回款-佣金-渠道费"
+  - path: "/residential/redlines"
+    title: "三道红线"
+  - path: "/residential/dedup-forecast"
+    title: "去化预测"
+
+# API mount point; the API loader exposes business_lines/<line>/api/router.py
+# under this prefix. Must start with "/".
+api_prefix: "/api/lines/residential"
+
+# Database schema/warehouse config (used by DBT and API)
+warehouse:
+  schema: "raw_residential"
+  dbt_schema: "stg_residential"
+  mart_schema: "mart_residential"
+
+# Default refresh cadence for this line's data
+refresh:
+  schedule: "0 2 * * *"
+  enabled: true
+
+# Feature flags consumed by the UI
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

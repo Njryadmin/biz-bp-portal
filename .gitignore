@@ -1,0 +1,129 @@
+# Node / Next.js
+**/node_modules
+**/.next
+**/out
+**/dist
+**/build
+**/coverage
+**/.nyc_output
+**/*.tsbuildinfo
+.npm
+.yarn
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/venv
+**/.venv
+**/*.egg-info
+**/.eggs
+**/pip-wheel-metadata
+
+# Local data and uploads
+data/landing/*
+!data/landing/.gitkeep
+**/uploads/*
+!**/uploads/.gitkeep
+
+# Logs
+**/*.log
+**/*.log.*
+**/smoke_*.txt
+**/smoke_out.txt
+**/api_*.log*
+**/next-dev.log
+**/next-dev.err.log
+**/logs/*
+!**/logs/.gitkeep
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/pnpm-debug.log*
+**/lerna-debug.log*
+
+# Test/debug scratch files
+**/_test_*.py
+**/_debug_*.py
+**/_verify.py
+**/_cleanup.py
+**/_t.py
+**/_no_db_lifespan_backup.py
+**/_startup_v2_backup.py
+**/_check_loader*.py
+**/_smoke_*.py
+**/smoke_keywords.py
+**/smoke_test*.py
+**/smoke_out.txt
+**/validation*.py
+**/validation*.txt
+**/validation_*.ps1
+**/curl_validation*.txt
+**/final_validation*.txt
+**/pytest_out.txt
+**/run_curl_validation.ps1
+**/final_validation.py
+
+# Business-line T1 verification artifacts (1-time evidence, not core code)
+**/business_lines/**/_evidence/
+**/business_lines/**/_capture_evidence.py
+**/business_lines/**/validate.py
+**/business_lines/**/debug.py
+**/business_lines/**/verify_seeds.py
+**/business_lines/**/_*.py
+
+**/*.bak
+**/*.local
+**/.run_api.py.local
+
+# Test-line leftovers
+business_lines/_test-line*/
+business_lines/_test_line*/
+business_lines/test-line*/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.iml
+.idea_modules/
+
+# Env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Backups / temp
+*.tmp
+*.bak
+*~
+*.log.gz
+*.pid
+
+# Coverage / testing
+htmlcov/
+.coverage
+.coverage.*
+.cache/
+.pytest_cache/
+.tox/
+.nox/
+
+# Node toolchain caches
+.eslintcache
+.stylelintcache
+.parcel-cache/
+.vite/
+
+# Next.js / TS
+next-env.d.ts
+.tsbuildinfo
+*.tsbuildinfo

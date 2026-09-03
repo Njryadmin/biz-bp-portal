@@ -1,0 +1,51 @@
+# business_lines/retail/forecast.yaml
+#
+# Rolling Forecast profile for the retail (零售) business line.
+# NOI, occupancy and collection rate are the headline forward-looking KPIs.
+
+line_id: retail
+line_name: "零售分析"
+
+series:
+  - indicator_id: noi
+    name: NOI (净营业收入)
+    frequency: monthly
+    method: linear_trend
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: efficiency
+    name: 坪效
+    frequency: monthly
+    method: ema
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: collection_rate
+    name: 收缴率
+    frequency: monthly
+    method: sma
+    sma_window: 3
+    horizon_months: 12
+    historical_periods: 12
+
+  - indicator_id: vacancy_rate
+    name: 空置率
+    frequency: monthly
+    method: seasonal_naive
+    horizon_months: 12
+    historical_periods: 24
+
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [商圈客流变化, 竞品调整, 季节性]
+  - id: tenant
+    name: 租户因素
+    drivers: [主力店调整, 品牌淘汰, 招租进度]
+  - id: rent
+    name: 租金因素
+    drivers: [新签租金, 续约租金, 免租期]
+  - id: opex
+    name: 运营因素
+    drivers: [能耗成本, 物业维护, 安保支出]

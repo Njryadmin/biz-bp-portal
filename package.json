@@ -1,0 +1,26 @@
+{
+  "name": "fin-bp-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Financial Business Performance Portal - plugin framework monorepo",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "web:dev": "npm --workspace apps/web run dev",
+    "web:build": "npm --workspace apps/web run build",
+    "web:typecheck": "npm --workspace apps/web run typecheck",
+    "api:dev": "cd apps/api && uvicorn app.main:app --reload --port 8000",
+    "api:test": "cd apps/api && pytest -q",
+    "lint": "npm --workspace apps/web run lint",
+    "typecheck": "npm --workspace apps/web run typecheck"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "allowScripts": {
+    "unrs-resolver@1.12.2": true
+  }
+}

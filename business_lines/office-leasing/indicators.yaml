@@ -1,0 +1,124 @@
+# business_lines/office-leasing/indicators.yaml
+# 写字楼租赁部业务线 KPI 指标库.
+
+indicators:
+  - id: deal_area
+    title: "成交面积"
+    unit: "㎡"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "当期成交的可租面积合计;含新签 + 续约 + 扩租。"
+
+  - id: commission_revenue
+    title: "佣金收入"
+    unit: "万元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "当期已收 + 应收佣金合计。"
+
+  - id: avg_commission_rate
+    title: "平均佣金费率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "佣金/月租的比例;租赁 0.5-1.5 月租,买卖 1-2% 总价。"
+
+  - id: avg_deal_cycle
+    title: "平均成交周期"
+    unit: "天"
+    format: "number"
+    aggregation: "avg"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "从客户委托到签约的平均天数;写字楼 30-90 天,大型企业 90-180 天。"
+
+  - id: client_mix
+    title: "客户结构多样性"
+    unit: "0-1"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "按行业分客户结构 Shannon 熵归一化;0.7+ 为优。"
+
+  - id: renewal_rate
+    title: "续约率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "到期租约中选择续约的比例;优质楼宇 70%+。"
+
+  - id: cross_region_ratio
+    title: "跨区成交占比"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "成交楼宇与客户总部不在同一城市的比例;体现跨区服务能力。"
+
+  - id: broker_count
+    title: "经纪人人数"
+    unit: "人"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "当月有产出的活跃经纪人人数。"
+
+  - id: per_broker_output
+    title: "人均产能"
+    unit: "万元/人/月"
+    format: "currency"
+    aggregation: "avg"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "经纪人月人均佣金;明星经纪人 10-30w。"
+
+  - id: vacancy_rate
+    title: "市场空置率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "重点关注楼宇的市场空置率;15%+ 利好租方。"
+
+charts:
+  - id: deal_volume_trend
+    title: "月度成交面积趋势"
+    type: "line"
+    x: "month"
+    y: ["deal_area", "commission_revenue"]
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "近 12 个月成交面积 + 佣金收入趋势。"
+
+  - id: client_industry_mix
+    title: "客户行业分布"
+    type: "bar"
+    x: "industry"
+    y: ["deal_count", "deal_area"]
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "按客户行业(金融/科技/制造/专业服务)分项。"
+
+  - id: broker_productivity
+    title: "经纪人人均产能"
+    type: "bar"
+    x: "broker"
+    y: ["per_broker_output", "deal_count"]
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "团队内经纪人月人均产能。"
+
+  - id: region_pie
+    title: "成交区域分布"
+    type: "bar"
+    x: "region"
+    y: ["deal_area"]
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "按城市/商圈分项成交面积。"
+
+  - id: building_grade
+    title: "楼宇等级成交"
+    type: "bar"
+    x: "grade"
+    y: ["deal_count", "avg_unit_rent"]
+    source: "mart_office_leasing.mart_deal_kpis"
+    description: "甲级/乙级/丙级成交单数与平均租金。"

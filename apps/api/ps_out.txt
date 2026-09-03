@@ -1,0 +1,13 @@
+﻿powershell : At C:\Users\mozzi\.mavis\workspace\fin-bp-portal\apps\api\run_curl_validation.ps1:38 char:23
+所在位置 行:2 字符: 1
++ powershell -ExecutionPolicy Bypass -File "C:\Users\mozzi\.mavis\works ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (At C:\Users\moz....ps1:38 char:23:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
++     $items = $j.items ?? $j
++                       ~~
+Unexpected token '??' in expression or statement.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : UnexpectedToken
+ 

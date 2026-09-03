@@ -1,0 +1,124 @@
+# business_lines/investment/indicators.yaml
+# 地产投资部业务线 KPI 指标库.
+
+indicators:
+  - id: aum
+    title: "AUM (资产管理规模)"
+    unit: "亿元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_investment.mart_fund_kpis"
+    description: "在管资产总规模;含已投资 + 待投。"
+
+  - id: aum_growth
+    title: "AUM 同比增速"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_investment.mart_fund_kpis"
+    description: "本期末 AUM 较上年同期增速。"
+
+  - id: mgmt_fee_rate
+    title: "管理费率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_investment.mart_fund_kpis"
+    description: "管理费/AUM 年化;REITs 0.5-1.5%, 私募 1.5-2.5%。"
+
+  - id: project_irr
+    title: "项目 IRR"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_investment.mart_fund_kpis"
+    description: "项目级 IRR;含已退出与未退出按 MOIC 估算。"
+
+  - id: realized_return
+    title: "已实现收益(DPI)"
+    unit: "亿元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_investment.mart_fund_kpis"
+    description: "已分配给 LP 的现金; 衡量实际回报。"
+
+  - id: unrealized_gain
+    title: "未实现收益"
+    unit: "亿元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_investment.mart_fund_kpis"
+    description: "持仓项目按公允价值计的浮盈。"
+
+  - id: dry_powder
+    title: "待投金额"
+    unit: "亿元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_investment.mart_fund_kpis"
+    description: "已募集尚未投资出去的金额;投速的驱动指标。"
+
+  - id: capital_called
+    title: "实缴比例"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_investment.mart_fund_kpis"
+    description: "实缴资本/认缴资本; 70%+ 投速健康。"
+
+  - id: portfolio_count
+    title: "组合项目数"
+    unit: "个"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_investment.mart_fund_kpis"
+    description: "在管投资组合项目数。"
+
+  - id: avg_hold_period
+    title: "平均持有期"
+    unit: "年"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_investment.mart_fund_kpis"
+    description: "从投资到退出的平均年限;5-8 年为成熟期。"
+
+charts:
+  - id: aum_trend
+    title: "AUM 增长趋势"
+    type: "line"
+    x: "quarter"
+    y: ["aum"]
+    source: "mart_investment.mart_fund_kpis"
+    description: "近 8 个季度 AUM 增长曲线。"
+
+  - id: irr_distribution
+    title: "项目 IRR 分布"
+    type: "bar"
+    x: "irr_band"
+    y: ["project_count"]
+    source: "mart_investment.mart_fund_kpis"
+    description: "项目按 IRR 区间分布直方图。"
+
+  - id: strategy_mix
+    title: "投资策略结构"
+    type: "bar"
+    x: "strategy"
+    y: ["aum", "project_count"]
+    source: "mart_investment.mart_fund_kpis"
+    description: "按核心/增值/机会/债类策略分项。"
+
+  - id: exit_outcomes
+    title: "退出方式结构"
+    type: "bar"
+    x: "exit_type"
+    y: ["exit_count", "realized_return"]
+    source: "mart_investment.mart_fund_kpis"
+    description: "REITs/转让/IPO/到期四种退出方式。"
+
+  - id: fund_mgmt_fees
+    title: "基金管理费率"
+    type: "bar"
+    x: "fund_name"
+    y: ["mgmt_fee_rate", "aum"]
+    source: "mart_investment.mart_fund_kpis"
+    description: "各基金的管理费率与 AUM 横向对比。"

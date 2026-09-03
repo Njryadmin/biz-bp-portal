@@ -1,0 +1,88 @@
+# business_lines/advisory/sensitivity.yaml
+#
+# Sensitivity profile for the advisory (顾问部) business line.
+#
+# Drives contract_amount, per_consultant_output, renewal_rate, project_success_rate.
+# 顾问部最大杠杆: 合同均价 × 项目数;产能由顾问人头 + 项目周期决定;
+# 续约率主要由客户满意度 + 行业景气驱动.
+
+line_id: advisory
+line_name: "地产顾问部"
+
+inputs:
+  - id: avg_contract
+    name: "合同均价"
+    unit: "万元/个"
+    base_value_ref: "project.contract_amount_wan"
+    default_range: [-0.15, 0.15]
+    default_step: 0.03
+    description: "单个项目的平均合同金额。"
+
+  - id: consultant_count
+    name: "顾问人头数"
+    unit: "人"
+    base_value_ref: "project.consultant_count"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "可独立交付报告的顾问人数。"
+
+  - id: project_count
+    name: "项目数"
+    unit: "个"
+    base_value_ref: "project.project_count"
+    default_range: [-0.20, 0.20]
+    default_step: 0.04
+    description: "当期在执行 + 交付的项目数。"
+
+  - id: renewal_rate
+    name: "续约率"
+    unit: "%"
+    base_value_ref: "project.renewal_rate"
+    default_range: [-0.10, 0.10]
+    default_step: 0.02
+    description: "到期客户续约的比例。"
+
+outputs:
+  - id: contract_amount
+    name: "合同金额"
+    unit: "万元"
+    base_value_ref: "kpi.contract_amount"
+    # 合同金额 ≈ 项目数 × 合同均价;人头↑使项目数↑;续约率无直接影响
+    coefficients:
+      avg_contract: +1.0
+      consultant_count: +800.0
+      project_count: +120.0
+      renewal_rate: +0.0
+
+  - id: per_consultant_output
+    name: "人均产能"
+    unit: "万元/人/月"
+    base_value_ref: "kpi.per_consultant_output"
+    # 人均产能 ≈ 合同金额 / 人头;合同均价、项目数正向;人头反向;续约率正向(老客户效率高)
+    coefficients:
+      avg_contract: +0.3
+      consultant_count: -0.5
+      project_count: +0.4
+      renewal_rate: +5.0
+
+  - id: project_success_rate
+    name: "项目成功率"
+    unit: "%"
+    base_value_ref: "kpi.project_success_rate"
+    # 成功率: 顾问多→专业度↑;合同均价高→大型项目;续约率=客户已成功
+    coefficients:
+      avg_contract: +1.0
+      consultant_count: +1.5
+      project_count: -0.5
+      renewal_rate: +0.4
+
+  - id: client_nps
+    name: "客户 NPS"
+    unit: "-100~100"
+    base_value_ref: "kpi.client_nps"
+    # NPS: 顾问经验 + 续约率强烈正相关;项目数过多→质量↓
+    coefficients:
+      avg_contract: +5.0
+      consultant_count: +4.0
+      project_count: -3.0
+      renewal_rate: +0.8

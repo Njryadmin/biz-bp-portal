@@ -1,0 +1,30 @@
+{
+  "project_id": "PRJ-004",
+  "name": "杭州·龙湖滨江",
+  "city": "杭州",
+  "developer": "龙湖集团",
+  "stage": "在建",
+  "saleable_area_wan_sqm": 18.6,
+  "avg_price_per_sqm": 52000,
+  "dynamic_cost_yi": 72.5,
+  "land_cost_yi": 35.0,
+  "cumulative_payment_yi": 48.9,
+  "monthly_payment_plan_yi": [3.6, 3.8, 3.4, 3.2, 3.5, 3.7, 4.0, 4.2, 4.4, 4.1, 3.8, 3.6],
+  "monthly_payment_actual_yi": [3.5, 3.7, 3.3, 3.1, 3.4, 3.6, 3.9, 4.1, 4.3, 4.0, 3.7, 3.5],
+  "commission_wan": 1980,
+  "channel_fee_wan": 2740,
+  "debt_structure": {
+    "short_term_debt_yi": 9.5,
+    "long_term_debt_yi": 36.0,
+    "cash_yi": 12.5,
+    "total_assets_yi": 110.0,
+    "total_liabilities_yi": 72.0,
+    "shareholders_equity_yi": 38.0
+  },
+  "dedup_history": [0.04, 0.05, 0.06, 0.07, 0.06, 0.05, 0.04, 0.05, 0.06, 0.05, 0.04, 0.03],
+  "dedup_forecast_median": [0.05, 0.06, 0.07, 0.06, 0.05, 0.05, 0.04, 0.04, 0.04, 0.03, 0.03, 0.02],
+  "dedup_forecast_lower": [0.03, 0.04, 0.05, 0.04, 0.03, 0.03, 0.02, 0.02, 0.02, 0.01, 0.01, 0.00],
+  "dedup_forecast_upper": [0.07, 0.08, 0.09, 0.08, 0.07, 0.07, 0.06, 0.06, 0.06, 0.05, 0.05, 0.04],
+  "start_date": "2023-01-10",
+  "expected_delivery": "2026-09-30"
+}

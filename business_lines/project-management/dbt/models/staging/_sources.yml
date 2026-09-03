@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw_pm
+    description: "Raw landing zone for the project-management business line."
+    schema: raw_pm
+    tables:
+      - name: managed_projects
+        description: "Master data for each project under construction management."
+        columns:
+          - name: project_id
+            tests:
+              - unique
+              - not_null

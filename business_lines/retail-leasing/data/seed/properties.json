@@ -1,0 +1,118 @@
+[
+  {
+    "property_id": "sh-jingan-xintiandi-shops",
+    "name": "上海静安新天地商铺",
+    "city": "上海",
+    "city_tier": "t1",
+    "area_district": "静安区",
+    "gla_sqm": 1850,
+    "deal_rent_yuan_per_sqm_per_month": 720,
+    "benchmark_rent_yuan_per_sqm_per_month": 680,
+    "vacancy_rate": 0.06,
+    "owner": "瑞安房地产",
+    "tenant": "Shake Shack",
+    "owner_vacancy_days": 42,
+    "quarterly_reports_published": 4,
+    "brand_entry_rate": 0.78,
+    "renewal_rate": 0.82,
+    "commission_revenue_wan": 186.5,
+    "comparables": [
+      {"comparable_id": "C-JAS-001", "name": "上海静安嘉里中心 B1 餐饮", "rent_yuan_per_sqm_per_month": 760, "distance_m": 320},
+      {"comparable_id": "C-JAS-002", "name": "上海兴业太古汇 L1 零售", "rent_yuan_per_sqm_per_month": 810, "distance_m": 480},
+      {"comparable_id": "C-JAS-003", "name": "上海中信泰富广场 L2 时尚", "rent_yuan_per_sqm_per_month": 640, "distance_m": 620}
+    ]
+  },
+  {
+    "property_id": "bj-sanlitun-street-shops",
+    "name": "北京三里屯太古里南区街铺",
+    "city": "北京",
+    "city_tier": "t1",
+    "area_district": "朝阳区",
+    "gla_sqm": 1240,
+    "deal_rent_yuan_per_sqm_per_month": 950,
+    "benchmark_rent_yuan_per_sqm_per_month": 880,
+    "vacancy_rate": 0.04,
+    "owner": "太古地产",
+    "tenant": "Gentle Monster",
+    "owner_vacancy_days": 28,
+    "quarterly_reports_published": 4,
+    "brand_entry_rate": 0.88,
+    "renewal_rate": 0.86,
+    "commission_revenue_wan": 248.0,
+    "comparables": [
+      {"comparable_id": "C-SLT-001", "name": "北京三里屯北区 Apple 旗舰店", "rent_yuan_per_sqm_per_month": 1100, "distance_m": 180},
+      {"comparable_id": "C-SLT-002", "name": "北京工体北路 lululemon", "rent_yuan_per_sqm_per_month": 860, "distance_m": 410},
+      {"comparable_id": "C-SLT-003", "name": "北京三里屯通盈中心 Stone Island", "rent_yuan_per_sqm_per_month": 920, "distance_m": 290}
+    ]
+  },
+  {
+    "property_id": "sh-xuhui-tianlin-street-shops",
+    "name": "上海徐汇田林路街铺",
+    "city": "上海",
+    "city_tier": "t1",
+    "area_district": "徐汇区",
+    "gla_sqm": 860,
+    "deal_rent_yuan_per_sqm_per_month": 380,
+    "benchmark_rent_yuan_per_sqm_per_month": 420,
+    "vacancy_rate": 0.12,
+    "owner": "个体业主-张氏",
+    "tenant": "瑞幸咖啡",
+    "owner_vacancy_days": 95,
+    "quarterly_reports_published": 1,
+    "brand_entry_rate": 0.45,
+    "renewal_rate": 0.58,
+    "commission_revenue_wan": 38.6,
+    "comparables": [
+      {"comparable_id": "C-XHL-001", "name": "上海徐汇漕溪北路餐饮底商", "rent_yuan_per_sqm_per_month": 410, "distance_m": 720},
+      {"comparable_id": "C-XHL-002", "name": "上海徐汇田林路 142 号", "rent_yuan_per_sqm_per_month": 360, "distance_m": 110},
+      {"comparable_id": "C-XHL-003", "name": "上海徐汇虹漕路底商", "rent_yuan_per_sqm_per_month": 430, "distance_m": 850},
+      {"comparable_id": "C-XHL-004", "name": "上海徐汇肇嘉浜路零售", "rent_yuan_per_sqm_per_month": 470, "distance_m": 1280}
+    ]
+  },
+  {
+    "property_id": "sz-futian-coast-city-shops",
+    "name": "深圳福田海岸城商铺",
+    "city": "深圳",
+    "city_tier": "t1",
+    "area_district": "福田区",
+    "gla_sqm": 2200,
+    "deal_rent_yuan_per_sqm_per_month": 560,
+    "benchmark_rent_yuan_per_sqm_per_month": 540,
+    "vacancy_rate": 0.05,
+    "owner": "海岸城置业",
+    "tenant": "MUJI",
+    "owner_vacancy_days": 31,
+    "quarterly_reports_published": 3,
+    "brand_entry_rate": 0.74,
+    "renewal_rate": 0.79,
+    "commission_revenue_wan": 165.0,
+    "comparables": [
+      {"comparable_id": "C-FT-001", "name": "深圳福田 KK MALL B1 餐饮", "rent_yuan_per_sqm_per_month": 590, "distance_m": 480},
+      {"comparable_id": "C-FT-002", "name": "深圳福田中心城 L1 时尚", "rent_yuan_per_sqm_per_month": 600, "distance_m": 360},
+      {"comparable_id": "C-FT-003", "name": "深圳福田皇庭广场 L2", "rent_yuan_per_sqm_per_month": 510, "distance_m": 690}
+    ]
+  },
+  {
+    "property_id": "hz-xihu-jiefang-street-shops",
+    "name": "杭州西湖解放路街铺",
+    "city": "杭州",
+    "city_tier": "new_t1",
+    "area_district": "西湖区",
+    "gla_sqm": 1450,
+    "deal_rent_yuan_per_sqm_per_month": 410,
+    "benchmark_rent_yuan_per_sqm_per_month": 460,
+    "vacancy_rate": 0.09,
+    "owner": "杭州城投资产",
+    "tenant": "奈雪の茶",
+    "owner_vacancy_days": 73,
+    "quarterly_reports_published": 2,
+    "brand_entry_rate": 0.62,
+    "renewal_rate": 0.71,
+    "commission_revenue_wan": 89.4,
+    "comparables": [
+      {"comparable_id": "C-HZ-001", "name": "杭州西湖湖滨银泰 in77 L1", "rent_yuan_per_sqm_per_month": 520, "distance_m": 380},
+      {"comparable_id": "C-HZ-002", "name": "杭州上城延安路底商", "rent_yuan_per_sqm_per_month": 440, "distance_m": 920},
+      {"comparable_id": "C-HZ-003", "name": "杭州西湖文三路零售", "rent_yuan_per_sqm_per_month": 380, "distance_m": 1500}
+    ]
+  }
+]

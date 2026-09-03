@@ -1,0 +1,80 @@
+# business_lines/project-management/alerts.yaml
+#
+# Alert rules for the project-management business line.
+
+line_id: project-management
+line_name: "地产项目管理部"
+
+rules:
+  - id: progress_lag_threshold
+    name: 进度滞后 > 10%
+    indicator_id: progress_deviation
+    operator: "<"
+    threshold: -0.10
+    severity: high
+    message_template: "{project} 进度偏差 {value:.2%}，滞后 10% 警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+  - id: cost_overrun
+    name: 预算超支 > 5%
+    indicator_id: cost_deviation
+    operator: ">"
+    threshold: 0.05
+    severity: high
+    message_template: "{project} 预算偏差 {value:.2%}，超支 5% 警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+  - id: milestone_missed_consecutive
+    name: 连续 2 个里程碑延期
+    indicator_id: on_time_milestone_rate
+    operator: "<"
+    threshold: 0.50
+    consecutive: 2
+    severity: critical
+    message_template: "{project} 连续 {n} 月里程碑准时率 < 50%，需 PM 介入"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+  - id: safety_incident
+    name: 出现安全事故
+    indicator_id: safety_incidents
+    operator: ">"
+    threshold: 0
+    severity: critical
+    message_template: "{project} 出现 {value:.0f} 起安全事故，触发应急响应"
+    enabled: true
+    channels: [in_app, email]
+    scope: project
+
+  - id: satisfaction_drop
+    name: 客户满意度环比下降 5pt
+    indicator_id: client_satisfaction
+    operator: change_pct
+    threshold: -0.05
+    severity: medium
+    message_template: "{project} 客户满意度环比 {delta_pct:.2%}，需排查服务"
+    enabled: true
+    channels: [in_app]
+    scope: project
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [代建市场规模, 国央企代建需求, 政府代建]
+  - id: capacity
+    name: 产能因素
+    drivers: [PM 招聘, 培训体系, 团队稳定性]
+  - id: execution
+    name: 执行因素
+    drivers: [施工方管理, 设计变更, 招标节奏]
+  - id: client
+    name: 客户因素
+    drivers: [业主决策效率, 验收标准, 续约谈判]

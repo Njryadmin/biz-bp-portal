@@ -1,0 +1,142 @@
+# business_lines/retail/indicators.yaml
+# 零售分析业务线 KPI 指标库.
+# 与住宅线(IRR 驱动)不同,这里以 NOI 驱动,核心衡量资产经营效率.
+# Consumed by packages/ui UniversalKpiCard + the API /indicators endpoint.
+
+indicators:
+  - id: noi
+    title: "NOI (净营业收入)"
+    unit: "万元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_retail.mart_property_kpis"
+    description: "有效毛收入扣除运营成本后的净营业收入;零售资管的核心指标。"
+
+  - id: efficiency
+    title: "坪效"
+    unit: "元/㎡/月"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "单位可租赁面积每月产生的 NOI,衡量单平米盈利能力。"
+
+  - id: rent_to_sales
+    title: "租售比"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "租金占商户销售额的比重;过高预示商户经营压力,过低预示租金有提升空间。"
+
+  - id: collection_rate
+    title: "收缴率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "当期应收租金中实际收回的比例,反映租户履约能力。"
+
+  - id: renovation_npv
+    title: "调改 NPV"
+    unit: "万元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_retail.mart_renovation_npv"
+    description: "调改方案在持有期内的净现值;与维持现状方案做差额对比。"
+
+  - id: foot_traffic_efficiency
+    title: "客流坪效"
+    unit: "人/㎡/日"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "单位面积日均接待客流,衡量商场人气与引流效率。"
+
+  - id: brand_diversity
+    title: "品牌多样性指数"
+    unit: "0-1"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_retail.mart_brand_mix"
+    description: "基于 Shannon 熵归一化的业态多样性;越接近 1 越多元,降低单一业态风险。"
+
+  - id: rent_escalation
+    title: "租金递增率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "租约约定的年化租金递增幅度,加权平均;与续约谈判能力正相关。"
+
+  - id: vacancy_rate
+    title: "空置率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "空置可租面积占总可租面积的比例;3-5% 为健康,8%+ 需警惕。"
+
+  - id: wault
+    title: "租约剩余年限加权 (WAULT)"
+    unit: "年"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "按面积加权的租约剩余年限 (Weighted Average Unexpired Lease Term);越长越稳定。"
+
+  - id: sales_per_sqm
+    title: "坪效销售额"
+    unit: "元/㎡/月"
+    format: "ratio"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "单位可租面积每月商户销售额;配合租售比共同判断租金议价空间。"
+
+  - id: tenant_churn
+    title: "租户流失率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail.mart_property_kpis"
+    description: "当期到期未续约或中途解约的租户面积占比;反映租户粘性。"
+
+charts:
+  - id: noi_waterfall
+    title: "NOI 瀑布图"
+    type: "bar"
+    x: "step"
+    y: ["noi"]
+    source: "mart_retail.mart_property_kpis"
+    description: "Potential Gross → Vacancy → EGR → OpEx → NOI 的逐项扣减瀑布。"
+
+  - id: collection_trend
+    title: "12 个月收缴率趋势"
+    type: "line"
+    x: "month"
+    y: ["collection_rate"]
+    source: "mart_retail.mart_property_kpis"
+    description: "过去 12 个月的月度收缴率变化曲线。"
+
+  - id: brand_mix_bubble
+    title: "品牌组合气泡图"
+    type: "bar"
+    x: "category"
+    y: ["share", "avg_rent"]
+    source: "mart_retail.mart_brand_mix"
+    description: "横轴=业态占比,纵轴=平均租金,气泡大小=品牌数;识别高价值业态。"
+
+  - id: renovation_compare
+    title: "维持 vs 调改 NPV 对比"
+    type: "bar"
+    x: "scenario"
+    y: ["npv", "irr"]
+    source: "mart_retail.mart_renovation_npv"
+    description: "两档方案在持有期内的 NPV 与 IRR 对比,辅助资本性决策。"
+
+  - id: efficiency_scatter
+    title: "NOI vs 坪效散点"
+    type: "bar"
+    x: "property"
+    y: ["noi", "efficiency"]
+    source: "mart_retail.mart_property_kpis"
+    description: "各物业在 NOI 规模与坪效效率两个维度的分布。"

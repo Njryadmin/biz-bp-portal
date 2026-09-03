@@ -1,0 +1,124 @@
+# business_lines/project-management/indicators.yaml
+# 地产项目管理部业务线 KPI 指标库.
+
+indicators:
+  - id: project_count
+    title: "在管项目数"
+    unit: "个"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_pm.mart_pm_kpis"
+    description: "当期在管的代建/项目管理项目数。"
+
+  - id: contract_value
+    title: "代建合同额"
+    unit: "亿元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_pm.mart_pm_kpis"
+    description: "当期所有在管项目合同金额合计。"
+
+  - id: progress_deviation
+    title: "进度偏差率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_pm.mart_pm_kpis"
+    description: "实际进度 vs 计划进度;正值=超前,负值=滞后;±5% 健康。"
+
+  - id: cost_deviation
+    title: "预算偏差率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_pm.mart_pm_kpis"
+    description: "实际成本 vs 预算;正值=超支,负值=节省;±3% 健康。"
+
+  - id: on_time_milestone_rate
+    title: "里程碑准时率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_pm.mart_pm_kpis"
+    description: "在约定日期 ±7 天内完成的里程碑占比。"
+
+  - id: quality_defect_rate
+    title: "质量缺陷率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_pm.mart_pm_kpis"
+    description: "验收发现质量缺陷的次数/验收次数;2% 以内健康。"
+
+  - id: safety_incidents
+    title: "安全事故数"
+    unit: "起"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_pm.mart_pm_kpis"
+    description: "当期发生的安全事故;0 为目标。"
+
+  - id: client_satisfaction
+    title: "客户满意度"
+    unit: "0-100"
+    format: "number"
+    aggregation: "avg"
+    source: "mart_pm.mart_pm_kpis"
+    description: "客户对 PM 团队的满意度评分。"
+
+  - id: renewal_rate
+    title: "续约率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_pm.mart_pm_kpis"
+    description: "到期项目客户续约比例;60%+ 优秀。"
+
+  - id: per_pm_output
+    title: "PM 人均产能"
+    unit: "万元/人/月"
+    format: "currency"
+    aggregation: "avg"
+    source: "mart_pm.mart_pm_kpis"
+    description: "项目经理月人均管理合同额;高级 PM 800-2000w。"
+
+charts:
+  - id: progress_distribution
+    title: "项目进度偏差分布"
+    type: "bar"
+    x: "progress_band"
+    y: ["project_count"]
+    source: "mart_pm.mart_pm_kpis"
+    description: "项目按进度偏差区间分布(±10% 间隔)。"
+
+  - id: cost_deviation_trend
+    title: "预算偏差趋势"
+    type: "line"
+    x: "month"
+    y: ["avg_cost_deviation"]
+    source: "mart_pm.mart_pm_kpis"
+    description: "近 12 月预算偏差率变化。"
+
+  - id: pm_workload
+    title: "PM 工作量"
+    type: "bar"
+    x: "pm"
+    y: ["project_count", "contract_value"]
+    source: "mart_pm.mart_pm_kpis"
+    description: "PM 同时在管项目数与合同额。"
+
+  - id: project_type_mix
+    title: "项目类型结构"
+    type: "bar"
+    x: "project_type"
+    y: ["project_count", "contract_value"]
+    source: "mart_pm.mart_pm_kpis"
+    description: "住宅/写字楼/产业园/综合体分项。"
+
+  - id: milestone_completion
+    title: "里程碑完成情况"
+    type: "bar"
+    x: "month"
+    y: ["on_time", "delayed"]
+    source: "mart_pm.mart_pm_kpis"
+    description: "月度准时 vs 延期里程碑数。"

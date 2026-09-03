@@ -1,0 +1,39 @@
+# business_lines/_template/manifest.yaml.example
+# Copy this file to business_lines/<line_id>/manifest.yaml and edit.
+# Schema is consumed by both API and Web layers.
+
+id: change-me                    # url-safe slug, must match the directory name
+name: Change Me                   # human-readable display name (i18n key: name)
+version: 0.1.0
+description: "Template business line. Replace this description."
+owner: "you@example.com"
+
+# Visual: icon name from @ant-design/icons (used by Web layout)
+icon: "AppstoreOutlined"
+
+# Navigation entry rendered by apps/web/app/(dashboard)/layout.tsx
+# path is RELATIVE to the dashboard root
+nav:
+  - path: "/change-me"            # pages live in business_lines/<line>/web/pages/
+    title: "Overview"
+
+# API mount point; the API loader exposes business_lines/<line>/api/router.py
+# under this prefix. Must start with "/".
+api_prefix: "/api/lines/change-me"
+
+# Database schema/warehouse config (used by DBT and API)
+warehouse:
+  schema: "raw_change_me"        # raw landing schema
+  dbt_schema: "stg_change_me"    # dbt staging schema
+  mart_schema: "mart_change_me"  # dbt mart schema
+
+# Default refresh cadence for this line's data
+refresh:
+  schedule: "0 2 * * *"          # cron
+  enabled: true
+
+# Feature flags consumed by the UI
+features:
+  universal_kpi: true
+  universal_chart: true
+  ag_grid: true

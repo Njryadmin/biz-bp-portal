@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw_investment
+    description: "Raw landing zone for the investment business line."
+    schema: raw_investment
+    tables:
+      - name: funds
+        description: "Master data for each fund / project under management."
+        columns:
+          - name: fund_id
+            tests:
+              - unique
+              - not_null

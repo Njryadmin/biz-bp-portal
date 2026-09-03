@@ -1,0 +1,81 @@
+# business_lines/industrial/alerts.yaml
+#
+# Alert rules for the industrial business line.
+
+line_id: industrial
+line_name: "工业地产部"
+
+rules:
+  - id: occupancy_below_threshold
+    name: 出租率 < 70%
+    indicator_id: occupancy_rate
+    operator: "<"
+    threshold: 0.70
+    severity: high
+    message_template: "{property} 出租率 {value:.2%}，低于 70% 警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+  - id: occupancy_consecutive_low
+    name: 连续 3 月出租率 < 60%
+    indicator_id: occupancy_rate
+    operator: "<"
+    threshold: 0.60
+    consecutive: 3
+    severity: critical
+    message_template: "{property} 连续 {n} 月出租率 < 60%，建议重新定位"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+  - id: rent_drop
+    name: 租金环比下降 10pt
+    indicator_id: avg_rent
+    operator: change_pct
+    threshold: -0.10
+    severity: medium
+    message_template: "{property} 租金环比 {delta_pct:.2%}，可能因议价或大客户退租"
+    enabled: true
+    channels: [in_app]
+    scope: property
+
+  - id: renewal_below_band
+    name: 续租率 < 60%
+    indicator_id: lease_renewal_rate
+    operator: "<"
+    threshold: 0.60
+    severity: high
+    message_template: "{property} 续租率 {value:.2%}，低于 60% 客户黏性警戒"
+    enabled: true
+    channels: [in_app, email]
+    scope: property
+
+  - id: no_new_key_clients
+    name: 连续 3 月无新增大客户
+    indicator_id: new_key_clients
+    operator: "=="
+    threshold: 0
+    consecutive: 3
+    severity: medium
+    message_template: "{property} 连续 {n} 月无新增大客户，渠道需激活"
+    enabled: true
+    channels: [in_app]
+    scope: property
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [电商需求, 制造业景气, 出口订单]
+  - id: supply
+    name: 供给因素
+    drivers: [新交付仓库, 一线城市工业用地, 改造升级]
+  - id: demand
+    name: 需求因素
+    drivers: [冷链需求, 跨境电商, 新能源配套]
+  - id: tenant
+    name: 租户因素
+    drivers: [菜鸟/京东扩张, 制造业搬迁, 退租]

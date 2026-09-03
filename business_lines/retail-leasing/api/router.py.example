@@ -1,0 +1,36 @@
+"""
+business_lines/_template/api/router.py.example
+Template FastAPI router for a business line.
+
+Usage:
+    1. Copy this file to business_lines/<line_id>/api/router.py
+    2. Rename `template_router` -> `<line_id>_router`
+    3. Add routes below. The router will be auto-mounted at the line's api_prefix.
+
+The loader (apps/api/app/routers/registry.py) will:
+    - import this module via importlib
+    - find a FastAPI() or APIRouter() instance
+    - include_router it under <api_prefix>
+"""
+
+from fastapi import APIRouter, HTTPException
+
+# Module-level FastAPI router. The loader looks for an instance of APIRouter
+# or FastAPI in this module. Either name pattern is fine; we use `router` by
+# convention.
+router = APIRouter()
+
+
+@router.get("/ping")
+async def ping() -> dict:
+    """Health endpoint for the business line."""
+    return {"status": "ok", "line": "change-me"}
+
+
+@router.get("/info")
+async def info() -> dict:
+    """Static info endpoint, also a good place to load the manifest."""
+    return {
+        "line_id": "change-me",
+        "indicators": [],
+    }

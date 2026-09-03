@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: raw_office_leasing
+    description: "Raw landing zone for the office-leasing business line. Populated by ingestion from CRM (Salesforce / 自研)."
+    schema: raw_office_leasing
+    tables:
+      - name: office_deals
+        description: "Master data for each office leasing deal (lease / renewal / expansion)."
+        columns:
+          - name: deal_id
+            tests:
+              - unique
+              - not_null

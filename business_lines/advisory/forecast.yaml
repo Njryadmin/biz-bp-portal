@@ -1,0 +1,51 @@
+# business_lines/advisory/forecast.yaml
+#
+# Rolling Forecast profile for the advisory (顾问部) business line.
+# 合同金额、续约率、人均产能、项目成功率是核心前瞻 KPI.
+
+line_id: advisory
+line_name: "地产顾问部"
+
+series:
+  - indicator_id: contract_amount
+    name: 合同金额
+    frequency: monthly
+    method: linear_trend
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: per_consultant_output
+    name: 人均产能
+    frequency: monthly
+    method: ema
+    horizon_months: 12
+    historical_periods: 24
+
+  - indicator_id: renewal_rate
+    name: 续约率
+    frequency: monthly
+    method: sma
+    sma_window: 3
+    horizon_months: 12
+    historical_periods: 12
+
+  - indicator_id: project_success_rate
+    name: 项目成功率
+    frequency: monthly
+    method: seasonal_naive
+    horizon_months: 12
+    historical_periods: 24
+
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [土地市场热度, 开发商拿地意愿, 融资环境]
+  - id: capacity
+    name: 产能因素
+    drivers: [顾问入职率, 培训认证, 项目周转]
+  - id: client
+    name: 客户因素
+    drivers: [国央企采购周期, 民企续约, 外资项目审批]
+  - id: competition
+    name: 竞争因素
+    drivers: [五大行报价, 本土所价格战, 数字化交付]

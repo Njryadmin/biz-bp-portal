@@ -1,0 +1,79 @@
+# business_lines/investment/alerts.yaml
+#
+# Alert rules for the investment business line.
+
+line_id: investment
+line_name: "地产投资部"
+
+rules:
+  - id: aum_negative_growth
+    name: AUM 同比负增长
+    indicator_id: aum_growth
+    operator: "<"
+    threshold: 0
+    severity: high
+    message_template: "{fund} AUM 同比 {value:.2%}，规模收缩"
+    enabled: true
+    channels: [in_app, email]
+    scope: fund
+
+  - id: irr_below_hurdle
+    name: 项目 IRR 低于 8%
+    indicator_id: project_irr
+    operator: "<"
+    threshold: 0.08
+    severity: critical
+    message_template: "{fund} 项目 IRR {value:.2%}，低于 8% 业绩门槛"
+    enabled: true
+    channels: [in_app, email]
+    scope: fund
+
+  - id: irr_between_band
+    name: 项目 IRR 处于 8%-10% 警戒带
+    indicator_id: project_irr
+    operator: between
+    threshold: [0.08, 0.10]
+    severity: medium
+    message_template: "{fund} 项目 IRR {value:.2%}，处于 8-10% 警戒带"
+    enabled: true
+    channels: [in_app]
+    scope: fund
+
+  - id: dry_powder_oversupply
+    name: 待投金额 > AUM 30%
+    indicator_id: dry_powder
+    operator: ">"
+    threshold: 30
+    severity: medium
+    message_template: "{fund} 待投 {value:.1f} 亿元，资本效率下降"
+    enabled: true
+    channels: [in_app]
+    scope: fund
+
+  - id: realized_return_drop
+    name: 已实现收益环比下降 20pt
+    indicator_id: realized_return
+    operator: change_pct
+    threshold: -0.20
+    severity: high
+    message_template: "{fund} 已实现收益环比 {delta_pct:.2%}，LP 现金回流恶化"
+    enabled: true
+    channels: [in_app, email]
+    scope: fund
+
+# ─────────────────────────────────────────────────────────────────────────
+# ATTRIBUTION
+# ─────────────────────────────────────────────────────────────────────────
+attribution:
+  - id: market
+    name: 市场因素
+    drivers: [REITs 政策, 利率环境, 资产估值]
+  - id: capital
+    name: 资本因素
+    drivers: [LP 募集, 银行配资, 实缴节奏]
+  - id: operations
+    name: 运营因素
+    drivers: [项目筛选, 改造增值, 招商运营]
+  - id: exit
+    name: 退出因素
+    drivers: [REITs 上市, 协议转让, 整售]

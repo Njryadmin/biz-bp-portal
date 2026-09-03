@@ -1,0 +1,28 @@
+version: 2
+
+sources:
+  - name: raw_retail
+    description: "Raw landing zone for the retail business line. Populated by ingestion jobs from property management systems (Yardi / SAP RE)."
+    schema: raw_retail
+    tables:
+      - name: properties
+        description: "Master data for each retail property (shopping mall / street retail)."
+        columns:
+          - name: property_id
+            tests:
+              - unique
+              - not_null
+      - name: leases
+        description: "Lease contracts between the property owner and tenants."
+        columns:
+          - name: lease_id
+            tests:
+              - unique
+              - not_null
+      - name: tenants
+        description: "Tenant master data (brands)."
+        columns:
+          - name: tenant_id
+            tests:
+              - unique
+              - not_null

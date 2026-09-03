@@ -1,0 +1,62 @@
+# .dockerignore
+# Keep build context small.
+
+# Build artifacts / caches
+**/node_modules
+**/.next
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/dist
+**/build
+**/coverage
+**/.coverage
+
+# Local data and uploads
+data/landing/*
+!data/landing/.gitkeep
+*.log
+*.bak
+*.tmp
+*.swp
+
+# Test/debug scratch files
+**/_test_*.py
+**/_debug_*.py
+**/_verify.py
+**/_cleanup.py
+**/_t.py
+**/_no_db_lifespan_backup.py
+**/_startup_v2_backup.py
+**/_check_loader*.py
+**/_smoke_*.py
+**/*.bak
+**/*.local
+
+# Test-line leftovers
+business_lines/_test-line*/
+business_lines/_test_line*/
+business_lines/test-line*/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.github/
+.gitignore
+
+# Docs (not needed in image)
+docs/
+
+# Random / non-essential
+*.md
+!apps/api/README.md
+!apps/web/README.md
+!README.md

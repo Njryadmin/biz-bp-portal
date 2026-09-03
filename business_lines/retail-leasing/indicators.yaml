@@ -1,0 +1,111 @@
+# business_lines/retail-leasing/indicators.yaml
+# 零售租赁与市场报告 业务线 KPI 指标库.
+# 与 retail(NOI 驱动、资产运营)不同,这里以"交易 + 对标"驱动,
+# 核心衡量: 谁在租、租多少钱、与市场基准差多少、业主空多久.
+# Consumed by packages/ui UniversalKpiCard + the API /indicators endpoint.
+
+indicators:
+  - id: occupancy_rate
+    title: "商铺出租率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "已出租商铺面积占总可租面积的比例;反映租赁市场吸纳能力。"
+
+  - id: avg_deal_rent
+    title: "平均成交租金"
+    unit: "元/㎡/月"
+    format: "currency"
+    aggregation: "avg"
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "样本期内新签租约的月租金加权均值(元/㎡/月),与市场基准对比判断议价能力。"
+
+  - id: benchmark_gap_pct
+    title: "竞品基准租金对标差"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "实际成交租金相对同地段竞品基准的偏差;正=高于基准,负=低于基准,绝对值越大越偏离。"
+
+  - id: owner_vacancy_days
+    title: "业主空置期"
+    unit: "天"
+    format: "number"
+    aggregation: "avg"
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "业主从上一个租约结束到新租约签约之间的空置天数;越长越影响业主收益。"
+
+  - id: quarterly_market_reports
+    title: "季度市场报告"
+    unit: "份"
+    format: "number"
+    aggregation: "sum"
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "当期发布的零售租赁季度市场报告数;反映市场研究覆盖度。"
+
+  - id: brand_entry_rate
+    title: "品牌入驻率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "新签租约中品牌客户(连锁/知名)占比;反映商业体招商吸引力。"
+
+  - id: renewal_rate
+    title: "续约率"
+    unit: "%"
+    format: "percent"
+    aggregation: "avg"
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "到期租约中选择续约的比例;反映租户满意度与物业粘性。"
+
+  - id: commission_revenue
+    title: "佣金收入"
+    unit: "万元"
+    format: "currency"
+    aggregation: "sum"
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "本期租赁交易撮合产生的佣金收入合计(万元);衡量团队产出。"
+
+charts:
+  - id: occupancy_trend
+    title: "季度出租率趋势"
+    type: "line"
+    x: "quarter"
+    y: ["occupancy_rate"]
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "近 8 个季度的商铺出租率变化曲线。"
+
+  - id: benchmark_gap_bar
+    title: "竞品基准对标差"
+    type: "bar"
+    x: "property_name"
+    y: ["benchmark_gap_pct"]
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "各物业相对竞品基准的租金对标差,正负向一目了然。"
+
+  - id: vacancy_days_scatter
+    title: "业主空置期分布"
+    type: "bar"
+    x: "owner"
+    y: ["owner_vacancy_days"]
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "各业主的最近空置期天数,识别风险业主。"
+
+  - id: commission_stacked
+    title: "佣金收入构成"
+    type: "bar"
+    x: "quarter"
+    y: ["commission_revenue", "avg_deal_rent"]
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "近 4 个季度的佣金收入与平均成交租金组合。"
+
+  - id: brand_entry_pie
+    title: "品牌 vs 非品牌入驻占比"
+    type: "pie"
+    x: "segment"
+    y: ["count"]
+    source: "mart_retail_leasing.fct_retail_leasing"
+    description: "新签租约中品牌客户与非品牌客户的占比饼图。"

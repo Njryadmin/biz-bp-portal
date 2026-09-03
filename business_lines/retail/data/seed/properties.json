@@ -1,0 +1,242 @@
+[
+  {
+    "property_id": "sh-jingan-joycity",
+    "name": "上海静安大悦城",
+    "name_en": "Shanghai Jing'an Joy City",
+    "city": "上海",
+    "city_tier": "t1",
+    "format": "购物中心",
+    "format_en": "Shopping Mall",
+    "gla_wan_sqm": 20.0,
+    "noi_wan": 4800,
+    "gross_rent_wan": 8400,
+    "opex_wan": 3200,
+    "vacancy_rate": 0.045,
+    "collection_rate": 0.965,
+    "rent_escalation_rate": 0.045,
+    "foot_traffic_wan_per_month": 280,
+    "total_brands": 285,
+    "weighted_lease_remaining_years": 4.8,
+    "top_brands": [
+      "Apple", "Starbucks Reserve", "UNIQLO", "MUJI", "Sephora", "Nike KICKS LOUNGE",
+      "Zara", "H&M", "LAMY", "LEGO", "Line Friends", "Pop Mart", "海底捞", "西贝莜面村",
+      "南京大牌档", "喜茶", "奈雪の茶", "太二酸菜鱼", "凑凑火锅", "FILA"
+    ],
+    "leases": [
+      {"lease_id": "L-JJG-001", "tenant": "Apple", "category": "科技零售", "area_sqm": 320, "term_years": 5, "start_year": 2022, "monthly_rent_yuan_per_sqm": 580, "annual_escalation": 0.04},
+      {"lease_id": "L-JJG-002", "tenant": "Starbucks Reserve", "category": "餐饮", "area_sqm": 220, "term_years": 6, "start_year": 2021, "monthly_rent_yuan_per_sqm": 420, "annual_escalation": 0.045},
+      {"lease_id": "L-JJG-003", "tenant": "UNIQLO", "category": "时尚", "area_sqm": 850, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 310, "annual_escalation": 0.04},
+      {"lease_id": "L-JJG-004", "tenant": "MUJI", "category": "生活方式", "area_sqm": 480, "term_years": 5, "start_year": 2022, "monthly_rent_yuan_per_sqm": 350, "annual_escalation": 0.04},
+      {"lease_id": "L-JJG-005", "tenant": "海底捞", "category": "餐饮", "area_sqm": 540, "term_years": 8, "start_year": 2020, "monthly_rent_yuan_per_sqm": 280, "annual_escalation": 0.05},
+      {"lease_id": "L-JJG-006", "tenant": "Nike KICKS LOUNGE", "category": "运动", "area_sqm": 380, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 390, "annual_escalation": 0.045},
+      {"lease_id": "L-JJG-007", "tenant": "喜茶", "category": "餐饮", "area_sqm": 180, "term_years": 5, "start_year": 2024, "monthly_rent_yuan_per_sqm": 460, "annual_escalation": 0.05},
+      {"lease_id": "L-JJG-008", "tenant": "Pop Mart", "category": "潮玩", "area_sqm": 150, "term_years": 3, "start_year": 2023, "monthly_rent_yuan_per_sqm": 520, "annual_escalation": 0.05}
+    ]
+  },
+  {
+    "property_id": "sh-xintiandi-plaza",
+    "name": "上海新天地广场",
+    "name_en": "Shanghai Xintiandi Plaza",
+    "city": "上海",
+    "city_tier": "t1",
+    "format": "购物中心",
+    "format_en": "Shopping Mall",
+    "gla_wan_sqm": 12.0,
+    "noi_wan": 3600,
+    "gross_rent_wan": 5800,
+    "opex_wan": 2100,
+    "vacancy_rate": 0.028,
+    "collection_rate": 0.982,
+    "rent_escalation_rate": 0.05,
+    "foot_traffic_wan_per_month": 195,
+    "total_brands": 165,
+    "weighted_lease_remaining_years": 5.2,
+    "top_brands": [
+      "Apple", "Tesla Showroom", "Gentle Monster", "Alexander Wang", "COS", "Acne Studios",
+      "Maison Kitsuné", "Shake Shack", "%Arabica", "Luneurs", "三克映画", "RAC", "Edition"
+    ],
+    "leases": [
+      {"lease_id": "L-XTD-001", "tenant": "Apple", "category": "科技零售", "area_sqm": 280, "term_years": 6, "start_year": 2021, "monthly_rent_yuan_per_sqm": 720, "annual_escalation": 0.05},
+      {"lease_id": "L-XTD-002", "tenant": "Gentle Monster", "category": "时尚", "area_sqm": 180, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 680, "annual_escalation": 0.05},
+      {"lease_id": "L-XTD-003", "tenant": "Shake Shack", "category": "餐饮", "area_sqm": 240, "term_years": 8, "start_year": 2022, "monthly_rent_yuan_per_sqm": 520, "annual_escalation": 0.05},
+      {"lease_id": "L-XTD-004", "tenant": "%Arabica", "category": "餐饮", "area_sqm": 120, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 600, "annual_escalation": 0.05},
+      {"lease_id": "L-XTD-005", "tenant": "COS", "category": "时尚", "area_sqm": 350, "term_years": 5, "start_year": 2022, "monthly_rent_yuan_per_sqm": 480, "annual_escalation": 0.045}
+    ]
+  },
+  {
+    "property_id": "bj-sanlitun-taikoo",
+    "name": "北京三里屯太古里",
+    "name_en": "Beijing Sanlitun Taikoo Li",
+    "city": "北京",
+    "city_tier": "t1",
+    "format": "购物中心",
+    "format_en": "Shopping Mall",
+    "gla_wan_sqm": 17.0,
+    "noi_wan": 4500,
+    "gross_rent_wan": 7600,
+    "opex_wan": 2950,
+    "vacancy_rate": 0.032,
+    "collection_rate": 0.97,
+    "rent_escalation_rate": 0.048,
+    "foot_traffic_wan_per_month": 240,
+    "total_brands": 220,
+    "weighted_lease_remaining_years": 4.5,
+    "top_brands": [
+      "Apple", "Gentle Monster", "Stone Island", "Maison Margiela", "Ami Paris", "Jil Sander",
+      "lululemon", "Puma Select", "Mercedes me", "特斯拉展厅", "BAD MARKET", "Tribe", "Page One"
+    ],
+    "leases": [
+      {"lease_id": "L-SLT-001", "tenant": "Apple", "category": "科技零售", "area_sqm": 350, "term_years": 6, "start_year": 2021, "monthly_rent_yuan_per_sqm": 650, "annual_escalation": 0.05},
+      {"lease_id": "L-SLT-002", "tenant": "Mercedes me", "category": "生活方式", "area_sqm": 800, "term_years": 10, "start_year": 2020, "monthly_rent_yuan_per_sqm": 380, "annual_escalation": 0.045},
+      {"lease_id": "L-SLT-003", "tenant": "lululemon", "category": "运动", "area_sqm": 280, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 520, "annual_escalation": 0.05},
+      {"lease_id": "L-SLT-004", "tenant": "Stone Island", "category": "时尚", "area_sqm": 200, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 720, "annual_escalation": 0.05},
+      {"lease_id": "L-SLT-005", "tenant": "BAD MARKET", "category": "潮玩", "area_sqm": 260, "term_years": 5, "start_year": 2024, "monthly_rent_yuan_per_sqm": 460, "annual_escalation": 0.05}
+    ]
+  },
+  {
+    "property_id": "sz-mixc",
+    "name": "深圳万象城",
+    "name_en": "Shenzhen MixC",
+    "city": "深圳",
+    "city_tier": "t1",
+    "format": "购物中心",
+    "format_en": "Shopping Mall",
+    "gla_wan_sqm": 25.0,
+    "noi_wan": 6500,
+    "gross_rent_wan": 11200,
+    "opex_wan": 4500,
+    "vacancy_rate": 0.035,
+    "collection_rate": 0.975,
+    "rent_escalation_rate": 0.042,
+    "foot_traffic_wan_per_month": 320,
+    "total_brands": 350,
+    "weighted_lease_remaining_years": 5.5,
+    "top_brands": [
+      "Apple", "Hermès", "Louis Vuitton", "Cartier", "Tiffany & Co.", "Burberry", "UNIQLO",
+      "MUJI", "无印良品旗舰店", "Olé精品超市", "盒马鲜生", "西西弗书店", "万象影城"
+    ],
+    "leases": [
+      {"lease_id": "L-MIX-001", "tenant": "Apple", "category": "科技零售", "area_sqm": 420, "term_years": 8, "start_year": 2020, "monthly_rent_yuan_per_sqm": 480, "annual_escalation": 0.04},
+      {"lease_id": "L-MIX-002", "tenant": "Olé精品超市", "category": "超市", "area_sqm": 1500, "term_years": 10, "start_year": 2019, "monthly_rent_yuan_per_sqm": 220, "annual_escalation": 0.04},
+      {"lease_id": "L-MIX-003", "tenant": "万象影城", "category": "娱乐", "area_sqm": 2200, "term_years": 10, "start_year": 2020, "monthly_rent_yuan_per_sqm": 180, "annual_escalation": 0.04},
+      {"lease_id": "L-MIX-004", "tenant": "UNIQLO", "category": "时尚", "area_sqm": 950, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 290, "annual_escalation": 0.04},
+      {"lease_id": "L-MIX-005", "tenant": "盒马鲜生", "category": "超市", "area_sqm": 1800, "term_years": 8, "start_year": 2021, "monthly_rent_yuan_per_sqm": 200, "annual_escalation": 0.04}
+    ]
+  },
+  {
+    "property_id": "gz-tee-mall",
+    "name": "广州天环广场",
+    "name_en": "Guangzhou Tee Mall",
+    "city": "广州",
+    "city_tier": "t1",
+    "format": "购物中心",
+    "format_en": "Shopping Mall",
+    "gla_wan_sqm": 11.0,
+    "noi_wan": 2900,
+    "gross_rent_wan": 4900,
+    "opex_wan": 1900,
+    "vacancy_rate": 0.055,
+    "collection_rate": 0.955,
+    "rent_escalation_rate": 0.04,
+    "foot_traffic_wan_per_month": 175,
+    "total_brands": 145,
+    "weighted_lease_remaining_years": 4.0,
+    "top_brands": [
+      "Apple", "Tesla Showroom", "DIOR", "Lancôme", "Fresh", "Givenchy Beauty",
+      "Nike", "adidas", "Puma", "Under Armour", "GAP", "Old Navy"
+    ],
+    "leases": [
+      {"lease_id": "L-THM-001", "tenant": "Apple", "category": "科技零售", "area_sqm": 300, "term_years": 6, "start_year": 2022, "monthly_rent_yuan_per_sqm": 540, "annual_escalation": 0.04},
+      {"lease_id": "L-THM-002", "tenant": "Tesla Showroom", "category": "生活方式", "area_sqm": 750, "term_years": 8, "start_year": 2021, "monthly_rent_yuan_per_sqm": 320, "annual_escalation": 0.04},
+      {"lease_id": "L-THM-003", "tenant": "Nike", "category": "运动", "area_sqm": 420, "term_years": 5, "start_year": 2022, "monthly_rent_yuan_per_sqm": 380, "annual_escalation": 0.04},
+      {"lease_id": "L-THM-004", "tenant": "DIOR Beauty", "category": "美妆", "area_sqm": 180, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 720, "annual_escalation": 0.045}
+    ]
+  },
+  {
+    "property_id": "hz-hubin-yintai",
+    "name": "杭州湖滨银泰in77",
+    "name_en": "Hangzhou Hubin Yintai in77",
+    "city": "杭州",
+    "city_tier": "t1_new",
+    "format": "购物中心",
+    "format_en": "Shopping Mall",
+    "gla_wan_sqm": 18.0,
+    "noi_wan": 4200,
+    "gross_rent_wan": 7300,
+    "opex_wan": 2950,
+    "vacancy_rate": 0.042,
+    "collection_rate": 0.968,
+    "rent_escalation_rate": 0.045,
+    "foot_traffic_wan_per_month": 230,
+    "total_brands": 240,
+    "weighted_lease_remaining_years": 4.3,
+    "top_brands": [
+      "Apple", "Starbucks", "喜茶", "奈雪", "POP MART", "TOP TOY", "名创优品",
+      "热风", "西树泡芙", "外婆家", "绿茶餐厅", "南京大牌档", "凑凑"
+    ],
+    "leases": [
+      {"lease_id": "L-HBY-001", "tenant": "Apple", "category": "科技零售", "area_sqm": 320, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 480, "annual_escalation": 0.045},
+      {"lease_id": "L-HBY-002", "tenant": "Starbucks", "category": "餐饮", "area_sqm": 250, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 360, "annual_escalation": 0.045},
+      {"lease_id": "L-HBY-003", "tenant": "POP MART", "category": "潮玩", "area_sqm": 220, "term_years": 3, "start_year": 2024, "monthly_rent_yuan_per_sqm": 450, "annual_escalation": 0.05},
+      {"lease_id": "L-HBY-004", "tenant": "外婆家", "category": "餐饮", "area_sqm": 580, "term_years": 8, "start_year": 2020, "monthly_rent_yuan_per_sqm": 240, "annual_escalation": 0.04}
+    ]
+  },
+  {
+    "property_id": "cd-taikoo-li",
+    "name": "成都远洋太古里",
+    "name_en": "Chengdu Sino-Ocean Taikoo Li",
+    "city": "成都",
+    "city_tier": "t1_new",
+    "format": "购物中心",
+    "format_en": "Open-street Mall",
+    "gla_wan_sqm": 15.0,
+    "noi_wan": 3800,
+    "gross_rent_wan": 6700,
+    "opex_wan": 2750,
+    "vacancy_rate": 0.030,
+    "collection_rate": 0.973,
+    "rent_escalation_rate": 0.047,
+    "foot_traffic_wan_per_month": 210,
+    "total_brands": 195,
+    "weighted_lease_remaining_years": 5.0,
+    "top_brands": [
+      "Apple", "Hermès", "Cartier", "MUJI旗舰店", "MUJI Hotel概念店", "方所书店",
+      "Mango Six", "Blue Frog", "沿客小馆", "蓉李记", "烤匠"
+    ],
+    "leases": [
+      {"lease_id": "L-CTL-001", "tenant": "Apple", "category": "科技零售", "area_sqm": 380, "term_years": 6, "start_year": 2022, "monthly_rent_yuan_per_sqm": 460, "annual_escalation": 0.045},
+      {"lease_id": "L-CTL-002", "tenant": "Hermès", "category": "奢侈品", "area_sqm": 220, "term_years": 10, "start_year": 2019, "monthly_rent_yuan_per_sqm": 880, "annual_escalation": 0.05},
+      {"lease_id": "L-CTL-003", "tenant": "方所书店", "category": "生活方式", "area_sqm": 420, "term_years": 8, "start_year": 2020, "monthly_rent_yuan_per_sqm": 220, "annual_escalation": 0.04},
+      {"lease_id": "L-CTL-004", "tenant": "MUJI", "category": "生活方式", "area_sqm": 620, "term_years": 5, "start_year": 2023, "monthly_rent_yuan_per_sqm": 320, "annual_escalation": 0.045}
+    ]
+  },
+  {
+    "property_id": "sh-wujiaochang-street",
+    "name": "上海五角场万达街铺",
+    "name_en": "Shanghai Wujiaochang Street Shops",
+    "city": "上海",
+    "city_tier": "t1",
+    "format": "街铺",
+    "format_en": "Street Retail",
+    "gla_wan_sqm": 2.3,
+    "noi_wan": 720,
+    "gross_rent_wan": 1150,
+    "opex_wan": 380,
+    "vacancy_rate": 0.075,
+    "collection_rate": 0.92,
+    "rent_escalation_rate": 0.035,
+    "foot_traffic_wan_per_month": 65,
+    "total_brands": 45,
+    "weighted_lease_remaining_years": 3.2,
+    "top_brands": [
+      "麦当劳", "肯德基", "星巴克", "一点点", "蜜雪冰城", "老乡鸡", "永和大王",
+      "波司登", "森马", "以纯", "三福", "名创优品"
+    ],
+    "leases": [
+      {"lease_id": "L-WJC-001", "tenant": "麦当劳", "category": "餐饮", "area_sqm": 380, "term_years": 10, "start_year": 2018, "monthly_rent_yuan_per_sqm": 320, "annual_escalation": 0.035},
+      {"lease_id": "L-WJC-002", "tenant": "星巴克", "category": "餐饮", "area_sqm": 180, "term_years": 5, "start_year": 2022, "monthly_rent_yuan_per_sqm": 420, "annual_escalation": 0.04},
+      {"lease_id": "L-WJC-003", "tenant": "波司登", "category": "时尚", "area_sqm": 220, "term_years": 3, "start_year": 2024, "monthly_rent_yuan_per_sqm": 380, "annual_escalation": 0.04},
+      {"lease_id": "L-WJC-004", "tenant": "蜜雪冰城", "category": "餐饮", "area_sqm": 80, "term_years": 5, "start_year": 2022, "monthly_rent_yuan_per_sqm": 520, "annual_escalation": 0.04}
+    ]
+  }
+]

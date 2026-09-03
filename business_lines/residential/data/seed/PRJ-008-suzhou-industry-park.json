@@ -1,0 +1,30 @@
+{
+  "project_id": "PRJ-008",
+  "name": "苏州·金地工业园",
+  "city": "苏州",
+  "developer": "金地集团",
+  "stage": "在建",
+  "saleable_area_wan_sqm": 8.6,
+  "avg_price_per_sqm": 38500,
+  "dynamic_cost_yi": 28.4,
+  "land_cost_yi": 13.5,
+  "cumulative_payment_yi": 14.2,
+  "monthly_payment_plan_yi": [1.1, 1.2, 1.0, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.3, 1.2, 1.1],
+  "monthly_payment_actual_yi": [0.9, 1.0, 0.8, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.1, 1.0, 0.9],
+  "commission_wan": 720,
+  "channel_fee_wan": 1040,
+  "debt_structure": {
+    "short_term_debt_yi": 4.8,
+    "long_term_debt_yi": 12.0,
+    "cash_yi": 2.4,
+    "total_assets_yi": 38.0,
+    "total_liabilities_yi": 25.0,
+    "shareholders_equity_yi": 13.0
+  },
+  "dedup_history": [0.03, 0.04, 0.03, 0.04, 0.03, 0.02, 0.03, 0.04, 0.03, 0.02, 0.03, 0.02],
+  "dedup_forecast_median": [0.03, 0.04, 0.03, 0.03, 0.03, 0.02, 0.02, 0.02, 0.02, 0.02, 0.01, 0.01],
+  "dedup_forecast_lower": [0.01, 0.02, 0.01, 0.01, 0.01, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00],
+  "dedup_forecast_upper": [0.05, 0.06, 0.05, 0.05, 0.05, 0.04, 0.04, 0.04, 0.04, 0.04, 0.03, 0.03],
+  "start_date": "2024-04-15",
+  "expected_delivery": "2027-12-31"
+}
