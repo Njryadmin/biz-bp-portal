@@ -2,6 +2,7 @@
 // BFF proxy: forwards GET /api/sensitivity/scenarios/{line_id} to the Python API.
 
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

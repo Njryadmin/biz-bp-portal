@@ -2,11 +2,12 @@
 // BFF proxy: forward POST /api/scrapers/run-all (run every enabled scraper).
 
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8769";
   try {
     const res = await fetch(`${base}/api/scrapers/run-all`, {

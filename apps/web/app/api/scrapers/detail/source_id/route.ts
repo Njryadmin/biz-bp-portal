@@ -2,6 +2,7 @@
 // BFF proxy: GET /api/scrapers/{source_id} (scraper detail with history).
 
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

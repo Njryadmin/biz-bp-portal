@@ -2,6 +2,7 @@
 // BFF proxy: forward POST /api/scrapers/{source_id}/run (run one scraper).
 
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
