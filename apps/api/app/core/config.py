@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     cookie_name: str = "finbp_token"
     cookie_secure: bool = False
 
+    # AI-model registry: symmetric key used to encrypt stored api_key
+    # values. If unset, the registry stores api_key as plaintext (or
+    # treats ``env:VAR`` references as pass-through). See
+    # ``core/secret.py`` for the Fernet-based encryption helper.
+    ai_secret_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

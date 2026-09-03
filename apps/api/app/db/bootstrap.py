@@ -4,7 +4,7 @@ apps/api/app/db/bootstrap.py
 Schema bootstrap for the data-integration + auth layer.
 
 Creates (idempotently) the schemas and tables that the rest of the app
-expects to find on first boot. The DDL is split into two groups:
+expects to find on first boot. The DDL is split into three groups:
 
 1. ``SCHEMA_DDL`` — the legacy ``raw`` schema + ``raw.uploads`` table
    (data-integration), preserved verbatim from the original file.
@@ -12,6 +12,9 @@ expects to find on first boot. The DDL is split into two groups:
 2. ``AUTH_DDL`` — the new RBAC tables (``users``, ``user_roles``,
    ``user_business_lines``, ``raw.audit_log``) introduced for the
    2026-09-03 RBAC deliverable.
+
+3. ``AI_MODELS_DDL`` — the ``ai_models`` registry table for the
+   runtime-toggleable LLM provider switcher, added on 2026-09-03.
 
 All DDL is idempotent (``CREATE ... IF NOT EXISTS`` / ``ADD ... IF NOT
 EXISTS``), so this is safe to call on every boot.
@@ -147,20 +150,92 @@ AUTH_DDL: list[str] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# AI-models registry DDL — created 2026-09-03
+# ---------------------------------------------------------------------------
+#
+# One row per registered LLM provider config. The ``is_default`` +
+# ``enabled`` + ``is_active`` triple is what the factory
+# (``services.llm.factory.get_active_model``) checks to pick the
+# runtime provider. We always seed one row — the MockBackend — so the
+# system is never without a working LLM.
+#
+# The provider CHECK is enforced in DDL so a typo at the API layer
+# surfaces as a 500, not as a silent fallback to mock. Additive
+# migrations are listed at the bottom of the list so existing
+# installations upgrade cleanly.
+
+AI_MODELS_DDL: list[str] = [
+    # -----------------------------------------------------------------------
+    # ai_models — runtime-toggleable LLM provider registry.
+    # -----------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS ai_models (
+        id                    SERIAL PRIMARY KEY,
+        name                  VARCHAR(64) UNIQUE NOT NULL,
+        provider              VARCHAR(32) NOT NULL
+                              CHECK (provider IN ('openai', 'deepseek', 'ollama', 'mock', 'anthropic', 'custom')),
+        model_name            VARCHAR(128) NOT NULL,
+        base_url              VARCHAR(512),
+        api_key               VARCHAR(512),
+        enabled               BOOLEAN NOT NULL DEFAULT TRUE,
+        is_default            BOOLEAN NOT NULL DEFAULT FALSE,
+        is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+        last_tested_at        TIMESTAMPTZ,
+        last_test_status      VARCHAR(32),
+        last_test_latency_ms  INTEGER,
+        last_test_response    TEXT,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_ai_models_active "
+    "ON ai_models (is_active) WHERE is_active = TRUE",
+    "CREATE INDEX IF NOT EXISTS idx_ai_models_default "
+    "ON ai_models (is_default) WHERE is_default = TRUE",
+    # The CHECK constraint on ``provider`` cannot be re-issued to add a
+    # new enum value without a DROP+ADD. We do the swap in a DO block
+    # so legacy databases that pre-date the new provider values are
+    # auto-upgraded. The new constraint allows all six values, so
+    # existing rows that already satisfy it pass unchanged.
+    """
+    DO $$
+    BEGIN
+        ALTER TABLE ai_models DROP CONSTRAINT IF EXISTS ai_models_provider_check;
+        ALTER TABLE ai_models
+            ADD CONSTRAINT ai_models_provider_check
+            CHECK (provider IN ('openai', 'deepseek', 'ollama', 'mock', 'anthropic', 'custom'));
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END$$;
+    """,
+]
+
+
 async def ensure_raw_schema() -> None:
-    """Create the ``raw`` schema + ``raw.uploads`` table + RBAC tables if missing.
+    """Create the ``raw`` schema + ``raw.uploads`` table + RBAC tables
+    + ``ai_models`` registry if missing.
 
     The engine has ``connect_args={"timeout": 2}`` so a missing
     PostgreSQL server fails fast. ``init_db`` adds an outer
     ``asyncio.wait_for`` for extra safety; this function itself does
     not impose a per-statement timeout because the DDL list is small
     and each statement is idempotent.
+
+    Also seeds ONE row into ``ai_models`` on the very first boot: the
+    built-in MockBackend. This guarantees the LLM factory always has a
+    working provider to fall back to — even if the operator never opens
+    the admin UI to add a real provider. The seed is ON CONFLICT
+    DO NOTHING, so a partial seed (e.g. the table was created but the
+    row was lost) is repaired on the next restart.
     """
     eng = engine()
     async with eng.begin() as conn:
         for stmt in SCHEMA_DDL:
             await conn.execute(text(stmt))
         for stmt in AUTH_DDL:
+            await conn.execute(text(stmt))
+        for stmt in AI_MODELS_DDL:
             await conn.execute(text(stmt))
         # One-off cleanup: the ``bp-my-line`` user was created when the
         # ``my-line`` test line was still in the registry. The line has
@@ -179,4 +254,42 @@ async def ensure_raw_schema() -> None:
         )
         await conn.execute(
             text("DELETE FROM users WHERE username = 'bp-my-line'")
+        )
+        # Seed the MockBackend row. ON CONFLICT DO NOTHING so a partial
+        # seed (the row was deleted but the table was kept) is repaired
+        # on the next restart. We always force this row to
+        # is_default=TRUE so the factory has a known-good fallback even
+        # if the operator later deletes every other row.
+        await conn.execute(
+            text(
+                """
+                INSERT INTO ai_models
+                    (name, provider, model_name, base_url, api_key,
+                     enabled, is_default, is_active,
+                     last_test_status)
+                VALUES
+                    ('Mock (built-in)', 'mock', 'mock-1', NULL, NULL,
+                     TRUE, TRUE, TRUE, 'untested')
+                ON CONFLICT (name) DO NOTHING
+                """
+            )
+        )
+        # If for any reason no row is the default (e.g. the operator
+        # deleted the seeded row and only the mock row remains under a
+        # different name), promote the mock row to default. This is
+        # belt-and-suspenders; the seed above already covers the
+        # standard case.
+        await conn.execute(
+            text(
+                """
+                UPDATE ai_models
+                SET is_default = TRUE
+                WHERE provider = 'mock'
+                  AND is_active = TRUE
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ai_models
+                      WHERE is_default = TRUE AND is_active = TRUE
+                  )
+                """
+            )
         )

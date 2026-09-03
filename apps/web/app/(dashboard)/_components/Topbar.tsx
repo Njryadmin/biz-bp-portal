@@ -114,24 +114,44 @@ export function Topbar({ lines, user }: TopbarProps) {
         市场数据
       </Link>
       {isAdmin(user ?? null) ? (
-        <Link
-          href="/admin/users"
-          aria-label="管理后台"
-          style={{
-            color: "#ffd591",
-            fontSize: 13,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "2px 8px",
-            border: "1px solid rgba(255,213,145,0.45)",
-            borderRadius: 4,
-          }}
-          title="管理后台 — 用户角色与可见业务线"
-        >
-          <Icons.SafetyOutlined />
-          管理后台
-        </Link>
+        <>
+          <Link
+            href="/admin/users"
+            aria-label="管理后台"
+            style={{
+              color: "#ffd591",
+              fontSize: 13,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "2px 8px",
+              border: "1px solid rgba(255,213,145,0.45)",
+              borderRadius: 4,
+            }}
+            title="管理后台 — 用户角色与可见业务线"
+          >
+            <Icons.SafetyOutlined />
+            管理后台
+          </Link>
+          <Link
+            href="/admin/ai-models"
+            aria-label="AI 模型"
+            style={{
+              color: "#ffd591",
+              fontSize: 13,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "2px 8px",
+              border: "1px solid rgba(255,213,145,0.45)",
+              borderRadius: 4,
+            }}
+            title="管理后台 — 运行时切换 LLM provider"
+          >
+            <Icons.RobotOutlined />
+            AI 模型
+          </Link>
+        </>
       ) : null}
       <RoleSwitcher lines={lines} activeRoles={user?.roles ?? null} />
       <Dropdown

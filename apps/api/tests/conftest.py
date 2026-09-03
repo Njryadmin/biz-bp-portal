@@ -157,11 +157,17 @@ def _disable_audit_middleware_in_tests(monkeypatch):
     monkeypatch.setattr(audit_mod, "_write_audit_row", _noop)
     monkeypatch.setattr(audit_mod, "_schedule_audit_row", lambda **kw: None)
 
-    # Short-circuit the seed_initial_users lifespan hook.
+    # Short-circuit the seed_initial_users lifespan hook. We patch
+    # ONLY the reference in app.main (which is the one the lifespan
+    # imports at module load). Patching the source module
+    # ``app.db.seed_users`` would prevent the dedicated bootstrap test
+    # (``test_bootstrap_creates_admin_and_bp_users``) from exercising
+    # the real function — the test does its own monkeypatching of the
+    # inner helpers and then calls ``seed_users.seed_initial_users``
+    # directly, which is the noop when we patch here too. So: patch
+    # the binding in main, leave the source module alone.
     async def _seed_noop():
         return {"admin": 0, "bp_users": 0}
-    monkeypatch.setattr(_seed_mod, "seed_initial_users", _seed_noop)
-    # And the reference in main.lifespan (imported at module load).
     import app.main as _main_mod
     monkeypatch.setattr(_main_mod, "seed_initial_users", _seed_noop)
     yield

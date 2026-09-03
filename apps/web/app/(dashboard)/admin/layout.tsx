@@ -127,6 +127,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               用户管理
             </Button>
           </Link>
+          <Link href="/admin/ai-models">
+            <Button
+              type="default"
+              size="small"
+              aria-label="AI 模型"
+              style={{ background: "rgba(255,255,255,0.1)", color: "#fff", border: 0 }}
+            >
+              AI 模型
+            </Button>
+          </Link>
           <Link href="/dashboard">
             <Button
               type="default"

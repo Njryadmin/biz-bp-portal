@@ -5,16 +5,27 @@ LLM backend factory + fallback chain.
 
 The factory picks the backend in priority order:
 
-  1. ``DEEPSEEK_API_KEY`` set  →  ``DeepSeekBackend``  (primary)
+  1. ``ai_models`` registry  — runtime-toggleable via the admin UI.
+     The row with ``is_default=TRUE AND enabled=TRUE AND is_active=TRUE``
+     wins. See ``factory.get_active_model`` for the full selection logic.
+  2. ``DEEPSEEK_API_KEY`` set  →  ``DeepSeekBackend``  (primary)
                                   wrapped in ``FallbackBackend`` with mock
-  2. ``OLLAMA_BASE_URL`` set   →  ``OllamaBackend``    (primary)
+                                  (legacy env-var path)
+  3. ``OLLAMA_BASE_URL`` set   →  ``OllamaBackend``    (primary)
                                   wrapped in ``FallbackBackend`` with mock
-  3. (default)                 →  ``MockBackend``       (no fallback needed)
+                                  (legacy env-var path)
+  4. (default)                 →  ``MockBackend``       (no fallback needed)
 
 The factory is a thin wrapper around the env check; it does not cache
 the backend instance (each call returns a fresh object so tests can
 monkey-patch env vars). If you need a process-wide singleton, wrap the
 factory call at the call site.
+
+This module preserves the public symbols the rest of the codebase
+imports (``get_llm_backend``, ``configured_backend_name``,
+``get_primary_backend``, the ``FallbackBackend`` class, the
+backend classes, etc.). The actual factory logic now lives in
+``factory.py``; this file re-exports it for backward compatibility.
 
 Fallback semantics
 ------------------
@@ -31,6 +42,12 @@ from typing import Any
 
 from .base import LLMBackend
 from .deepseek import DeepSeekBackend
+from .factory import (
+    configured_backend_name,
+    get_active_model,
+    get_llm_backend,
+    get_primary_backend,
+)
 from .mock import MockBackend, MockAnswer
 from .ollama import OllamaBackend
 
@@ -163,63 +180,13 @@ class FallbackBackend:
         self.primary_stats = stats
 
 
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
-
-
-def get_llm_backend() -> LLMBackend:
-    """Return the active LLM backend, picked by env vars.
-
-    Priority:
-
-      1. ``DEEPSEEK_API_KEY``  → DeepSeek primary + mock fallback
-      2. ``OLLAMA_BASE_URL``   → Ollama primary + mock fallback
-      3. (default)            → Mock only
-
-    Tests may monkey-patch the env to swap backends; this function is
-    NOT cached so each call reflects the current env.
-    """
-    if os.environ.get("DEEPSEEK_API_KEY"):
-        try:
-            primary = DeepSeekBackend()
-        except Exception:  # noqa: BLE001 — fall back to mock
-            return MockBackend()
-        return FallbackBackend(primary, MockBackend())
-    if os.environ.get("OLLAMA_BASE_URL"):
-        try:
-            primary = OllamaBackend()
-        except Exception:  # noqa: BLE001
-            return MockBackend()
-        return FallbackBackend(primary, MockBackend())
-    return MockBackend()
-
-
-def configured_backend_name() -> str:
-    """Return the *configured* backend name from env (no I/O).
-
-    This is the backend the factory WOULD pick right now if called.
-    It does not consult runtime state (e.g. the FallbackBackend
-    instance).
-    """
-    if os.environ.get("DEEPSEEK_API_KEY"):
-        return "deepseek"
-    if os.environ.get("OLLAMA_BASE_URL"):
-        return "ollama"
-    return "mock"
-
-
-def get_primary_backend() -> LLMBackend:
-    """Return the configured primary backend (no FallbackBackend wrapper).
-
-    Useful for tests and health checks that need to inspect the primary
-    directly (model, temperature, base_url, stats).
-    """
-    if os.environ.get("DEEPSEEK_API_KEY"):
-        return DeepSeekBackend()
-    if os.environ.get("OLLAMA_BASE_URL"):
-        return OllamaBackend()
-    return MockBackend()
+# Note: ``get_llm_backend`` / ``configured_backend_name`` /
+# ``get_primary_backend`` are re-exported above from ``factory``.
+# The factory now consults the ``ai_models`` table first and falls
+# back to the env-var logic below (see ``factory.get_legacy_env_backend``)
+# before resorting to the MockBackend. This preserves the original
+# module-level surface (importing these names from
+# ``app.services.llm`` still works) while adding the new registry path.
 
 
 __all__ = [
@@ -229,6 +196,7 @@ __all__ = [
     "DeepSeekBackend",
     "OllamaBackend",
     "FallbackBackend",
+    "get_active_model",
     "get_llm_backend",
     "configured_backend_name",
     "get_primary_backend",

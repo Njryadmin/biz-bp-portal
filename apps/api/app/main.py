@@ -19,6 +19,7 @@ from .db import init_db
 from .db.seed_users import seed_initial_users
 from .middleware import AuditMiddleware
 from .routers import build_registry_router
+from .routers.ai_models import router as ai_models_router
 from .routers.alerts import router as alerts_router
 from .routers.auth import router as auth_router
 from .routers.copilot import router as copilot_router
@@ -114,6 +115,9 @@ def create_app() -> FastAPI:
 
     # Web scrapers (market data ingest)
     app.include_router(scrapers_router)
+
+    # AI-models registry (runtime-toggleable LLM provider switcher)
+    app.include_router(ai_models_router)
 
     @app.get("/")
     async def root() -> dict:
