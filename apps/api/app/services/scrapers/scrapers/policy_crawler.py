@@ -1,41 +1,98 @@
 """
 apps/api/app/services/scrapers/scrapers/policy_crawler.py
 
-Real-estate policy crawler.
+Real-estate / housing policy crawler (房地产政策抓取).
 
-Source targets (in order of priority):
-  1. 住房和城乡建设部 (mohurd.gov.cn) — national policy releases.
-  2. 各地住建委 / 住建局 — local policy releases.
+Historical problem
+-------------------
+The old URL ``https://www.mohurd.gov.cn/gongkai/zhengce/zhengcefilelib/``
+returns 404 — the site was restructured. The new mohurd.gov.cn site
+publishes all key 住建部 policies (通知 / 公告 / 法规 / 规范性文件) on
+its **homepage**, not under a dedicated ``/zhengce/`` section.
 
-The real network is unreliable; we ship a curated static corpus as
-the primary "source of truth" and only attempt a single live request
-per run to enrich it. The fallback path emits a few extra historical
-policies to make the chart meaningful.
+What we now do
+--------------
+We hit the mohurd.gov.cn homepage and parse the policy-anchor lists it
+exposes. The HTML is a server-rendered page with this structure:
 
-Schema (rows):
-    policy_id       stable id, e.g. "POL-2024-0001"
-    title           short title
-    publish_date    ISO date (YYYY-MM-DD)
-    city            city name or "全国"
-    level           "国家" | "省" | "市"
-    content         1-3 sentence summary
-    source_url      original URL when applicable
+    2026-09-03
+        <a href="/gongkai/zc/wjk/art/2026/art_xxx.html">title</a>
+    2026-09-02 ...
+
+The anchors are grouped under these ``/gongkai/...`` paths (which we
+classify into ``level``):
+
+    /gongkai/zc/wjk/...            → 通知 (level="国家", city="全国")
+    /gongkai/zhengce/gzk/...       → 法规 / 规章 (level="国家")
+    /gongkai/zc/xzgfxwjk/...       → 规范性文件 (level="国家")
+    /gongkai/fdzdgknr/...          → 法定主动公开内容 (level="国家")
+
+We pull up to ~25 live policies per run, and merge with a curated
+20-row historical corpus (kept in ``_HISTORICAL_POLICIES`` below) so
+the downstream chart has data even when the live call returns a
+transient failure.
+
+The ``fallback()`` hook returns the curated corpus (marked
+``is_fallback=True``), preserving the old behaviour.
+
+Notes / limitations
+-------------------
+* We hit only the national-level (mohurd.gov.cn) policy page. Local
+  住建委 pages (Shanghai, Shenzhen) are kept in the curated corpus.
+* Rate-limited to 3 req/min across mohurd.gov.cn.
+* The page may add / remove sections month to month; the parser
+  is keyword-driven and degrades to 0 live rows rather than crash.
 """
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from ..base import BaseScraper
 from ..registry import register
-from ..utils import http_get, rate_limit_check
+from ..utils import http_get, rate_limit_check, retry_with_backoff
 from ._html import parse_html
 
 
 SOURCE_ID = "policy_crawler"
-MOHURD_INDEX = "https://www.mohurd.gov.cn/gongkai/zhengce/zhengcefilelib/"
 MOHURD_DOMAIN = "mohurd.gov.cn"
+MOHURD_INDEX = "https://www.mohurd.gov.cn/"  # site restructured; homepage now lists policies
+
+_DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+}
+
+# URL path fragments we treat as "real" policies (通知 / 公告 / 法规 / 规章
+# / 规范性文件). The mohurd homepage mixes news / 视频 / 媒体 / 通知 on
+# one page; we explicitly skip the news sub-paths below.
+_POLICY_PATH_FRAGMENTS = (
+    "/gongkai/zc/wjk/",        # 通知
+    "/gongkai/zhengce/gzk/",   # 法规
+    "/gongkai/zc/xzgfxwjk/",   # 规范性文件
+    "/gongkai/fdzdgknr/",      # 法定主动公开内容
+)
+_NEWS_PATH_FRAGMENTS = (
+    "/xinwen/jsyw/",           # 要闻
+    "/xinwen/gzdt/",           # 工作动态
+    "/xinwen/dfxx/",           # 地方信息
+)
+
+# Keyword whitelist for a sensible "summary" line. The mohurd page
+# rarely exposes an English-language description, so we synthesise one
+# from the title + the path-derived policy type.
+_POLICY_TYPE_BY_PATH: list[tuple[str, str]] = [
+    ("/gongkai/zc/wjk/", "通知"),
+    ("/gongkai/zhengce/gzk/", "法规"),
+    ("/gongkai/zc/xzgfxwjk/", "规范性文件"),
+    ("/gongkai/fdzdgknr/", "法定主动公开"),
+]
 
 
 # A curated corpus of well-known real-estate policies. The scraper
@@ -227,31 +284,42 @@ _HISTORICAL_POLICIES: list[dict[str, Any]] = [
 
 class PolicyCrawler(BaseScraper):
     source_id = SOURCE_ID
-    name = "房地产政策抓取 (住建部 + 各地住建委)"
+    name = "房地产政策抓取 (mohurd.gov.cn 公开页面 + 各地住建委历史)"
     schedule = "0 8 * * 1"
     enabled = True
     required_fields = ("policy_id", "title", "publish_date", "city", "level")
 
-    async def fetch(self) -> list[dict[str, Any]]:
-        """Return a list of dicts: [{_url, _html}, ...].
+    # ---- fetch --------------------------------------------------------
 
-        We only attempt ONE live call to be polite. Any failure raises;
-        the framework then calls ``fallback`` which returns the full
-        curated corpus (so the pipeline never runs dry).
+    async def fetch(self) -> list[dict[str, Any]]:
+        """Hit the mohurd.gov.cn homepage; return a single raw wrapper.
+
+        The homepage is rich enough on its own — it lists 30+ policy
+        anchors grouped by 通知 / 法规 / 规范性文件 / 法定主动公开
+        in a single server-rendered page. If the request fails we
+        raise so the framework falls back to the curated corpus.
         """
-        if rate_limit_check(MOHURD_DOMAIN, max_per_minute=3):
-            try:
-                r = http_get(MOHURD_INDEX, timeout=10)
-                r.raise_for_status()
-                return [{"_url": MOHURD_INDEX, "_html": r.text}]
-            except Exception as exc:  # noqa: BLE001
-                raise RuntimeError(f"mohurd fetch failed: {exc}") from exc
-        # Rate-limited: skip live and let fallback run.
-        raise RuntimeError("rate-limit hit for mohurd; skipping live fetch")
+        if not rate_limit_check(MOHURD_DOMAIN, max_per_minute=3):
+            raise RuntimeError(f"rate-limit hit for {MOHURD_DOMAIN}; skipping live fetch")
+
+        @retry_with_backoff(max_retries=1, base_delay=1.0)
+        def _get() -> str:
+            r = http_get(MOHURD_INDEX, timeout=12, headers=_DEFAULT_HEADERS)
+            if r.status_code in (403, 429, 503):
+                raise RuntimeError(f"mohurd anti-bot {r.status_code}")
+            r.raise_for_status()
+            return r.text
+
+        html = _get()
+        return [{"_url": MOHURD_INDEX, "_html": html}]
+
+    # ---- parse --------------------------------------------------------
 
     def parse(self, raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Try to extract new policy items from the live page; merge with the
-        curated corpus. The ``validate`` step deduplicates on ``policy_id``.
+        """Pull live policies from the mohurd homepage; merge with corpus.
+
+        Output rows use the same schema as the curated corpus:
+            policy_id, title, publish_date, city, level, content, source_url.
         """
         merged: list[dict[str, Any]] = list(_HISTORICAL_POLICIES)
         if not raw:
@@ -260,37 +328,71 @@ class PolicyCrawler(BaseScraper):
         html = page.get("_html", "")
         if not html:
             return merged
+
         soup = parse_html(html)
-        # Find list items that look like policy titles.
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # The mohurd homepage emits a sequence of policy blocks where
+        # each block looks like:
+        #     <span class="time">2026-09-03</span>
+        #     <a href="/gongkai/.../art/...">title</a>
+        # We extract by scanning the whole page in document order and
+        # pairing each policy-path anchor with the most recent date
+        # string we've seen.
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        last_date: str | None = None
         counter = 1
-        for a in soup.select("a"):
-            text = a.get_text(strip=True)
-            href = a.get("href", "")
-            if not text or len(text) < 6 or len(text) > 80:
+        seen_keys: set[tuple[str, str]] = set()
+        for el in soup.find_all(["span", "a"]):
+            if el.name == "span":
+                txt = el.get_text(strip=True)
+                m = re.match(r"^(\d{4}-\d{2}-\d{2})$", txt)
+                if m:
+                    last_date = txt
                 continue
-            if not any(kw in text for kw in ("住房", "保障", "公积金", "限购", "贷款", "房地产", "城中村", "保交楼")):
+            href = el.get("href", "") or ""
+            text = el.get_text(strip=True)
+            if not href or not text:
                 continue
-            if not href:
+            if len(text) < 6 or len(text) > 120:
                 continue
+            # Only policy-like hrefs.
+            if not any(frag in href for frag in _POLICY_PATH_FRAGMENTS):
+                continue
+            if any(frag in href for frag in _NEWS_PATH_FRAGMENTS):
+                continue
+            publish_date = last_date or today_str
+            key = (publish_date, text)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
             url = (
-                href if href.startswith("http")
+                href
+                if href.startswith("http")
+                else f"https://www.mohurd.gov.cn{href}" if href.startswith("/")
                 else MOHURD_INDEX.rstrip("/") + "/" + href.lstrip("/")
             )
-            pid = f"POL-LIVE-{datetime.now(timezone.utc):%Y%m%d}-{counter:03d}"
+            policy_type = "通知"
+            for frag, label in _POLICY_TYPE_BY_PATH:
+                if frag in href:
+                    policy_type = label
+                    break
+            pid = (
+                f"POL-MOHURD-{publish_date.replace('-', '')}-{counter:03d}"
+            )
             counter += 1
             merged.append(
                 {
                     "policy_id": pid,
                     "title": text,
-                    "publish_date": today,
+                    "publish_date": publish_date,
                     "city": "全国",
                     "level": "国家",
-                    "content": _first_paragraph_after(a) or text,
+                    "content": f"住建部{policy_type}: {text}",
                     "source_url": url,
                 }
             )
         return merged
+
+    # ---- validate -----------------------------------------------------
 
     def validate(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen: set[str] = set()
@@ -301,7 +403,6 @@ class PolicyCrawler(BaseScraper):
                 continue
             if not r.get("title") or not r.get("publish_date") or not r.get("city"):
                 continue
-            # Normalize date format.
             d = r.get("publish_date")
             if isinstance(d, str) and re.match(r"^\d{4}-\d{2}-\d{2}$", d):
                 pass
@@ -314,8 +415,10 @@ class PolicyCrawler(BaseScraper):
             kept.append(r)
         return kept
 
+    # ---- fallback -----------------------------------------------------
+
     def fallback(self) -> list[dict[str, Any]]:
-        """Return the full curated corpus, marked as fallback."""
+        """Return the curated corpus, marked as fallback."""
         out: list[dict[str, Any]] = []
         for p in _HISTORICAL_POLICIES:
             cp = dict(p)
@@ -323,13 +426,6 @@ class PolicyCrawler(BaseScraper):
             cp["is_fallback"] = True
             out.append(cp)
         return out
-
-
-def _first_paragraph_after(node: Any) -> str:
-    sib = node.find_next("p")
-    if sib is None:
-        return ""
-    return sib.get_text(strip=True)[:240]
 
 
 register(PolicyCrawler())
