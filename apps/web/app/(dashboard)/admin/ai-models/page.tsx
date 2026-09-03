@@ -258,6 +258,22 @@ export default function AdminAIModelsPage() {
     }
   };
 
+  const onReactivate = async (row: AIModelItem) => {
+    // PATCH /api/ai-models/{id} with is_active=true. The PATCH route
+    // already accepts is_active; we just reuse the existing
+    // updateAIModel client helper. The backend's "promote a mock
+    // row to default if no default exists" safety net also runs on
+    // every API startup, so a re-activated model that becomes the
+    // only active row will start as a regular (non-default) row.
+    try {
+      await updateAIModel(row.id, { is_active: true });
+      message.success(`已启用 ${row.name}`);
+      loadModels();
+    } catch (e) {
+      message.error(`启用失败: ${getErrorMessage(e)}`);
+    }
+  };
+
   // -----------------------------------------------------------------
   // Column defs
   // -----------------------------------------------------------------
@@ -432,6 +448,32 @@ export default function AdminAIModelsPage() {
               停用
             </Button>
           </Popconfirm>
+          {/*
+            Re-enable button: shown only for soft-deleted rows
+            (is_active=false). The previous design only had a
+            "停用" button that became disabled for inactive rows,
+            leaving no way to re-enable from the table — the
+            operator had to open the edit modal and flip the
+            "启用" switch by hand, which was non-obvious.
+          */}
+          {!row.is_active ? (
+            <Popconfirm
+              title={`确认启用 ${row.name}?`}
+              description="启用后此模型会重新出现在引擎候选列表中(不会自动成为默认)。"
+              okText="启用"
+              cancelText="取消"
+              onConfirm={() => onReactivate(row)}
+            >
+              <Button
+                size="small"
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                aria-label={`启用 ${row.name}`}
+              >
+                启用
+              </Button>
+            </Popconfirm>
+          ) : null}
         </Space>
       ),
     },
