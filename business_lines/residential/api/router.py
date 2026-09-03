@@ -278,7 +278,13 @@ async def indicators() -> dict:
     for d in defs:
         items.append(
             {
-                "indicator_id": d["id"],
+                # Match the schema used by every other line's
+                # /indicators endpoint: the primary key is ``id`` (not
+                # ``indicator_id``). The frontend's ``Indicator`` type
+                # declares ``id`` and renders ``<UniversalKpiCard>`` keyed
+                # on it; using ``indicator_id`` here caused the page to
+                # treat all residential KPIs as un-configured.
+                "id": d["id"],
                 "title": d["title"],
                 "unit": d.get("unit", ""),
                 "format": d.get("format", "number"),
