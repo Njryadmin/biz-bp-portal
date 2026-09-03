@@ -13,7 +13,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Result, Space, Typography } from "antd";
+import { App, Button, Result, Space, Typography } from "antd";
 import { ArrowLeftOutlined, SafetyOutlined } from "@ant-design/icons";
 
 import { getCurrentUser, isAdmin, type CurrentUser } from "../../../lib/auth";
@@ -151,7 +151,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </Space>
       </header>
       <div style={{ flex: 1, padding: 24, background: "#f5f5f5", overflow: "auto" }}>
-        {children}
+        {/* antd <App> provides the context that App.useApp() reads
+            in child pages (e.g. /admin/users and /admin/ai-models
+            both pull { message, notification, modal } from
+            App.useApp()). Without this wrapper the hook returns a
+            placeholder object and message.error() throws. */}
+        <App>
+          {children}
+        </App>
       </div>
     </div>
   );
