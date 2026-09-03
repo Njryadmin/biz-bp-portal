@@ -1,9 +1,8 @@
 // apps/web/lib/auth.ts
 //
-// Client-side helpers for the RBAC system. Pure functions + thin
-// fetch wrappers; no React here so they can be reused in any
-// component (including server components, via the ``accessToken``
-// helper for SSR).
+// RBAC 系统的浏览器端辅助函数。纯函数 + 精简的 fetch 包装；
+// 不依赖 React，可在任意组件中复用（包括服务端组件，通过
+// ``accessToken`` 辅助函数支持 SSR）。
 
 export type RoleName = string;
 
@@ -24,7 +23,7 @@ export interface AccessibleLines {
 }
 
 // ---------------------------------------------------------------------------
-// Admin user-management payloads (mirror of apps/api/app/schemas/auth.py)
+// 管理后台用户管理请求体（与 apps/api/app/schemas/auth.py 对应）
 // ---------------------------------------------------------------------------
 
 export interface AdminUserItem {
@@ -57,10 +56,10 @@ export interface UpdateUserPayload {
   email?: string;
   is_active?: boolean;
   password?: string;
-  // Set to true to explicitly clear the user's email column to NULL.
-  // Pydantic EmailStr rejects empty strings so we use a separate
-  // signal. The backend treats clear_email=true as "set email to
-  // NULL", which wins over any value in the email field.
+  // 设为 true 以显式将用户的 email 字段置为 NULL。
+  // Pydantic 的 EmailStr 不接受空字符串，因此使用单独的标志位。
+  // 后端将 clear_email=true 解释为"将 email 置为 NULL"，
+  // 其优先级高于 email 字段中的任何值。
   clear_email?: boolean;
 }
 
@@ -134,8 +133,8 @@ export async function getAccessibleLines(): Promise<AccessibleLines> {
 }
 
 // ---------------------------------------------------------------------------
-// Admin user-management API (admin only — calls are expected to 403 for
-// non-admin callers; we let the page surface that as a permissions error).
+// 管理后台用户管理 API（仅 admin —— 非 admin 调用预期会收到 403，
+// 由页面层以"权限不足"形式呈现给用户）。
 // ---------------------------------------------------------------------------
 
 async function apiJson<T>(
@@ -219,7 +218,7 @@ export async function deactivateUser(userId: number): Promise<{ ok: boolean; mes
   return apiJson(`/api/auth/users/${userId}`, { method: "DELETE" });
 }
 
-// ---- Pure helpers --------------------------------------------------------
+// ---- 纯辅助函数 --------------------------------------------------------
 
 export function isAdmin(user: CurrentUser | null): boolean {
   return !!user?.roles?.includes("admin");

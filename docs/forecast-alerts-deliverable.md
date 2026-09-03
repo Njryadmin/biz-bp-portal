@@ -1,82 +1,82 @@
-# Forecast & Alerts — Deliverable
+# 预测与告警 — 交付物
 
-> **Modules shipped:** Rolling Forecast Engine (Module 1) + Alert Center (Module 2)
-> **Date:** 2026-09-02
-> **Lines of code:** 2 engines, 2 routers, 2 BFF proxy trees, 2 pages, 6 YAML configs, 44 new tests, all green.
-> **Status:** PASS
-
----
-
-## 1 · File inventory
-
-### Backend (Python · FastAPI)
-
-| Path | Purpose |
-|---|---|
-| `apps/api/app/services/forecast_engine.py` | Universal rolling-forecast engine. Reads `business_lines/<line>/forecast.yaml`; supports `sma` / `ema` / `linear_trend` / `seasonal_naive`; returns historical + 12-month forecast with 95% CI, MAPE, bias, and optional attribution. |
-| `apps/api/app/services/alert_engine.py` | Universal alert engine. Reads `business_lines/<line>/alerts.yaml`; supports `> < >= <= == between change_pct` operators plus `consecutive: N`; in-memory store; render templated messages. |
-| `apps/api/app/routers/forecast.py` | Cross-line HTTP router mounted at `/api/forecast/*`. |
-| `apps/api/app/routers/alerts.py` | Cross-line HTTP router mounted at `/api/alerts/*`. |
-| `apps/api/app/main.py` | `app.include_router(forecast_router)` + `app.include_router(alerts_router)` (next to sensitivity/copilot). No registry change. |
-| `apps/api/tests/test_forecast.py` | 20 tests — profile load, all 4 methods, MAPE/bias, attribution, HTTP, universality. |
-| `apps/api/tests/test_alerts.py` | 24 tests — profile load, 6 operators, `consecutive`, summary, ack/delete, history pagination, HTTP, universality. |
-
-### Backend config (YAML, per line)
-
-| Path | Series / rules |
-|---|---|
-| `business_lines/residential/forecast.yaml` | 4 series (dynamic_irr, payment_completion, dedup_rate, channel_fee_ratio) + 4 attribution buckets |
-| `business_lines/retail/forecast.yaml` | 4 series (noi, efficiency, collection_rate, vacancy_rate) + 4 attribution buckets |
-| `business_lines/retail-leasing/forecast.yaml` | 4 series (occupancy_rate, avg_deal_rent, benchmark_gap_pct, renewal_rate) + 4 attribution buckets |
-| `business_lines/residential/alerts.yaml` | **5 rules** (irr_below_threshold, payment_drop, redline_breach, dedup_stall, irr_between_band) + 4 attribution buckets |
-| `business_lines/retail/alerts.yaml` | **5 rules** (noi_drop, collection_below, vacancy_spike, vacancy_consecutive_high, efficiency_below_band) + 4 attribution buckets |
-| `business_lines/retail-leasing/alerts.yaml` | **5 rules** (occupancy_below, vacancy_days_high, renewal_drop, benchmark_gap_negative, renewal_consecutive_low) + 4 attribution buckets |
-
-### Frontend (TypeScript · Next.js 14 / AntD 5 / ECharts 5)
-
-| Path | Purpose |
-|---|---|
-| `apps/web/app/(dashboard)/forecast/page.tsx` | Forecast page — left param panel (line/indicator/method/horizon/include_attribution), right: line chart with 95% CI band, MAPE/bias/confidence stats, attribution table. |
-| `apps/web/app/(dashboard)/alerts/page.tsx` | Alert Center — top bar (line selector + severity tabs + [立即检查]), triggered-alert cards with severity color bar + ack/ignore actions, rules list (collapsible). 10-second polling for in-app delivery. |
-| `apps/web/app/(dashboard)/_components/Topbar.tsx` | Added 2 new links: 滚动预测 (`/forecast`) + 告警中心 (`/alerts`) with icons. |
-| `apps/web/app/(dashboard)/[line]/page.tsx` | Added 2 new cross-cutting shortcut cards: 滚动预测 + 告警中心 (each with `?line=` pre-select). |
-| `apps/web/app/api/forecast/profiles/route.ts` | BFF proxy — list profiles |
-| `apps/web/app/api/forecast/profiles/[line_id]/route.ts` | BFF proxy — get one profile |
-| `apps/web/app/api/forecast/run/route.ts` | BFF proxy — POST /run |
-| `apps/web/app/api/forecast/compare/route.ts` | BFF proxy — POST /compare (actuals vs forecast variance) |
-| `apps/web/app/api/alerts/profiles/route.ts` | BFF proxy — list alert profiles |
-| `apps/web/app/api/alerts/rules/[line_id]/route.ts` | BFF proxy — list rules |
-| `apps/web/app/api/alerts/rules/[line_id]/summary/route.ts` | BFF proxy — rule summary |
-| `apps/web/app/api/alerts/check/route.ts` | BFF proxy — POST /check |
-| `apps/web/app/api/alerts/history/route.ts` | BFF proxy — GET /history (with line_id, limit, offset) |
-| `apps/web/app/api/alerts/acknowledge/[alert_id]/route.ts` | BFF proxy — POST /acknowledge |
-| `apps/web/app/api/alerts/[alert_id]/route.ts` | BFF proxy — DELETE (soft delete) |
-
-No new npm packages. `package.json` unchanged.
+> **本次交付模块：** 滚动预测引擎（模块 1）+ 告警中心（模块 2）
+> **日期：** 2026-09-02
+> **代码量：** 2 个引擎，2 个路由，2 棵 BFF 代理树，2 个页面，6 份 YAML 配置，44 个新测试，全部通过。
+> **状态：** PASS
 
 ---
 
-## 2 · 3-line forecast profile summary
+## 1 · 文件清单
 
-| Line | Series | Methods used |
+### 后端（Python · FastAPI）
+
+| 路径 | 用途 |
+|---|---|
+| `apps/api/app/services/forecast_engine.py` | 通用滚动预测引擎。读取 `business_lines/<line>/forecast.yaml`；支持 `sma` / `ema` / `linear_trend` / `seasonal_naive`；返回历史 + 12 个月预测，含 95% CI、MAPE、bias 以及可选的归因。 |
+| `apps/api/app/services/alert_engine.py` | 通用告警引擎。读取 `business_lines/<line>/alerts.yaml`；支持 `>` `<` `>=` `<=` `==` `between` `change_pct` 运算符以及 `consecutive: N`；内存存储；模板化消息渲染。 |
+| `apps/api/app/routers/forecast.py` | 跨业务线 HTTP 路由，挂载在 `/api/forecast/*`。 |
+| `apps/api/app/routers/alerts.py` | 跨业务线 HTTP 路由，挂载在 `/api/alerts/*`。 |
+| `apps/api/app/main.py` | `app.include_router(forecast_router)` + `app.include_router(alerts_router)`（紧邻 sensitivity/copilot）。注册表无变更。 |
+| `apps/api/tests/test_forecast.py` | 20 个测试 —— profile 加载、4 种方法、MAPE/bias、归因、HTTP、通用性。 |
+| `apps/api/tests/test_alerts.py` | 24 个测试 —— profile 加载、6 种运算符、`consecutive`、summary、ack/delete、history 分页、HTTP、通用性。 |
+
+### 后端配置（YAML，按业务线）
+
+| 路径 | 系列 / 规则 |
+|---|---|
+| `business_lines/residential/forecast.yaml` | 4 个系列（dynamic_irr, payment_completion, dedup_rate, channel_fee_ratio）+ 4 个归因分桶 |
+| `business_lines/retail/forecast.yaml` | 4 个系列（noi, efficiency, collection_rate, vacancy_rate）+ 4 个归因分桶 |
+| `business_lines/retail-leasing/forecast.yaml` | 4 个系列（occupancy_rate, avg_deal_rent, benchmark_gap_pct, renewal_rate）+ 4 个归因分桶 |
+| `business_lines/residential/alerts.yaml` | **5 条规则**（irr_below_threshold, payment_drop, redline_breach, dedup_stall, irr_between_band）+ 4 个归因分桶 |
+| `business_lines/retail/alerts.yaml` | **5 条规则**（noi_drop, collection_below, vacancy_spike, vacancy_consecutive_high, efficiency_below_band）+ 4 个归因分桶 |
+| `business_lines/retail-leasing/alerts.yaml` | **5 条规则**（occupancy_below, vacancy_days_high, renewal_drop, benchmark_gap_negative, renewal_consecutive_low）+ 4 个归因分桶 |
+
+### 前端（TypeScript · Next.js 14 / AntD 5 / ECharts 5）
+
+| 路径 | 用途 |
+|---|---|
+| `apps/web/app/(dashboard)/forecast/page.tsx` | 预测页面 —— 左侧参数面板（业务线/指标/方法/horizon/include_attribution），右侧带 95% CI 区间的折线图，MAPE/bias/confidence 统计，归因表。 |
+| `apps/web/app/(dashboard)/alerts/page.tsx` | 告警中心 —— 顶部条（业务线选择 + 严重度 tab + [立即检查]），触发告警卡片含严重度色条 + 确认/忽略动作，规则列表（可折叠）。10 秒轮询保证站内送达。 |
+| `apps/web/app/(dashboard)/_components/Topbar.tsx` | 新增 2 个链接：滚动预测（`/forecast`）+ 告警中心（`/alerts`），带图标。 |
+| `apps/web/app/(dashboard)/[line]/page.tsx` | 新增 2 个跨业务线快捷卡片：滚动预测 + 告警中心（均带 `?line=` 预选）。 |
+| `apps/web/app/api/forecast/profiles/route.ts` | BFF 代理 —— 列出 profile |
+| `apps/web/app/api/forecast/profiles/[line_id]/route.ts` | BFF 代理 —— 获取单个 profile |
+| `apps/web/app/api/forecast/run/route.ts` | BFF 代理 —— POST /run |
+| `apps/web/app/api/forecast/compare/route.ts` | BFF 代理 —— POST /compare（实际值 vs 预测值差异） |
+| `apps/web/app/api/alerts/profiles/route.ts` | BFF 代理 —— 列出告警 profile |
+| `apps/web/app/api/alerts/rules/[line_id]/route.ts` | BFF 代理 —— 列出规则 |
+| `apps/web/app/api/alerts/rules/[line_id]/summary/route.ts` | BFF 代理 —— 规则 summary |
+| `apps/web/app/api/alerts/check/route.ts` | BFF 代理 —— POST /check |
+| `apps/web/app/api/alerts/history/route.ts` | BFF 代理 —— GET /history（带 line_id, limit, offset） |
+| `apps/web/app/api/alerts/acknowledge/[alert_id]/route.ts` | BFF 代理 —— POST /acknowledge |
+| `apps/web/app/api/alerts/[alert_id]/route.ts` | BFF 代理 —— DELETE（软删除） |
+
+未新增 npm 包，`package.json` 未变。
+
+---
+
+## 2 · 3 条业务线 forecast profile 摘要
+
+| 业务线 | 系列 | 使用方法 |
 |---|---|---|
 | residential | `dynamic_irr`, `payment_completion`, `dedup_rate`, `channel_fee_ratio` (4) | linear_trend, ema, sma, seasonal_naive |
 | retail | `noi`, `efficiency`, `collection_rate`, `vacancy_rate` (4) | linear_trend, ema, sma, seasonal_naive |
 | retail-leasing | `occupancy_rate`, `avg_deal_rent`, `benchmark_gap_pct`, `renewal_rate` (4) | ema, linear_trend, sma, seasonal_naive |
 
-## 3 · 3-line alert rules summary
+## 3 · 3 条业务线告警规则摘要
 
-| Line | Rules (5 each) | Operators covered |
+| 业务线 | 规则（各 5 条） | 覆盖运算符 |
 |---|---|---|
-| residential | irr_below_threshold (`<`+consecutive), payment_drop (change_pct), redline_breach (`==`), dedup_stall (`<`+consecutive 2), irr_between_band (between) | `<` `change_pct` `==` `between` consecutive |
-| retail | noi_drop (change_pct), collection_below (`<`), vacancy_spike (`>`), vacancy_consecutive_high (`>`+consecutive 3), efficiency_below_band (between) | `<` `>` `change_pct` `between` consecutive |
-| retail-leasing | occupancy_below (`<`), vacancy_days_high (`>`), renewal_drop (change_pct), benchmark_gap_negative (`<`), renewal_consecutive_low (`<`+consecutive 2) | `<` `>` `change_pct` consecutive |
+| residential | irr_below_threshold（`<`+consecutive）、payment_drop（change_pct）、redline_breach（`==`）、dedup_stall（`<`+consecutive 2）、irr_between_band（between） | `<` `change_pct` `==` `between` consecutive |
+| retail | noi_drop（change_pct）、collection_below（`<`）、vacancy_spike（`>`）、vacancy_consecutive_high（`>`+consecutive 3）、efficiency_below_band（between） | `<` `>` `change_pct` `between` consecutive |
+| retail-leasing | occupancy_below（`<`）、vacancy_days_high（`>`）、renewal_drop（change_pct）、benchmark_gap_negative（`<`）、renewal_consecutive_low（`<`+consecutive 2） | `<` `>` `change_pct` consecutive |
 
 ---
 
-## 4 · Test results
+## 4 · 测试结果
 
-### New tests
+### 新增测试
 
 ```text
 apps/api/tests/test_forecast.py ........................... [45%]  20 passed
@@ -84,7 +84,7 @@ apps/api/tests/test_alerts.py   ........................ [55%]  24 passed
 ============================== 44 passed in 69.82s (0:01:09) =====================
 ```
 
-### Full test suite (excludes test_copilot.py — that one needs a live API process)
+### 完整测试套件（排除 test_copilot.py —— 该测试需要运行中的 API 进程）
 
 ```text
 apps/api/tests/test_sensitivity.py ........................  21 passed
@@ -95,7 +95,7 @@ apps/api/tests/test_alerts.py      ........................  24 passed
 ============================== 74 passed in 106.50s (0:01:46) ===================
 ```
 
-### TypeScript typecheck
+### TypeScript 类型检查
 
 ```text
 $ cd apps/web && npx tsc --noEmit
@@ -104,7 +104,7 @@ EXIT=0
 
 ---
 
-## 5 · curl smoke tests (against live API on :8769)
+## 5 · curl 冒烟测试（针对 :8769 上的运行 API）
 
 ### Forecast
 
@@ -168,7 +168,7 @@ delete result = {"deleted":"07317310-..."}
 second delete → 404 "alert not found: 07317310-..."
 ```
 
-### Pages (Next.js dev on :3000)
+### 页面（Next.js dev on :3000）
 
 ```text
 GET /forecast    200
@@ -179,7 +179,7 @@ GET /copilot     200
 GET /dashboard   200
 ```
 
-### Topbar / line-overview shortcuts (HTML grep)
+### Topbar / 业务线概览快捷（HTML grep）
 
 ```text
 /forecast HTML contains "滚动预测"  → True
@@ -190,9 +190,9 @@ GET /dashboard   200
 
 ---
 
-## 6 · Universality test (add a 5th line, no engine code change)
+## 6 · 通用性测试（新增第 5 条业务线，引擎代码 0 改动）
 
-Procedure: dropped `business_lines/test-line/{forecast.yaml, alerts.yaml, manifest.yaml}` and added one line to `registry.yaml`, then hit the API. The new line was auto-discovered, and both engines produced results.
+步骤：在 `business_lines/test-line/` 中放入 `{forecast.yaml, alerts.yaml, manifest.yaml}` 并向 `registry.yaml` 添加一行，然后调用 API。新业务线被自动发现，两个引擎都产生了结果。
 
 ```text
 $ curl GET /api/forecast/profiles       (after add)
@@ -200,7 +200,7 @@ count = 4
   residential: 4 series
   retail: 4 series
   retail-leasing: 4 series
-  test-line: 1 series             ← auto-discovered
+  test-line: 1 series             ← 自动发现
 
 $ curl GET /api/forecast/profiles/test-line
   test_kpi: method=sma horizon=6
@@ -216,40 +216,40 @@ rules_evaluated = 1, alerts_triggered = 1
   -> test-line 数值 1.0
 ```
 
-After verification, the test-line directory was removed and `registry.yaml` reverted. Confirmed: zero engine code changes are required to add a 5th line.
+验证完成后，test-line 目录已移除，`registry.yaml` 已回滚。结论：新增第 5 条业务线无需任何引擎代码改动。
 
 ---
 
-## 7 · Assumptions
+## 7 · 假设
 
-1. **Historical data is mocked** by `_generate_history(indicator_id, n)` in `forecast_engine.py` and `_mock_periods(target_id, indicator_id, n)` in `alert_engine.py`. They are deterministic per (indicator, target) so the same call returns the same series — useful for repeatability. When real historical data is wired in (e.g. from the dbt marts or ClickHouse), only the mock functions need to be replaced; the engine math stays the same.
-2. **Target lists** for alerts (projects / properties) are resolved by calling each line's `/projects` or `/properties` endpoint with a 0.5-second timeout. If the line API is unreachable, the engine falls back to a single line-level target so rules still fire. This makes the system work in dev (when only the cross-line API is up) and in prod.
-3. **Triggered alerts are in-memory.** A process restart wipes the store. That's fine for the demo. A future iteration could move the store to Redis or Postgres.
-4. **MAPE / bias are computed on the last 6 historical periods** as a model-quality sanity check; they're informational, not blocking.
-5. **95% CI half-width** for the linear_trend forecast grows as `z * sigma * sqrt(h)` where `h` is the horizon step. Bands visibly widen for longer horizons.
-6. **Attribution is mocked.** Real deviation attribution would compare predicted vs actual per factor — out of scope for this iteration.
-7. **Severity weights** (4 buckets × {0.30, 0.30, 0.20, 0.20}) are the same mock split used by the existing sensitivity engine. They sum to 1.0 and the heaviest buckets (market / project) reflect typical BP priorities.
-8. **Frontend polling** is the in-app channel (every 10s). Email / webhook channels are reserved in the rule schema but not implemented.
-9. **No new dependencies** were added to either `apps/api/pyproject.toml` or `apps/web/package.json`.
+1. **历史数据** 由 `forecast_engine.py` 中的 `_generate_history(indicator_id, n)` 和 `alert_engine.py` 中的 `_mock_periods(target_id, indicator_id, n)` 模拟生成。对相同的 (indicator, target) 是确定性的，方便重复实验。当接入真实历史数据（例如来自 dbt marts 或 ClickHouse）时，只需替换 mock 函数；引擎数学逻辑保持不变。
+2. **告警的目标列表**（项目 / 物业）通过以 0.5 秒超时调用各业务线的 `/projects` 或 `/properties` 端点解析。若业务线 API 不可达，引擎回退到单一业务线级目标，使规则仍能触发。这让系统既能跑在 dev（仅跨业务线 API 在线）也能跑在 prod。
+3. **触发的告警保存在内存中。** 进程重启会清空存储，demo 阶段无影响。后续可以将存储迁移到 Redis 或 Postgres。
+4. **MAPE / bias** 基于最近 6 个历史周期计算，作为模型质量的健康检查，仅供参考，不阻塞流程。
+5. **95% CI 半宽** 对 linear_trend 预测按 `z * sigma * sqrt(h)` 增长，其中 `h` 是预测期数。区间随预测期数变长而明显变宽。
+6. **归因是 mock。** 真实偏差归因应逐因子比较预测值与实际值 —— 不在本迭代范围。
+7. **严重度权重**（4 个分桶 × {0.30, 0.30, 0.20, 0.20}）与现有 sensitivity 引擎使用的同一套 mock 划分。总和为 1.0，权重最大的分桶（市场 / 项目）反映典型 BP 的优先级。
+8. **前端轮询** 为站内通道（每 10 秒）。Email / webhook 通道在规则 schema 中已预留，未实现。
+9. **未新增任何依赖** 到 `apps/api/pyproject.toml` 或 `apps/web/package.json`。
 
 ---
 
-## 8 · Blockers / open issues
+## 8 · 阻塞 / 未解决问题
 
-None.
+无。
 
 - `pytest apps/api/tests --ignore=apps/api/tests/test_copilot.py -q` → 74 passed
-- `npm run typecheck` (npx tsc --noEmit) → exit 0
-- Next.js dev compile + page render: all 6 verified pages return 200
-- Universality test: confirmed
-- Cleanup: temporary test-line directory removed via PowerShell Recycle Bin
+- `npm run typecheck`（npx tsc --noEmit）→ exit 0
+- Next.js dev 编译 + 页面渲染：6 个已验证页面均返回 200
+- 通用性测试：通过
+- 清理：临时 test-line 目录已通过 PowerShell 回收站移除
 
 ---
 
-## 9 · Quick navigation
+## 9 · 快速导航
 
-- Engine source: `apps/api/app/services/forecast_engine.py`, `apps/api/app/services/alert_engine.py`
-- HTTP routes: `apps/api/app/routers/forecast.py`, `apps/api/app/routers/alerts.py`
-- Frontend pages: `apps/web/app/(dashboard)/forecast/page.tsx`, `apps/web/app/(dashboard)/alerts/page.tsx`
-- Per-line config: `business_lines/{residential,retail,retail-leasing}/{forecast.yaml,alerts.yaml}`
-- Tests: `apps/api/tests/test_forecast.py`, `apps/api/tests/test_alerts.py`
+- 引擎源码：`apps/api/app/services/forecast_engine.py`、`apps/api/app/services/alert_engine.py`
+- HTTP 路由：`apps/api/app/routers/forecast.py`、`apps/api/app/routers/alerts.py`
+- 前端页面：`apps/web/app/(dashboard)/forecast/page.tsx`、`apps/web/app/(dashboard)/alerts/page.tsx`
+- 按业务线配置：`business_lines/{residential,retail,retail-leasing}/{forecast.yaml,alerts.yaml}`
+- 测试：`apps/api/tests/test_forecast.py`、`apps/api/tests/test_alerts.py`

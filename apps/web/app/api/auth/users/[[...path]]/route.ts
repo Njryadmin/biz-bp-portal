@@ -1,12 +1,13 @@
 // apps/web/app/api/auth/users/[[...path]]/route.ts
 //
-// Catch-all BFF proxy for /api/auth/users/* so the admin UI can call
-// list/create/update/delete/reset-password without CORS gymnastics.
+// /api/auth/users/* 的 BFF 通配代理，使管理后台在调用
+// list / create / update / delete / reset-password 时无需
+// 处理 CORS 细节。
 //
-// The browser POSTs /api/auth/users (or /api/auth/users/{id} or
-// /api/auth/users/{id}/reset-password) with the httpOnly cookie. The
-// BFF forwards method + body + cookie to the Python API and copies
-// the response status back.
+// 浏览器向 /api/auth/users（或 /api/auth/users/{id}、
+// /api/auth/users/{id}/reset-password）发起请求时携带
+// httpOnly cookie。BFF 转发 method + body + cookie 到 Python API，
+// 并把响应状态码原样回传。
 
 import { NextResponse } from "next/server";
 

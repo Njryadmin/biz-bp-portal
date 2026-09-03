@@ -1,8 +1,8 @@
 """
 apps/api/app/main.py
 
-FastAPI entrypoint. The startup event reads registry.yaml and mounts
-each business line's APIRouter / FastAPI sub-app under its api_prefix.
+FastAPI 入口。启动事件读取 registry.yaml，并将每个业务线的
+APIRouter / FastAPI 子应用挂载到其 api_prefix 之下。
 """
 from __future__ import annotations
 
@@ -39,9 +39,8 @@ async def lifespan(app: FastAPI):
     logger.info("Loading business line routers...")
     mount_business_line_routers(app)
     logger.info("Business line routers mounted.")
-    # Discover web scrapers eagerly so the log shows the registered
-    # list at startup (the routers would discover lazily on first hit
-    # anyway, but a boot-time line is nicer for ops).
+    # 主动发现 web 爬虫，便于启动日志中输出已注册列表
+    # （路由本身也会在首次访问时延迟发现，启动时打印更便于运维）。
     try:
         from .services.scrapers import discover_scrapers
         scrapers = discover_scrapers()
@@ -49,19 +48,18 @@ async def lifespan(app: FastAPI):
                     len(scrapers), ", ".join(s.source_id for s in scrapers))
     except Exception as exc:  # noqa: BLE001
         logger.warning("Scraper discovery failed: %s", exc)
-    # init_db() already has its own try/except + asyncio.wait_for inside
-    # (see app.db.session.init_db), but we add an outer guard here too:
-    # any unforeseen failure must NEVER prevent uvicorn from finishing
-    # its startup phase, otherwise the API appears to hang on boot when
-    # PostgreSQL is down.
+    # init_db() 内部已有自身的 try/except + asyncio.wait_for
+    # （参见 app.db.session.init_db），此处再增加一层保护：
+    # 任何意外异常都绝不能阻止 uvicorn 完成启动阶段，
+    # 否则 PostgreSQL 不可用时 API 会看似卡死在启动。
     try:
         await init_db()
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "init_db failed at lifespan level (continuing without DB): %s", exc
         )
-    # First-boot RBAC seed (admin + 1 BP per line). Best-effort:
-    # never block startup on this.
+    # 首次启动的 RBAC 种子（admin + 每个业务线一个 BP）。尽力而为：
+    # 不能因此阻塞启动。
     try:
         await seed_initial_users()
     except Exception as exc:  # noqa: BLE001
@@ -87,36 +85,35 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # Audit middleware sits inside CORS so it can read the cookie /
-    # Authorization header that the browser sent. It writes one row
-    # per request to raw.audit_log (best-effort).
+    # 审计中间件置于 CORS 之内，以便读取浏览器发送的 cookie /
+    # Authorization 头。每个请求向 raw.audit_log 写一行（尽力而为）。
     app.add_middleware(AuditMiddleware)
 
-    # Authentication / user management
+    # 身份认证 / 用户管理
     app.include_router(auth_router)
 
-    # Generic registry endpoints
+    # 通用注册表端点
     app.include_router(build_registry_router())
 
-    # Data-integration upload endpoints (Excel / CSV / bank-statement)
+    # 数据集成上传端点（Excel / CSV / 银行流水）
     app.include_router(upload_router)
 
-    # Cross-business-line sensitivity lab (universal, not under any line)
+    # 跨业务线敏感性 Lab（通用，不挂载在任何业务线下）
     app.include_router(sensitivity_router)
 
-    # AI Copilot (universal, not under any line)
+    # AI Copilot（通用，不挂载在任何业务线下）
     app.include_router(copilot_router)
 
-    # Rolling Forecast engine (universal)
+    # 滚动预测引擎（通用）
     app.include_router(forecast_router)
 
-    # Alert Center (universal)
+    # 告警中心（通用）
     app.include_router(alerts_router)
 
-    # Web scrapers (market data ingest)
+    # Web 爬虫（市场数据接入）
     app.include_router(scrapers_router)
 
-    # AI-models registry (runtime-toggleable LLM provider switcher)
+    # AI 模型注册表（运行时可切换的 LLM 厂商开关）
     app.include_router(ai_models_router)
 
     @app.get("/")

@@ -1,442 +1,403 @@
-# fin-bp-portal �� Architecture Consistency Audit
+# fin-bp-portal — 架构一致性审计
 
-**Date**: 2026-09-03
-**Auditor**: Verifier
-**Scope**: Verify the implementation delivers on the architecture promises
-(`apps/`/`infra/`/`packages/` are generic, business lines are plugins,
-zero core-code change to add a new line).
-**Method**: Static grep + dynamic end-to-end universality test (add/remove
-`test-line`, restart API, re-query all engines).
+**日期**：2026-09-03
+**审计人**：Verifier
+**范围**：验证实现是否兑现了架构承诺
+（`apps/` / `infra/` / `packages/` 通用，业务线即插件，新增业务线 0 改动核心代码）。
+**方法**：静态 grep + 动态端到端通用性测试（新增/移除 `test-line`、重启 API、重新查询所有引擎）。
 
 ---
 
-## Result: **PARTIAL** (with caveats)
+## 结果：**部分通过**（带说明）
 
-**Score: 10 / 11 checks PASS** �� 1 PASS-with-notes (A1 has 3 minor
-hardcoded-line violations in the LLM mock + 1 in the linePageConfig table
-that are not blocking).
+**得分：10 / 11 项 PASS** — 1 项 PASS-with-notes（A1 存在 3 处 LLM mock 中的硬编码业务线问题，外加 linePageConfig 表 1 处，但都不阻塞）。
 
-| # | Check | Result |
+| # | 检查项 | 结果 |
 |---|---|---|
-| A1 | Core code has no hardcoded business-line names | PASS with 3 P2 notes (see ��2) |
-| A2 | Business-line auto-discovery works at runtime | PASS |
-| A3 | Adding a new business line needs zero core-code change | PASS (universality test) |
-| B1 | Engines read per-line YAML at runtime | PASS |
-| B2 | LLM abstraction layer with fallback chain | PASS |
-| B3 | Scraper framework with `is_fallback` / `used_fallback` flag | PASS |
-| C1 | Frontend dynamic `[line]/[page]/page.tsx` routes | PASS (data-driven; linePageConfig is UI config) |
-| C2 | 5 engine pages exist (sensitivity/copilot/forecast/alerts/scrapers) | PASS |
-| C3 | Topbar contains all 4 engines + /scrapers | PASS |
-| D | Each business line ships the 8-file skeleton | PASS for residential/retail/retail-leasing; 6 newer lines ship 7/8 (no dbt_project.yml, see ��3) |
-| E | Config consistency (registry.yaml + plugin-howto.md + package.json) | PASS |
+| A1 | 核心代码无硬编码业务线名称 | PASS，附 3 处 P2 备注（见 §2） |
+| A2 | 业务线运行时自动发现 | PASS |
+| A3 | 新增业务线无需核心代码改动 | PASS（通用性测试验证） |
+| B1 | 引擎运行时读取按业务线 YAML | PASS |
+| B2 | LLM 抽象层带降级链 | PASS |
+| B3 | 爬虫框架带 `is_fallback` / `used_fallback` 标志 | PASS |
+| C1 | 前端动态 `[line]/[page]/page.tsx` 路由 | PASS（数据驱动；linePageConfig 是 UI 配置） |
+| C2 | 5 个引擎页面齐全（sensitivity/copilot/forecast/alerts/scrapers） | PASS |
+| C3 | Topbar 含全部 4 个引擎 + /scrapers | PASS |
+| D | 每条业务线交付 8 文件骨架 | residential/retail/retail-leasing PASS；6 条新业务线交付 7/8（无 dbt_project.yml，见 §3） |
+| E | 配置一致性（registry.yaml + plugin-howto.md + package.json） | PASS |
 
-**No P0 / P1 issues found.** Three P2 issues documented in ��2 �� they
-are real hardcoding violations but bounded, documented, and do not
-block the universality invariant.
+**未发现 P0 / P1 问题。** §2 中记录的 3 处 P2 问题属于真实硬编码违规，但有界、有文档记录，不阻塞通用性不变量。
 
 ---
 
-## 1. Promise-vs-Implementation Matrix
+## 1. 承诺 vs 实现矩阵
 
-### A. Plugin isolation (most critical)
+### A. 插件隔离（最关键）
 
-#### A1. Core code has no hardcoded business-line names
+#### A1. 核心代码无硬编码业务线名称
 
-**Status: PASS with 3 P2 notes** (3 minor hardcoded dictionaries in
-the LLM mock + 1 in the web app linePageConfig table).
+**状态：PASS，附 3 处 P2 备注**（LLM mock 中 3 处次要硬编码字典 + web 端 linePageConfig 表中 1 处）。
 
-**Evidence �� clean core code (no hardcoded business line names)**:
+**证据 — 核心代码干净（无硬编码业务线名称）**：
 
-- `apps/api/app/routers/*.py` �� 0 matches
-- `apps/api/app/services/sensitivity_engine.py` �� 0 matches
-- `apps/api/app/services/forecast_engine.py` �� 0 matches
-- `apps/api/app/services/alert_engine.py` �� 0 matches (the "Operator
-  evaluation" hit at line 436 is a comment containing "valuation" in
-  the word "evaluat**ion**")
-- `apps/api/app/services/scrapers/**/*.py` �� 0 matches
-- `apps/api/app/core/*.py` �� 0 matches
-- `apps/api/app/db/*.py` �� 0 matches
-- `apps/api/app/schemas/*.py` �� 0 matches
-- `apps/web/app/api/**/*.ts` �� 0 matches (BFF proxy)
-- `apps/web/lib/registry.ts` �� 0 matches
-- `apps/web/app/(dashboard)/_components/Topbar.tsx` �� 0 matches
-- `apps/web/app/(dashboard)/_components/SidebarMenu.tsx` �� 0 matches
-- `apps/web/app/(dashboard)/[line]/page.tsx` �� 0 matches
-- `apps/web/app/(dashboard)/[line]/[page]/page.tsx` �� 0 matches
-  (only code comments mention line names; renderer is data-driven)
-- `apps/web/app/(dashboard)/{sensitivity,copilot,forecast,alerts,scrapers}/page.tsx` �� 0 matches
-- `infra/dbt/models/**/*.sql` �� only 1 hardcoded reference
-  (`stg_residential_seed.sql` + `sample_residential.csv`) �� these are
-  reference-data seeds for the residential line, not engine code; all
-  6 newer lines have their own per-line dbt models under
-  `business_lines/<line>/dbt/`
-- `packages/ui/src/RoleSwitcher.tsx` �� 0 matches (purely dynamic)
-- `packages/types/src/index.ts` �� 0 matches
+- `apps/api/app/routers/*.py` — 0 处匹配
+- `apps/api/app/services/sensitivity_engine.py` — 0 处匹配
+- `apps/api/app/services/forecast_engine.py` — 0 处匹配
+- `apps/api/app/services/alert_engine.py` — 0 处匹配（436 行的 "Operator evaluation" 是注释中"evaluat**ion**"这个词里含了 "valuation"）
+- `apps/api/app/services/scrapers/**/*.py` — 0 处匹配
+- `apps/api/app/core/*.py` — 0 处匹配
+- `apps/api/app/db/*.py` — 0 处匹配
+- `apps/api/app/schemas/*.py` — 0 处匹配
+- `apps/web/app/api/**/*.ts` — 0 处匹配（BFF 代理）
+- `apps/web/lib/registry.ts` — 0 处匹配
+- `apps/web/app/(dashboard)/_components/Topbar.tsx` — 0 处匹配
+- `apps/web/app/(dashboard)/_components/SidebarMenu.tsx` — 0 处匹配
+- `apps/web/app/(dashboard)/[line]/page.tsx` — 0 处匹配
+- `apps/web/app/(dashboard)/[line]/[page]/page.tsx` — 0 处匹配
+  （仅代码注释提及业务线名称；渲染器是数据驱动的）
+- `apps/web/app/(dashboard)/{sensitivity,copilot,forecast,alerts,scrapers}/page.tsx` — 0 处匹配
+- `infra/dbt/models/**/*.sql` — 仅 1 处硬编码引用
+  （`stg_residential_seed.sql` + `sample_residential.csv`）— 这是 residential 业务线的参考数据种子，不是引擎代码；6 条新业务线都有自己的 dbt 模型，位于 `business_lines/<line>/dbt/`
+- `packages/ui/src/RoleSwitcher.tsx` — 0 处匹配（完全动态）
+- `packages/types/src/index.ts` — 0 处匹配
 
-**P2 violations (hardcoded, but bounded and documented)**:
+**P2 违规（硬编码但有界、有文档）**：
 
-| File | Hardcoded lines | What it is | Why acceptable today | Should it be fixed? |
+| 文件 | 硬编码业务线 | 内容 | 今日可接受原因 | 是否应修复 |
 |---|---|---|---|---|
-| `apps/api/app/services/llm/mock_helpers.py:73-83` | residential / retail / retail-leasing / valuation / advisory / office-leasing / investment / project-management / industrial / my-line | `_LINE_DISPLAY_NAMES` dict | Architecture allows it: "mock fallback �İ����Ѽ� _LINE_DISPLAY_NAMES �ֵ䣩". | No (explicit allow-list). |
-| `apps/api/app/services/llm/mock_helpers.py:117-740` | `intent_residential_*` (4) / `intent_retail_*` (3) / `intent_retail-leasing` (2) | Per-line mock intent handlers | Mock-only stubs; 6 newer lines fall back to `intent_line_indicators` / `intent_fallback` �� see ��3.1. | Yes (long-term). |
-| `apps/api/app/services/llm/mock.py:134-161` | residential / retail / retail-leasing / my-line / valuation / advisory / office-leasing / investment / project-management / industrial | `_LINE_ALIAS_SEEDS` dict | Architecture allows it: "���˶�̬ alias �ֵ�". | No (explicit allow-list). |
-| `apps/api/app/services/llm/prompts.py:88-110` | residential / retail / retail-leasing / my-line | `ENDPOINT_CATALOG` dict (LLM system-prompt hint) | **Real A1 violation** �� not in the allow-list. 6 newer lines are absent, so system prompt won't advertise their endpoints. | Yes (P2-1). |
-| `apps/api/app/services/copilot_engine.py:166-184` | residential / retail / retail-leasing | `LINE_SUGGESTIONS` dict | **Real A1 violation** �� hardcoded per-line "ʾ������". 6 newer lines silently fall back to "common" only. | Yes (P2-2). |
-| `apps/web/app/(dashboard)/_components/linePageConfig.ts:50-78` | residential / retail / retail-leasing / my-line | `LINE_PAGE_SPECS` (URL slug �� page render kind) | **Real A1 violation** �� architecture forbids hardcoded business line names in `apps/web/app/(dashboard)/**` except for dynamic routes. 6 newer lines fall through to `not-integrated` even when they have working pages. | Yes (P2-3). |
+| `apps/api/app/services/llm/mock_helpers.py:73-83` | residential / retail / retail-leasing / valuation / advisory / office-leasing / investment / project-management / industrial / my-line | `_LINE_DISPLAY_NAMES` 字典 | 架构允许："mock fallback 文案（已加 _LINE_DISPLAY_NAMES 字典）" | 否（明确白名单） |
+| `apps/api/app/services/llm/mock_helpers.py:117-740` | `intent_residential_*`（4）/ `intent_retail_*`（3）/ `intent_retail-leasing`（2） | 按业务线的 mock intent 处理器 | 仅 mock 存根；6 条新业务线回退到 `intent_line_indicators` / `intent_fallback`，见 §3.1。 | 是（长期） |
+| `apps/api/app/services/llm/mock.py:134-161` | residential / retail / retail-leasing / my-line / valuation / advisory / office-leasing / investment / project-management / industrial | `_LINE_ALIAS_SEEDS` 字典 | 架构允许："除了动态 alias 字典" | 否（明确白名单） |
+| `apps/api/app/services/llm/prompts.py:88-110` | residential / retail / retail-leasing / my-line | `ENDPOINT_CATALOG` 字典（LLM system-prompt 提示） | **真实的 A1 违规** — 不在白名单内。6 条新业务线缺席，因此 system prompt 不会宣传它们的端点。 | 是（P2-1） |
+| `apps/api/app/services/copilot_engine.py:166-184` | residential / retail / retail-leasing | `LINE_SUGGESTIONS` 字典 | **真实的 A1 违规** — 硬编码按业务线的"示例问题"。6 条新业务线静默回退到仅 "common"。 | 是（P2-2） |
+| `apps/web/app/(dashboard)/_components/linePageConfig.ts:50-78` | residential / retail / retail-leasing / my-line | `LINE_PAGE_SPECS`（URL slug → 页面渲染类型） | **真实的 A1 违规** — 架构禁止在 `apps/web/app/(dashboard)/**` 中硬编码业务线名称（动态路由除外）。6 条新业务线即使有可用页面，也会落到 `not-integrated`。 | 是（P2-3） |
 
-#### A2. Business-line auto-discovery really works at runtime
+#### A2. 业务线运行时自动发现确实工作
 
-**Status: PASS** (verified by universality test in ��4).
+**状态：PASS**（由 §4 的通用性测试验证）。
 
-| Subsystem | Mechanism | Evidence |
+| 子系统 | 机制 | 证据 |
 |---|---|---|
 | `apps/api/app/routers/registry.py` | `importlib.util.spec_from_file_location` + `module_from_spec` | `apps/api/app/routers/registry.py:39-61` |
-| `apps/api/app/core/registry.py` | YAML-driven `load_registry()` (no Python imports) | `apps/api/app/core/registry.py:191-220` |
-| `apps/api/app/services/sensitivity_engine.py` | Reads `business_lines/<line>/sensitivity.yaml` | `apps/api/app/services/sensitivity_engine.py:223-269` |
-| `apps/api/app/services/forecast_engine.py` | Reads `business_lines/<line>/forecast.yaml` | `apps/api/app/services/forecast_engine.py:187-227` |
-| `apps/api/app/services/alert_engine.py` | Reads `business_lines/<line>/alerts.yaml` | `apps/api/app/services/alert_engine.py:185-226` |
-| `apps/api/app/services/copilot_engine.py` | `load_registry()` for the system prompt | `apps/api/app/services/copilot_engine.py:42,55` |
+| `apps/api/app/core/registry.py` | YAML 驱动的 `load_registry()`（无 Python import） | `apps/api/app/core/registry.py:191-220` |
+| `apps/api/app/services/sensitivity_engine.py` | 读取 `business_lines/<line>/sensitivity.yaml` | `apps/api/app/services/sensitivity_engine.py:223-269` |
+| `apps/api/app/services/forecast_engine.py` | 读取 `business_lines/<line>/forecast.yaml` | `apps/api/app/services/forecast_engine.py:187-227` |
+| `apps/api/app/services/alert_engine.py` | 读取 `business_lines/<line>/alerts.yaml` | `apps/api/app/services/alert_engine.py:185-226` |
+| `apps/api/app/services/copilot_engine.py` | 为 system prompt 调用 `load_registry()` | `apps/api/app/services/copilot_engine.py:42,55` |
 | `apps/api/app/services/scrapers/registry.py` | `pkgutil.iter_modules` + `importlib.import_module` | `apps/api/app/services/scrapers/registry.py:106-140` |
 
-#### A3. Adding a new business line requires zero core-code change
+#### A3. 新增业务线零核心代码改动
 
-**Status: PASS** �� confirmed end-to-end (full reproducibility in ��4).
+**状态：PASS** — 端到端确认（完整可复现性见 §4）。
 
 ---
 
-### B. Engine + scraper boundaries
+### B. 引擎 + 爬虫边界
 
-#### B1. Engines read per-line YAML
+#### B1. 引擎读取按业务线 YAML
 
-**Status: PASS** �� verified by enumeration of all 9 production lines:
+**状态：PASS** — 通过对全部 9 条生产业务线的枚举验证：
 
-| Engine | File | Lines that have the YAML |
+| 引擎 | 文件 | 持有 YAML 的业务线 |
 |---|---|---|
-| Sensitivity | `business_lines/<line>/sensitivity.yaml` | residential, retail, retail-leasing, valuation, advisory, office-leasing, investment, project-management, industrial �� **9/9** |
-| Forecast   | `business_lines/<line>/forecast.yaml`    | same 9 (my-line has no engines by design) �� **9/9** |
-| Alerts     | `business_lines/<line>/alerts.yaml`      | same 9 �� **9/9** |
+| Sensitivity | `business_lines/<line>/sensitivity.yaml` | residential, retail, retail-leasing, valuation, advisory, office-leasing, investment, project-management, industrial — **9/9** |
+| Forecast   | `business_lines/<line>/forecast.yaml`    | 同上 9 条（my-line 按设计无引擎）— **9/9** |
+| Alerts     | `business_lines/<line>/alerts.yaml`      | 同上 9 条 — **9/9** |
 
-#### B2. LLM abstraction layer
+#### B2. LLM 抽象层
 
-**Status: PASS** �� `apps/api/app/services/llm/`:
+**状态：PASS** — `apps/api/app/services/llm/`：
 
-- `base.py` �� `LLMBackend` Protocol with `name` / `complete()` / `embed()`
-- `mock.py` �� `MockBackend` (deterministic rule engine, no I/O)
-- `deepseek.py` �� `DeepSeekBackend` (real LLM, env-gated by `DEEPSEEK_API_KEY`)
-- `ollama.py` �� `OllamaBackend` (local LLM, env-gated by `OLLAMA_BASE_URL`)
-- `__init__.py` �� `get_llm_backend()` factory + `FallbackBackend` wrapper
-  that catches any primary exception and falls back to mock, setting
-  `used_fallback=True` and `last_error` on the instance.
+- `base.py` — `LLMBackend` Protocol，含 `name` / `complete()` / `embed()`
+- `mock.py` — `MockBackend`（确定性规则引擎，无 I/O）
+- `deepseek.py` — `DeepSeekBackend`（真实 LLM，由 `DEEPSEEK_API_KEY` 控制）
+- `ollama.py` — `OllamaBackend`（本地 LLM，由 `OLLAMA_BASE_URL` 控制）
+- `__init__.py` — `get_llm_backend()` 工厂 + `FallbackBackend` 包装器，
+  捕获 primary 任何异常并降级到 mock，在实例上设置 `used_fallback=True` 和 `last_error`。
 
-Live `GET /api/copilot/health` confirms the factory picked mock and
-reports `configured_backend=mock`, `deepseek_key_present=false`,
-`ollama_url=null`.
+线上 `GET /api/copilot/health` 确认工厂选了 mock，并报告
+`configured_backend=mock`、`deepseek_key_present=false`、`ollama_url=null`。
 
-#### B3. Scraper framework
+#### B3. 爬虫框架
 
-**Status: PASS** �� `apps/api/app/services/scrapers/`:
+**状态：PASS** — `apps/api/app/services/scrapers/`：
 
-- `base.py` �� `BaseScraper` ABC + `Scraper` Protocol + `ScraperRunResult`
-  dataclass with `used_fallback: bool` field
-- `scrapers/registry.py` �� `pkgutil.iter_modules` discovery
-- 3 scrapers registered: `nbs_house_price`, `lianjia_deals`, `policy_crawler`
-- Each `BaseScraper` subclass overrides `fallback()` and tags every row
-  with `"is_fallback": True` (verified at `scrapers/nbs_house_price.py:187-207`,
-  `scrapers/lianjia_deals.py:127-172`, `scrapers/policy_crawler.py:317-323`).
-- The 3 scrapers landed in the boot log: `Discovered 3 scraper(s):
-  lianjia_deals, nbs_house_price, policy_crawler`.
+- `base.py` — `BaseScraper` ABC + `Scraper` Protocol + `ScraperRunResult`
+  dataclass，含 `used_fallback: bool` 字段
+- `scrapers/registry.py` — `pkgutil.iter_modules` 发现
+- 3 个爬虫已注册：`nbs_house_price`、`lianjia_deals`、`policy_crawler`
+- 每个 `BaseScraper` 子类都覆盖 `fallback()` 并把每行打上 `"is_fallback": True` 标签
+  （在 `scrapers/nbs_house_price.py:187-207`、`scrapers/lianjia_deals.py:127-172`、
+  `scrapers/policy_crawler.py:317-323` 验证）
+- 启动日志中确认 3 个爬虫： `Discovered 3 scraper(s):
+  lianjia_deals, nbs_house_price, policy_crawler`。
 
 ---
 
-### C. Frontend dynamic routes
+### C. 前端动态路由
 
-#### C1. Business-line dynamic routes
+#### C1. 业务线动态路由
 
-**Status: PASS** �� both files exist, both are pure data fetchers:
+**状态：PASS** — 两个文件均存在，都是纯数据拉取器：
 
-- `apps/web/app/(dashboard)/[line]/page.tsx` �� fetches `/api/registry`
-  and `/api/lines/{line}/indicators`; never imports `business_lines/`
-- `apps/web/app/(dashboard)/[line]/[page]/page.tsx` �� same; uses
-  `getPageSpec()` from `linePageConfig.ts` to map slug �� render kind
+- `apps/web/app/(dashboard)/[line]/page.tsx` — 拉取 `/api/registry`
+  和 `/api/lines/{line}/indicators`；绝不 import `business_lines/`
+- `apps/web/app/(dashboard)/[line]/[page]/page.tsx` — 同上；通过
+  `linePageConfig.ts` 的 `getPageSpec()` 把 slug 映射为渲染类型
 
-#### C2. 5 engine pages exist
+#### C2. 5 个引擎页面齐全
 
-**Status: PASS** �� all 5 present:
+**状态：PASS** — 5 个全部就位：
 - `apps/web/app/(dashboard)/sensitivity/page.tsx`
 - `apps/web/app/(dashboard)/copilot/page.tsx`
 - `apps/web/app/(dashboard)/forecast/page.tsx`
 - `apps/web/app/(dashboard)/alerts/page.tsx`
 - `apps/web/app/(dashboard)/scrapers/page.tsx`
 
-(Plus the cockpit `dashboard/page.tsx` and the 2 dynamic `[line]` pages.)
+（外加驾驶舱 `dashboard/page.tsx` 和 2 个动态 `[line]` 页面。）
 
-#### C3. Topbar completeness
+#### C3. Topbar 完整性
 
-**Status: PASS** �� `apps/web/app/(dashboard)/_components/Topbar.tsx`
-contains exactly the 5 expected cross-cutting links in this order:
+**状态：PASS** — `apps/web/app/(dashboard)/_components/Topbar.tsx`
+按以下顺序包含 5 个预期的跨业务线链接：
 
-1. �����Է��� �� `/sensitivity` (ExperimentOutlined)
-2. AI Copilot �� `/copilot` (RobotOutlined)
-3. ����Ԥ�� �� `/forecast` (LineChartOutlined)
-4. �澯���� �� `/alerts` (AlertOutlined)
-5. **�г����� �� `/scrapers`** (CloudDownloadOutlined) �� present
+1. 敏感性分析 → `/sensitivity`（ExperimentOutlined）
+2. AI Copilot → `/copilot`（RobotOutlined）
+3. 滚动预测 → `/forecast`（LineChartOutlined）
+4. 告警中心 → `/alerts`（AlertOutlined）
+5. **市场数据 → `/scrapers`**（CloudDownloadOutlined）— 已就位
 
-Plus the dynamic `RoleSwitcher` (line-count-driven).
+外加动态 `RoleSwitcher`（由业务线数量驱动）。
 
-The business-line list lives in the sidebar (not the topbar), and it
-is entirely registry-driven (`SidebarMenu` takes `lines` from the BFF
-and sorts by `display_name` with `zh-Hans-CN` locale).
+业务线列表位于侧边栏（而非 Topbar），完全由注册表驱动
+（`SidebarMenu` 从 BFF 接收 `lines`，按 `display_name` 排序，本地化使用 `zh-Hans-CN`）。
 
 ---
 
-### D. Per-business-line file skeleton (8 files each)
+### D. 每条业务线的文件骨架（每条 8 个文件）
 
-**Status: PASS** with one minor consistency note (see ��3 D2).
+**状态：PASS**，附一条小的一致性备注（见 §3 D2）。
 
-| Line | manifest | indicators | api/router | sensitivity | forecast | alerts | dbt/models | data/seed |
+| 业务线 | manifest | indicators | api/router | sensitivity | forecast | alerts | dbt/models | data/seed |
 |---|---|---|---|---|---|---|---|---|
-| residential        | YES | YES | YES | YES | YES | YES | YES + `dbt_project.yml` | YES (8 files) |
+| residential        | YES | YES | YES | YES | YES | YES | YES + `dbt_project.yml` | YES（8 文件） |
 | retail             | YES | YES | YES | YES | YES | YES | YES + `dbt_project.yml` | YES |
 | retail-leasing     | YES | YES | YES | YES | YES | YES | YES + `dbt_project.yml` | YES |
-| valuation          | YES | YES | YES | YES | YES | YES | YES (no `dbt_project.yml`) | YES |
-| advisory           | YES | YES | YES | YES | YES | YES | YES (no `dbt_project.yml`) | YES |
-| office-leasing     | YES | YES | YES | YES | YES | YES | YES (no `dbt_project.yml`) | YES |
-| investment         | YES | YES | YES | YES | YES | YES | YES (no `dbt_project.yml`) | YES |
-| project-management | YES | YES | YES | YES | YES | YES | YES (no `dbt_project.yml`) | YES |
-| industrial         | YES | YES | YES | YES | YES | YES | YES (no `dbt_project.yml`) | YES |
-| my-line (demo)     | YES | YES | YES | ��  | ��  | ��  | YES (no `dbt_project.yml`) | �� |
+| valuation          | YES | YES | YES | YES | YES | YES | YES（无 `dbt_project.yml`） | YES |
+| advisory           | YES | YES | YES | YES | YES | YES | YES（无 `dbt_project.yml`） | YES |
+| office-leasing     | YES | YES | YES | YES | YES | YES | YES（无 `dbt_project.yml`） | YES |
+| investment         | YES | YES | YES | YES | YES | YES | YES（无 `dbt_project.yml`） | YES |
+| project-management | YES | YES | YES | YES | YES | YES | YES（无 `dbt_project.yml`） | YES |
+| industrial         | YES | YES | YES | YES | YES | YES | YES（无 `dbt_project.yml`） | YES |
+| my-line（demo）    | YES | YES | YES | —  | —  | —  | YES（无 `dbt_project.yml`） | — |
 
-The 6 newer lines (valuation �� industrial) are missing
-`business_lines/<line>/dbt/dbt_project.yml`. They DO have the
-`dbt/models/{staging,marts}/*.sql` files (which is the contract the
-architecture requires). The 3 older lines have a `dbt_project.yml`
-because they were delivered under the older "line-owned dbt project"
-model �� see ��3 D2.
-
----
-
-### E. Configuration consistency
-
-**Status: PASS**:
-
-- `business_lines/registry.yaml` lists all 10 production lines, ordered
-  exactly as they appear in the directory layout (residential, retail,
-  retail-leasing, my-line, valuation, advisory, office-leasing,
-  investment, project-management, industrial).
-- `docs/plugin-howto.md` describes the **5-step** add-a-line workflow
-  (copy template �� edit YAML �� wire API �� register �� restart) and
-  matches the actual code path (`routers/registry.py` does the
-  importlib mount, the `api_prefix` from manifest is the mount point,
-  and the README links to the right files).
-  Minor: ��1 of the howto still mentions `web/pages/*.tsx` in the
-  template directory listing, but the actual app uses the dynamic
-  `[line]/page.tsx` route �� see ��3.3.
-- `package.json` workspaces cover `apps/*` and `packages/*` �� both
-  `apps/web` and `apps/api` are present; `packages/ui` and
-  `packages/types` are present. The 9 business-line directories are
-  NOT workspaces (which is correct �� they are leaf plugins, not build
-  targets).
+6 条较新的业务线（valuation 到 industrial）缺失
+`business_lines/<line>/dbt/dbt_project.yml`。它们**确实**有
+`dbt/models/{staging,marts}/*.sql` 文件（架构要求的契约）。3 条老业务线
+有 `dbt_project.yml` 是因为它们是在更早的"业务线拥有自己的 dbt 项目"
+模型下交付的 — 见 §3 D2。
 
 ---
 
-## 2. Findings (by severity)
+### E. 配置一致性
 
-### P0 �� Blocking (must-fix before release)
-**None.**
+**状态：PASS**：
 
-### P1 �� Important (should-fix before next deliverable)
-**None.**
-
-### P2 �� Nice-to-have (cleanup)
-
-#### P2-1. `ENDPOINT_CATALOG` in `prompts.py` is a real A1 violation
-
-**File**: `apps/api/app/services/llm/prompts.py:88-110`
-**Why**: The architecture's allow-list for `llm/` is "��̬ alias �ֵ�"
-only. `ENDPOINT_CATALOG` is a hint catalog, not an alias dictionary,
-and it hardcodes line ids (`residential`, `retail`, `retail-leasing`,
-`my-line`). The 6 newer lines are absent from it, so the LLM system
-prompt won't advertise their endpoints.
-**Fix options**:
-  (a) Build the catalog at runtime by walking `load_registry()` +
-      `manifest.nav[]` and probing each line's `/api/lines/<id>/ping`
-      response.
-  (b) Move the catalog into `business_lines/<line>/llm_hints.yaml`
-      (one per line) and have `prompts.py` aggregate at startup.
-**Effort**: small (~30 LoC).
-**Risk**: low �� the LLM still works today (the missing entries are
-non-blocking for the 4 well-known endpoints).
-
-#### P2-2. `LINE_SUGGESTIONS` in `copilot_engine.py` is a real A1 violation
-
-**File**: `apps/api/app/services/copilot_engine.py:166-184`
-**Why**: Hardcoded per-line "ʾ������" for residential, retail,
-retail-leasing. The 6 newer lines and any future line will fall back
-to "common" suggestions only.
-**Fix options**:
-  (a) Move per-line suggestions into a new
-      `business_lines/<line>/suggestions.yaml` and aggregate at startup.
-  (b) Generate suggestions from the manifest's `nav[]` titles
-      (e.g. "�鿴 <line> ������ϸ" from `manifest.nav[].title`).
-**Effort**: small.
-**Risk**: low.
-
-#### P2-3. `linePageConfig.ts` is a UI-level hardcoded config table
-
-**File**: `apps/web/app/(dashboard)/_components/linePageConfig.ts:50-78`
-**Why**: The architecture forbids hardcoded business line names in
-`apps/web/app/(dashboard)/**` except for the dynamic `[line]/[page]/page.tsx`
-route. `linePageConfig.ts` has `LINE_PAGE_SPECS` for residential, retail,
-retail-leasing, my-line �� the 6 newer lines fall through to
-`not-integrated` even when they have working pages.
-**Reality check**: this file IS the routing table the dynamic page
-consults to know "for `retail/noi`, render `property-detail` against
-`noi-waterfall`". Without it, the dynamic page would have nothing to
-dispatch on. So it is structurally necessary today.
-**Fix options**:
-  (a) Promote it to the architecture's allow-list (`packages/ui/src/`
-      is the suggested home) and document it as a per-(line, page)
-      hint table �� same status as `RoleSwitcher.tsx` (also allow-listed).
-  (b) Add a `kind` discriminator to each `manifest.nav[]` entry so the
-      table can be generated at build time.
-**Effort**: medium (option b touches the manifest schema).
-**Risk**: low.
+- `business_lines/registry.yaml` 列出全部 10 条生产业务线，顺序与目录布局
+  完全一致（residential、retail、retail-leasing、my-line、valuation、
+  advisory、office-leasing、investment、project-management、industrial）。
+- `docs/plugin-howto.md` 描述了**5 步**的"新增业务线"工作流
+  （复制模板 → 编辑 YAML → 接入 API → 注册 → 重启），
+  并与实际代码路径匹配（`routers/registry.py` 做 importlib 挂载、
+  manifest 中的 `api_prefix` 即挂载点、README 链接到正确的文件）。
+  小备注：howto 的 §1 仍在模板目录列表中提及 `web/pages/*.tsx`，
+  但实际应用使用动态的 `[line]/page.tsx` 路由 — 见 §3.3。
+- `package.json` workspaces 覆盖 `apps/*` 和 `packages/*` — `apps/web`
+  和 `apps/api` 均在；`packages/ui` 和 `packages/types` 也在。9 个业务线
+  目录**不**是 workspace（这是正确的 — 它们是叶子插件，不是构建目标）。
 
 ---
 
-## 3. Architectural deviations & unfulfilled promises
+## 2. 发现（按严重度）
 
-### 3.1 Mock intent handlers cover only 3 of 10 lines
+### P0 — 阻塞（发布前必须修复）
+**无。**
 
-`apps/api/app/services/llm/mock_helpers.py` has 13 intent handlers,
-but 7 of them are hardcoded to specific business lines:
+### P1 — 重要（下次交付前应修复）
+**无。**
 
-| Intent | Locked to | Other lines |
+### P2 — 可选改进（清理）
+
+#### P2-1. `prompts.py` 中的 `ENDPOINT_CATALOG` 是真实的 A1 违规
+
+**文件**：`apps/api/app/services/llm/prompts.py:88-110`
+**原因**：架构对 `llm/` 的白名单只允许"动态 alias 字典"。`ENDPOINT_CATALOG`
+是提示目录而非 alias 字典，并硬编码了业务线 id（`residential`、`retail`、
+`retail-leasing`、`my-line`）。6 条新业务线缺失，因此 LLM system prompt
+不会宣传它们的端点。
+**修复方案**：
+  (a) 在运行时通过遍历 `load_registry()` + `manifest.nav[]` 并探测每条业务线
+      `/api/lines/<id>/ping` 响应来构建目录。
+  (b) 把目录移到 `business_lines/<line>/llm_hints.yaml`（每条业务线一份），
+      由 `prompts.py` 在启动时聚合。
+**工作量**：小（~30 行代码）。
+**风险**：低 — LLM 今日仍能工作（缺失条目对 4 个常用端点不构成阻塞）。
+
+#### P2-2. `copilot_engine.py` 中的 `LINE_SUGGESTIONS` 是真实的 A1 违规
+
+**文件**：`apps/api/app/services/copilot_engine.py:166-184`
+**原因**：硬编码了 residential、retail、retail-leasing 的按业务线"示例问题"。
+6 条新业务线及任何未来的业务线都只会回退到 "common" 建议。
+**修复方案**：
+  (a) 把按业务线的建议移到新的 `business_lines/<line>/suggestions.yaml`，
+      在启动时聚合。
+  (b) 从 manifest 的 `nav[]` 标题生成建议
+      （例如基于 `manifest.nav[].title` 生成"查看 <line> 项目详情"）。
+**工作量**：小。
+**风险**：低。
+
+#### P2-3. `linePageConfig.ts` 是 UI 层硬编码配置表
+
+**文件**：`apps/web/app/(dashboard)/_components/linePageConfig.ts:50-78`
+**原因**：架构禁止在 `apps/web/app/(dashboard)/**` 中硬编码业务线名称
+（动态 `[line]/[page]/page.tsx` 路由除外）。`linePageConfig.ts` 包含
+residential、retail、retail-leasing、my-line 的 `LINE_PAGE_SPECS` — 6 条
+新业务线即使有可用页面，也会落到 `not-integrated`。
+**现状检查**：该文件确实就是动态页面用来知道"对 `retail/noi`，按 `noi-waterfall`
+渲染 `property-detail`"的路由表。没有它，动态页面将没有任何派发依据。
+因此它在当前结构上是必需的。
+**修复方案**：
+  (a) 将其纳入架构的白名单（建议放在 `packages/ui/src/`）并将其作为
+      按 (line, page) 的提示表 — 与 `RoleSwitcher.tsx` 同样处于白名单
+      （也是允许的）。
+  (b) 给每个 `manifest.nav[]` 条目添加 `kind` 判别字段，使表能在构建时生成。
+**工作量**：中等（方案 b 涉及 manifest schema）。
+**风险**：低。
+
+---
+
+## 3. 架构偏差与未兑现的承诺
+
+### 3.1 Mock intent 处理器仅覆盖 10 条业务线中的 3 条
+
+`apps/api/app/services/llm/mock_helpers.py` 有 13 个 intent 处理器，
+但其中 7 个被硬编码到具体业务线：
+
+| Intent | 锁定的业务线 | 其它业务线 |
 |---|---|---|
-| `irr_top`, `payment_low`, `redlines`, `dedup_low` | residential | only common fallback |
-| `noi_top`, `renovation`, `collection` | retail | only common fallback |
-| `vacancy`, `benchmark` | retail-leasing | only common fallback |
-| `cross_overview`, `line_indicators`, `sensitivity`, `compare` | (line-agnostic) | works for all lines |
+| `irr_top`、`payment_low`、`redlines`、`dedup_low` | residential | 仅 common 兜底 |
+| `noi_top`、`renovation`、`collection` | retail | 仅 common 兜底 |
+| `vacancy`、`benchmark` | retail-leasing | 仅 common 兜底 |
+| `cross_overview`、`line_indicators`、`sensitivity`、`compare` | （与业务线无关） | 对所有业务线都生效 |
 
-The 6 newer lines (valuation, advisory, office-leasing, investment,
-project-management, industrial) are **recognized by the alias
-dictionary (`_LINE_ALIAS_SEEDS`) and routed to the correct `line_id`**,
-but the mock then falls back to `intent_fallback` /
-`intent_line_indicators` because no domain-specific intent handler
-exists. Verified live: `/api/copilot/ask` with `line_id=office-leasing`
-returns `intent=fallback_unknown` plus residential/retail suggestions.
+6 条新业务线（valuation、advisory、office-leasing、investment、
+project-management、industrial）**被 alias 字典（`_LINE_ALIAS_SEEDS`）
+识别并路由到正确的 `line_id`**，但因没有专属 intent 处理器，mock
+随后回退到 `intent_fallback` / `intent_line_indicators`。已线上验证：
+`/api/copilot/ask` 设置 `line_id=office-leasing` 会返回
+`intent=fallback_unknown` 并附带 residential/retail 建议。
 
-This is not a "the line doesn't work" problem �� the alias resolver IS
-dynamic and recognizes all 10 lines. It is a "the mock LLM gives a
-less rich answer for the 6 newer lines" problem. In production with
-`DEEPSEEK_API_KEY` set, the real LLM is responsible for picking the
-right intent, and the deepseek prompt pulls endpoint metadata from
-`load_registry()` �� so this gap only shows up in mock mode.
+这不是"业务线不工作"的问题 — alias 解析器是动态的、识别所有 10 条业务线。
+这是"mock LLM 对 6 条新业务线给出不够丰富的答案"的问题。在生产环境
+配置了 `DEEPSEEK_API_KEY` 时，真实 LLM 负责选取正确的 intent，
+DeepSeek 的 prompt 通过 `load_registry()` 拉取端点元数据 — 因此这个
+gap 只在 mock 模式下显现。
 
-**Recommendation**: either add per-line intent templates to the
-manifest (small `mock_intents:` block in `manifest.yaml`) or accept
-the gap as "mock mode is intentionally minimal for non-pilot lines".
+**建议**：要么把按业务线的 intent 模板加到 manifest 中（manifest.yaml
+里加一个小的 `mock_intents:` 块），要么接受这个 gap（"mock 模式对
+非试点业务线刻意保持最小化"）。
 
-### 3.2 Two dbt project shapes coexist
+### 3.2 两种 dbt 项目结构共存
 
-- `infra/dbt/dbt_project.yml` is the **shared** dbt project
-  (residential + retail + lianjia + nbs + policy staging).
-- The 3 older lines (residential, retail, retail-leasing) ALSO have a
-  per-line `business_lines/<line>/dbt/dbt_project.yml` �� these are
-  leftover from an earlier "each line owns its dbt project" model.
-- The 6 newer lines (valuation, advisory, office-leasing, investment,
-  project-management, industrial) only have per-line
-  `dbt/models/*.sql` and no `dbt_project.yml`.
+- `infra/dbt/dbt_project.yml` 是**共享的** dbt 项目
+  （residential + retail + lianjia + nbs + policy staging）。
+- 3 条老业务线（residential、retail、retail-leasing）**还**有按业务线的
+  `business_lines/<line>/dbt/dbt_project.yml` — 这些是更早的"每条业务线
+  拥有自己的 dbt 项目"模型的遗留。
+- 6 条新业务线（valuation、advisory、office-leasing、investment、
+  project-management、industrial）只有按业务线的 `dbt/models/*.sql`，
+  没有 `dbt_project.yml`。
 
-This is not a violation per se �� the per-line `dbt_project.yml` is
-optional and only matters if you run `dbt build` from inside a
-business-line directory. But it IS a small inconsistency: "what's
-the canonical dbt layout for a new line?" has two answers.
+这本身不是违规 — 按业务线的 `dbt_project.yml` 是可选的，只有在
+业务线目录内运行 `dbt build` 时才有意义。但这确实是个小的不一致：
+"新增业务线时，规范的 dbt 布局是什么？"有两个答案。
 
-**Recommendation**: update `business_lines/_template/dbt/dbt_project.yml.example`
-to clarify "this is the multi-line shared dbt project; per-line models
-under `dbt/models/` are added to the central project at build time".
-Or: drop the per-line `dbt_project.yml` files for residential/retail/
-retail-leasing so the 6 newer shape becomes the canonical one.
+**建议**：更新 `business_lines/_template/dbt/dbt_project.yml.example`，
+明确"这是多业务线共享的 dbt 项目；按业务线的模型在 `dbt/models/` 下，
+在构建时会被合入中央项目"。或者：删掉 residential/retail/retail-leasing
+的按业务线 `dbt_project.yml`，使 6 条新业务线的形态成为规范。
 
-### 3.3 `docs/plugin-howto.md` ��1 mentions a directory layout that no longer exists
+### 3.3 `docs/plugin-howto.md` §1 提到的目录布局已不再存在
 
-The howto's ASCII diagram and ��1 step list include
-`web/pages/*.tsx` under `business_lines/<line>/`. The actual
-implementation uses the dynamic `app/(dashboard)/[line]/[page]/page.tsx`
-route + a `linePageConfig.ts` table �� there is no `web/pages/` subdir
-in any business line.
+howto 的 ASCII 图和 §1 步骤列表包含
+`business_lines/<line>/` 下的 `web/pages/*.tsx`。但实际实现使用动态
+`app/(dashboard)/[line]/[page]/page.tsx` 路由 + `linePageConfig.ts` 表
+— 任何业务线中都没有 `web/pages/` 子目录。
 
-**Recommendation**: edit ��1 of `plugin-howto.md` to reflect the
-current layout. (The ��3.1 router.py example is still correct.)
+**建议**：编辑 `plugin-howto.md` 的 §1 以反映当前布局。（§3.1 的
+router.py 示例仍然正确。）
 
-### 3.4 `infra/dbt/seeds/sample_residential.csv` is residential-specific
+### 3.4 `infra/dbt/seeds/sample_residential.csv` 是 residential 专用
 
-`infra/dbt/models/staging/stg_residential_seed.sql` and the seed
-`sample_residential.csv` are hardcoded for residential. The
-architecture says "infra/dbt/models/**" should be generic �� strictly
-speaking, the shared `stg_residential_seed.sql` belongs in
-`business_lines/residential/dbt/models/`, not in `infra/dbt/models/`.
+`infra/dbt/models/staging/stg_residential_seed.sql` 和 seed
+`sample_residential.csv` 是为 residential 硬编码的。架构要求
+"infra/dbt/models/**" 应该是通用的 — 严格来说，共享的
+`stg_residential_seed.sql` 应当位于 `business_lines/residential/dbt/models/`
+而非 `infra/dbt/models/`。
 
-**Reality check**: the 3 older lines pre-date the "per-line dbt
-models" convention and ship shared models at the infra level. The 6
-newer lines (valuation �� industrial) do NOT have anything in
-`infra/dbt/models/` �� they ship everything under their own
-`business_lines/<line>/dbt/models/`. So the pattern is: the 3 older
-lines need a `mv` cleanup, the 6 newer lines are already correct.
+**现状检查**：3 条老业务线早于"按业务线 dbt 模型"约定，把共享模型放在
+infra 层。6 条新业务线（valuation 到 industrial）在 `infra/dbt/models/`
+下没有任何内容 — 它们全部内容都在自己的 `business_lines/<line>/dbt/models/`
+下。所以模式是：3 条老业务线需要一次 `mv` 清理，6 条新业务线已正确。
 
-**Recommendation**: move the residential-specific seed and view to
-`business_lines/residential/dbt/` (next to the rest of residential's
-dbt models). Same for retail if applicable.
+**建议**：将 residential 专用的 seed 和 view 移动到
+`business_lines/residential/dbt/`（与 residential 其它 dbt 模型并列）。
+如果适用，retail 也按同样方式处理。
 
-### 3.5 (Unfulfilled promise) Plugin isolation invariant does not fully apply to LLM mock
+### 3.5 （未兑现的承诺）插件隔离不变量未完全适用于 LLM mock
 
-The architecture's "core code never imports `business_lines/*`" rule
-holds at the import level. But at the **string-literal** level,
+架构"核心代码绝不 import `business_lines/*`"的规则在 import 层面成立。
+但在**字面量**层面，
 `apps/api/app/services/llm/{mock.py, mock_helpers.py, prompts.py,
-copilot_engine.py}` together contain 5 different per-line hardcoded
-dictionaries. The architecture's allow-list ("alias �ֵ�" and
-"_LINE_DISPLAY_NAMES �ֵ�") covers 2 of them cleanly, and 3 others
-(ENDPOINT_CATALOG, LINE_SUGGESTIONS, intent_residential_*/retail_*)
-are arguably outside the allow-list.
+copilot_engine.py}` 合计包含 5 份按业务线硬编码的字典。架构的白名单
+（"alias 字典"和 "_LINE_DISPLAY_NAMES 字典"）干净地覆盖了其中 2 份，
+另 3 份（ENDPOINT_CATALOG、LINE_SUGGESTIONS、intent_residential_*/retail_*）
+可以说在白名单之外。
 
-If the architecture intended "core code knows nothing of specific
-lines beyond the alias dictionary and display-name dictionary", the
-implementation has a small gap in the LLM module. This is a ��3
-"unfulfilled promise" rather than a P0/P1 because the gap does not
-break universality (test-line still works), only reduces the quality
-of the mock-LLM answer for the 6 newer lines.
+如果架构的真实意图是"核心代码除了 alias 字典和 display-name 字典外
+不知道任何具体业务线"，那么 LLM 模块中有一个小 gap。这是 §3 类的
+"未兑现的承诺"，而非 P0/P1，因为该 gap 不破坏通用性（test-line
+仍能工作），只是降低了 6 条新业务线在 mock-LLM 答案中的丰富度。
 
 ---
 
-## 4. Universality test (full reproducibility)
+## 4. 通用性测试（完整可复现性）
 
-**Test plan**: add a minimal `test-line` (manifest + indicators +
-sensitivity + forecast + alerts + a 6-line `router.py` that returns
-`{status: ok, line: test-line}` for `/ping`), append one entry to
-`registry.yaml`, restart the API, hit each engine's profile endpoint
-and the line's `/ping`, then remove the test-line and confirm the
-count returns to 10.
+**测试计划**：新增一个最小的 `test-line`（manifest + indicators +
+sensitivity + forecast + alerts + 一个 6 行的 `router.py`（对 `/ping`
+返回 `{status: ok, line: test-line}`）），向 `registry.yaml` 追加一条，
+重启 API，命中每个引擎的 profile 端点和该业务线的 `/ping`，然后移除
+test-line 并确认数量恢复 10。
 
-**Result: PASS** (full transcript below).
+**结果：PASS**（完整记录见下）。
 
-### Step 1 �� Add test-line files
+### Step 1 — 新增 test-line 文件
 
 ```powershell
-# Copy the previous test scaffold (it had 4 files; we add forecast + alerts)
+# 复制先前的测试脚手架（原本 4 个文件；这里补上 forecast + alerts）
 Copy-Item -Recurse business_lines\_test_line_backup_universality business_lines\test-line
-# Add forecast.yaml and alerts.yaml (minimal valid content)
+# 新增 forecast.yaml 和 alerts.yaml（最小合法内容）
 ```
 
-### Step 2 �� Register the line
+### Step 2 — 注册该业务线
 
 ```yaml
-# business_lines/registry.yaml (appended)
+# business_lines/registry.yaml（追加）
 - id: test-line
   manifest: business_lines/test-line/manifest.yaml
 ```
 
-### Step 3 �� Restart API
+### Step 3 — 重启 API
 
 ```powershell
 Get-Process -Name python | Stop-Process -Force
@@ -444,7 +405,7 @@ $env:PYTHONPATH = "$PWD\apps\api"
 Start-Process python -ArgumentList "-m","uvicorn","app.main:app","--port","8769" -WorkingDirectory "$PWD\apps\api" -PassThru -NoNewWindow
 ```
 
-API boot log (truncated):
+API 启动日志（截断）：
 ```
 INFO [app.routers.registry] Mounted business line 'residential' (APIRouter) at /api/lines/residential
 ...
@@ -453,74 +414,66 @@ INFO [app.routers.registry] Mounted business line 'test-line' (APIRouter) at /ap
 INFO [app.services.scrapers.registry] Discovered 3 scraper(s): lianjia_deals, nbs_house_price, policy_crawler
 ```
 
-### Step 4 �� Verify all 4 engines + the line's API mounted
+### Step 4 — 验证全部 4 个引擎以及该业务线 API 都被挂载
 
-| Endpoint | With test-line | Without (after cleanup) |
+| 端点 | 含 test-line | 不含（清理后） |
 |---|---|---|
-| `GET /api/registry/lines` count | **11** (test-line included) | 10 |
-| `GET /api/sensitivity/profiles` line_ids | test-line present | absent |
-| `GET /api/forecast/profiles` line_ids | test-line present | absent |
-| `GET /api/alerts/profiles` line_ids | test-line present | absent |
+| `GET /api/registry/lines` count | **11**（含 test-line） | 10 |
+| `GET /api/sensitivity/profiles` line_ids | 含 test-line | 不含 |
+| `GET /api/forecast/profiles` line_ids | 含 test-line | 不含 |
+| `GET /api/alerts/profiles` line_ids | 含 test-line | 不含 |
 | `GET /api/lines/test-line/ping` | `{"status":"ok","line":"test-line"}` | 404 |
 
-**Zero core-code change was made.** The only files touched were
-`business_lines/test-line/*` (created) and `business_lines/registry.yaml`
-(2 lines appended). The 4 engines, the registry, the scraper
-framework, the LLM mock �� all auto-picked up the new line.
+**零核心代码改动。** 唯一被触动的文件是 `business_lines/test-line/*`（新建）
+和 `business_lines/registry.yaml`（追加 2 行）。4 个引擎、注册表、爬虫框架、
+LLM mock — 全部自动接住了新业务线。
 
-### Step 5 �� Clean up
+### Step 5 — 清理
 
 ```powershell
 Move-Item business_lines\test-line business_lines\_test_line_backup_universality_done
-# Strip the 2 lines from registry.yaml
+# 从 registry.yaml 中去掉这 2 行
 (Get-Content business_lines\registry.yaml -Raw) -replace "\n- id: test-line\n  manifest: business_lines/test-line/manifest.yaml", "" | Set-Content business_lines\registry.yaml -NoNewline
-# Restart API
+# 重启 API
 ```
 
-After restart, `GET /api/registry/lines` returns count=10, no test-line
-present. The system returns to the original state with no orphans.
+重启后，`GET /api/registry/lines` 返回 count=10，test-line 不存在。系统
+回到原始状态，没有任何遗留。
 
 ---
 
-## 5. Recommendations (priority order)
+## 5. 建议（按优先级）
 
-| # | Item | Severity | Effort | Impact |
+| # | 项目 | 严重度 | 工作量 | 影响 |
 |---|---|---|---|---|
-| 1 | Drop or rebuild `ENDPOINT_CATALOG` in `prompts.py` to be registry-driven | P2 | small | 6 newer lines get full LLM system-prompt coverage |
-| 2 | Drop or move `LINE_SUGGESTIONS` in `copilot_engine.py` to per-line YAML | P2 | small | 6 newer lines get rich mock-mode suggestions |
-| 3 | Either allow-list `linePageConfig.ts` explicitly or add `kind` to manifest.nav[] | P2 | medium | 6 newer lines get first-class web subpages (currently `not-integrated`) |
-| 4 | Move `infra/dbt/models/staging/stg_residential_seed.sql` + `seeds/sample_residential.csv` into `business_lines/residential/dbt/` | P2 | small | Cleaner separation of "shared infra" vs "line-specific" |
-| 5 | Edit `docs/plugin-howto.md` ��1 to remove the stale `web/pages/*.tsx` reference | P2 | trivial | Doc accuracy |
-| 6 | Decide between the two dbt layouts (per-line `dbt_project.yml` vs shared `infra/dbt/`), normalize the 3 older lines | P2 | medium | Single source of truth for "how do I add a dbt model to my line" |
-| 7 | Add per-line intent templates to `mock_helpers.py` (or expose mock-only intent metadata in `manifest.yaml`) | P2 | medium | Mock-LLM answers for the 6 newer lines match the depth of residential/retail/retail-leasing |
+| 1 | 删除或重建 `prompts.py` 中的 `ENDPOINT_CATALOG` 为注册表驱动 | P2 | 小 | 6 条新业务线获得完整的 LLM system-prompt 覆盖 |
+| 2 | 删除或把 `copilot_engine.py` 中的 `LINE_SUGGESTIONS` 移到按业务线 YAML | P2 | 小 | 6 条新业务线在 mock 模式下获得丰富建议 |
+| 3 | 要么显式白名单 `linePageConfig.ts`，要么给 manifest.nav[] 添加 `kind` | P2 | 中 | 6 条新业务线获得一等 web 子页面（当前为 `not-integrated`） |
+| 4 | 把 `infra/dbt/models/staging/stg_residential_seed.sql` + `seeds/sample_residential.csv` 移动到 `business_lines/residential/dbt/` | P2 | 小 | 清晰区分"共享 infra"与"业务线专属" |
+| 5 | 编辑 `docs/plugin-howto.md` 的 §1 移除过时的 `web/pages/*.tsx` 引用 | P2 | 极小 | 文档准确性 |
+| 6 | 在两种 dbt 布局（按业务线 `dbt_project.yml` vs 共享 `infra/dbt/`）之间二选一，对 3 条老业务线做归一化 | P2 | 中 | "如何为新业务线添加 dbt 模型"有单一权威答案 |
+| 7 | 给 `mock_helpers.py` 增加按业务线的 intent 模板（或在 `manifest.yaml` 暴露 mock 专用 intent 元数据） | P2 | 中 | 6 条新业务线的 mock-LLM 答案达到与 residential/retail/retail-leasing 同样的深度 |
 
-None of the above are blocking. The implementation **delivers on the
-core architecture promise** (zero-code-change line addition works
-end-to-end across all 4 engines, the LLM abstraction, the scraper
-framework, and the dynamic web routes). The P2 items are real but
-bounded: each one is a single dictionary or a single config file.
+以上都不是阻塞项。实现**兑现了核心架构承诺**（零代码改动即可新增业务线，
+端到端跨全部 4 个引擎、LLM 抽象、爬虫框架、动态 web 路由都通过）。
+P2 项是真实但有界的：每一项都只是一个字典或一个配置文件。
 
 ---
 
-## 6. Verdict
+## 6. 结论
 
-**Result: PASS** (the implementation is architecturally sound; the
-universality invariant holds in production).
+**结果：PASS**（实现架构上合理；通用性不变量在生产中成立）。
 
-**Score: 10 / 11 checks PASS, 1 PASS-with-P2-notes.**
+**得分：10 / 11 项 PASS，1 项 PASS-with-P2-notes。**
 
-The architecture promised: "core code is generic, business lines are
-plugins". The implementation delivers this at the **import level** (no
-`from business_lines.X import Y` anywhere outside the registry loader)
-and at the **runtime level** (universality test passes for all 4
-engines).
+架构承诺："核心代码是通用的，业务线是插件"。实现在 **import 层面**
+做到了（注册表加载器之外没有任何 `from business_lines.X import Y`），
+在 **运行时层面**也做到了（4 个引擎全部通过通用性测试）。
 
-The only architectural debt is in the LLM module's hardcoded mock
-intents, the prompts.py hint catalog, the linePageConfig UI table, and
-the per-line dbt project layout. These are documented ��2 P2 items and
-do not block the "zero-code-change line addition" invariant �� they
-just reduce the richness of the LLM mock for the 6 newer lines.
+唯一的架构债务在 LLM 模块的硬编码 mock intent、prompts.py 的提示目录、
+linePageConfig UI 表、以及按业务线的 dbt 项目布局。这些都已记录在
+§2 的 P2 项中，不阻塞"零代码改动新增业务线"不变量 — 它们只是降低了
+LLM mock 对 6 条新业务线的丰富度。
 
-**The system is ready for an 11th, 12th, ... line** to be added
-following the 5-step `plugin-howto.md` workflow. The universality
-test reproduced in ��4 is the proof.
+**系统已准备好** 按照 5 步的 `plugin-howto.md` 工作流添加第 11、
+12、… 条业务线。§4 中复现的通用性测试就是证明。

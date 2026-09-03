@@ -1,15 +1,15 @@
 """
 apps/api/app/services/llm/mock_helpers.py
 
-HTTP + data-fetch helpers for the mock LLM backend. Each `dispatch_*`
-function implements one intent template: it hits the relevant business-
-line API endpoint, picks the top-N / thresholded subset, and returns a
-MockAnswer with answer + citations + chart_data.
+Mock LLM 后端的 HTTP + 数据拉取辅助函数。每个 `dispatch_*` 函数
+实现一种意图模板：调用相应的业务线 API 端点，挑出前 N / 阈值
+筛选的子集，并返回包含 answer + citations + chart_data 的
+MockAnswer。
 
-The mock does NOT import `business_lines/*`. It goes through the Python
-HTTP layer against the live API. This is what makes it universal: a new
-business line that exposes `/indicators` and `/projects` (or
-`/properties`) gets Copilot support for free, no code changes.
+Mock 后端不 `import` `business_lines/*`。它通过 Python HTTP 层
+访问线上 API。这正是它具备通用性的原因：只要新增的业务线
+暴露 `/indicators` 和 `/projects`（或 `/properties`），就能
+零代码获得 Copilot 支持。
 """
 from __future__ import annotations
 

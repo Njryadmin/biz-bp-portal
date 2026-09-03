@@ -1,14 +1,14 @@
 // apps/web/app/(dashboard)/layout.tsx
 //
-// DYNAMIC, DATA-DRIVEN LAYOUT.
+// 动态、数据驱动的布局。
 //
-// 1. Resolves the current user from /api/auth/me (httpOnly cookie).
-// 2. If unauthenticated, redirects to /login (the Next.js middleware
-//    already does this, but we double-check here for safety + SSR).
-// 3. Fetches the registry from /api/registry (same-origin BFF).
-// 4. Filters the line list by the user's accessible_lines; the
-//    SidebarMenu receives the filtered set.
-// 5. The Topbar shows the real username + logout button.
+// 1. 从 /api/auth/me 解析当前用户（httpOnly cookie）。
+// 2. 若未登录则跳转 /login（Next.js middleware 已做一次，
+//    这里再双检一次，覆盖 SSR 场景）。
+// 3. 从 /api/registry 拉取注册表（同源 BFF）。
+// 4. 按当前用户的 accessible_lines 过滤业务线列表；
+//    SidebarMenu 只接收过滤后的子集。
+// 5. Topbar 显示真实用户名 + 登出按钮。
 
 'use client';
 
@@ -39,7 +39,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        // 1. Resolve current user.
+        // 1. 解析当前用户。
         const me = await getCurrentUser();
         if (cancelled) return;
         if (!me) {
@@ -47,7 +47,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           return;
         }
         setUser(me);
-        // 2. Fetch the registry (BFF forwards to the API with the cookie).
+        // 2. 拉取注册表（BFF 携带 cookie 转发到 API）。
         const res = await fetch("/api/registry", { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as RegistryResponse;
@@ -55,14 +55,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         const all = data.lines ?? [];
         setAllLines(all);
         setVersion(data.version ?? "?");
-        // 3. Filter to the user's accessible lines so the sidebar
-        // only shows what they can actually open.
+        // 3. 按用户可访问的业务线过滤，使侧边栏只显示能打开的项。
         const allowed = new Set<string>(me.accessible_lines);
-        // bp:<line> roles also grant access
+        // bp:<line> 角色也授予访问权限
         for (const r of me.roles) {
           if (r.startsWith("bp:")) allowed.add(r.slice(3));
         }
-        // admin / viewer / auditor see all
+        // admin / viewer / auditor 可见全部
         if (
           me.roles.includes("admin") ||
           me.roles.includes("viewer") ||

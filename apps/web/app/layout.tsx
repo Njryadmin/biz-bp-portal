@@ -1,4 +1,7 @@
 // apps/web/app/layout.tsx
+// Next.js 应用根布局。注入 AntdRegistry（antd 在 Next.js App Router
+// 下的样式注册组件）以及 ConfigProvider（统一主题 token），所有
+// 页面都嵌套在这个根布局之下。
 import type { ReactNode } from "react";
 import { AntdRegistry } from "@ant-design/nextjs-registry";
 import { ConfigProvider } from "antd";

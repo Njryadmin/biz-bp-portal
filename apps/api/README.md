@@ -1,8 +1,8 @@
 # apps/api
 
-Fin BP Portal API.
+Fin BP Portal API。
 
-## Quick start
+## 快速开始
 
 ```bash
 cd apps/api
@@ -12,23 +12,23 @@ pip install -e .[dev]
 uvicorn app.main:app --reload --port 8000
 ```
 
-Then `GET http://localhost:8000/api/registry/lines` should return
-`{"lines": [], "version": "..."}` when no business lines are registered.
+然后访问 `GET http://localhost:8000/api/registry/lines`，
+未注册任何业务线时应返回 `{"lines": [], "version": "..."}`。
 
-## Tests
+## 测试
 
 ```bash
 pytest -q
 ```
 
-## Layout
+## 目录结构
 
 ```
 app/
-  main.py            FastAPI entrypoint
-  core/              Settings, registry loader
-  routers/           Generic + dynamic-discovery routers
-  schemas/           Pydantic v2 models
-  db/                SQLAlchemy 2.0 async engine
+  main.py            FastAPI 入口
+  core/              配置、注册表加载器
+  routers/           通用路由 + 动态发现路由
+  schemas/           Pydantic v2 模型
+  db/                SQLAlchemy 2.0 async 引擎
 tests/               pytest
 ```

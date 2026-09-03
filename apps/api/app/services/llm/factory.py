@@ -1,61 +1,56 @@
 """
 apps/api/app/services/llm/factory.py
 
-LLM provider factory — runtime-toggleable via the ``ai_models`` table.
+LLM 厂商工厂——通过 ``ai_models`` 表实现运行时切换。
 
-Design
-------
-Before this module, the active backend was decided by environment
-variables: ``DEEPSEEK_API_KEY`` → ``DeepSeekBackend``;
-``OLLAMA_BASE_URL`` → ``OllamaBackend``; else ``MockBackend``. That
-worked for a single deployment but required an API restart (or a
-container rebuild) to switch providers.
+设计
+----
+在此模块出现之前，活跃后端由环境变量决定：
+``DEEPSEEK_API_KEY`` → ``DeepSeekBackend``；
+``OLLAMA_BASE_URL`` → ``OllamaBackend``；否则 ``MockBackend``。
+在单一部署下能工作，但切换厂商需要重启 API（或重建容器）。
 
-The new flow is database-driven. The factory now:
+新的流程改为由数据库驱动。工厂现在：
 
-  1. Looks for the row with ``is_default=TRUE AND enabled=TRUE AND
-     is_active=TRUE`` in ``ai_models``. If it finds one, the factory
-     instantiates the matching provider class from the row's
-     ``provider`` / ``model_name`` / ``base_url`` / ``api_key`` columns.
-  2. If no default row is configured, falls back to the legacy env
-     check (``get_legacy_env_backend``) so existing deployments keep
-     working without any admin UI action.
-  3. If neither (1) nor (2) yields a provider, returns ``MockBackend``
-     so the system is never broken.
+  1. 在 ``ai_models`` 中查找同时满足 ``is_default=TRUE AND
+     enabled=TRUE AND is_active=TRUE`` 的行。找到后，按该行的
+     ``provider`` / ``model_name`` / ``base_url`` / ``api_key`` 字段
+     实例化对应的厂商类。
+  2. 如果没有配置默认行，则回退到旧版环境变量检查
+     （``get_legacy_env_backend``），保证已有部署无需任何管理后台
+     操作就能继续工作。
+  3. 如果 (1) 和 (2) 都没有得到可用厂商，则返回 ``MockBackend``，
+     以保证系统不会完全瘫痪。
 
-``get_active_model()`` is the single read-side helper the rest of the
-app should use. It returns a typed dict (the schema mirrors the row)
-or None if no default is configured. It NEVER raises — the caller
-decides what to do with "no model".
+``get_active_model()`` 是其余代码应当使用的唯读侧辅助函数。
+它返回一个带类型的 dict（结构与行一致），如果未配置默认行则
+返回 None。它不会抛出异常——调用方自行决定如何处理"无模型"。
 
-Provider matrix
----------------
-The factory currently supports six provider strings (mirroring the SQL
-CHECK constraint on ``ai_models.provider``):
+厂商矩阵
+--------
+工厂目前支持六种 provider 字符串（与 ``ai_models.provider`` 的 SQL
+CHECK 约束一致）：
 
-  * ``mock``       → ``MockBackend`` (no I/O, deterministic)
-  * ``deepseek``   → ``DeepSeekBackend`` (with fallback to mock)
+  * ``mock``       → ``MockBackend``（无 I/O，确定性）
+  * ``deepseek``   → ``DeepSeekBackend``（失败时回退到 mock）
   * ``ollama``     → ``OllamaBackend``
-  * ``openai``     → ``OpenAICompatibleBackend`` (base_url optional,
-                     defaults to https://api.openai.com/v1/chat/completions)
-  * ``anthropic``  → ``OpenAICompatibleBackend`` (anthropic-style base_url)
-  * ``custom``     → ``OpenAICompatibleBackend`` (any OpenAI-compatible
-                     endpoint; the operator supplies a custom base_url)
+  * ``openai``     → ``OpenAICompatibleBackend``（base_url 可选，
+                     默认 https://api.openai.com/v1/chat/completions）
+  * ``anthropic``  → ``OpenAICompatibleBackend``（anthropic 风格的 base_url）
+  * ``custom``     → ``OpenAICompatibleBackend``（任意 OpenAI 兼容端点；
+                     运维人员提供自定义 base_url）
 
-The first three use the existing backend classes (no API change for
-them). The last three reuse a new ``OpenAICompatibleBackend`` class
-that follows the same chat-completions wire format as DeepSeek but is
-configurable at runtime (the existing DeepSeek class reads env vars
-at construction time, so it can't be reused as-is for a database
-configuration).
+前三个复用现有的后端类（API 无需变动）。后三个共用一个新的
+``OpenAICompatibleBackend`` 类，它沿用与 DeepSeek 相同的
+chat-completions 协议但支持运行时配置（现有 DeepSeek 类在构造
+时读取环境变量，因此不能直接复用于数据库配置）。
 
-API-key handling
-----------------
-The ``api_key`` column stores either an encrypted secret (Fernet, see
-``core/secret.py``) or an ``env:VAR_NAME`` reference. ``decrypt_secret``
-resolves either form at call time. If both the table column and the
-env var are empty, the factory returns a config error (the operator
-will see it in the response of the ``/test`` endpoint).
+API 密钥处理
+------------
+``api_key`` 列存储的是加密后的密钥（Fernet，参见 ``core/secret.py``）
+或 ``env:VAR_NAME`` 引用。``decrypt_secret`` 在调用时解析这两种形式。
+如果表中字段和环境变量均为空，工厂会返回配置错误（运维人员
+会在 ``/test`` 端点的响应中看到）。
 """
 from __future__ import annotations
 

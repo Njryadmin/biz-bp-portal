@@ -1,17 +1,15 @@
-# Fin BP Portal — Architecture Overview
+# Fin BP Portal — 架构概览
 
-> Generated 2026-09-03 from the architecture audit (`docs/architecture-audit-2026-09-03.md`).
-> **10/11 架构承诺 PASS · Universality verified · 0 P0/P1 issues**.
+> 生成于 2026-09-03，依据架构审计报告（`docs/architecture-audit-2026-09-03.md`）。
+> **10/11 架构承诺 PASS · 通用性已验证 · 0 P0/P1 问题**。
 
-This document is the visual companion to the audit. Five diagrams, each
-annotated with the code locations that implement the claim.
+本文档是审计报告的可视化伴侣。五张图，每张都标注了实现该承诺的代码位置。
 
 ---
 
-## Diagram 1 — Layered System Architecture (整体分层)
+## 图 1 — 系统分层架构（整体分层）
 
-The whole system, from browser to database, with the boundaries where
-code lives, where data flows, and where secrets are wired in.
+整个系统，从浏览器到数据库，标注代码所在、数据流动、密钥接入的边界。
 
 ```mermaid
 graph TB
@@ -114,20 +112,19 @@ graph TB
     class DEEPSEEK_API_KEY secret
 ```
 
-**Key boundary invariants** (verified by audit):
+**关键边界不变量**（已由审计验证）：
 
-1. **No `import business_lines.X` anywhere outside `apps/api/app/routers/registry.py`**
-2. **No `from @fin-bp/...` business-line components in `apps/web/app/`** — only via the `[line]/[page]` dynamic route
-3. **Engines read YAML from `business_lines/<line>/` at runtime**, no Python imports
-4. **Secrets only enter via env vars** — no `.env` in repo, `.env.example` is the template
+1. **`apps/api/app/routers/registry.py` 之外没有任何 `import business_lines.X`**
+2. **`apps/web/app/` 中没有 `from @fin-bp/...` 形式的业务线组件** —— 只能通过 `[line]/[page]` 动态路由
+3. **引擎在运行时从 `business_lines/<line>/` 读取 YAML**，不进行 Python import
+4. **密钥仅通过环境变量进入** —— 仓库中没有 `.env`，`.env.example` 是模板
 
 ---
 
-## Diagram 2 — Plugin Mechanism (业务线插件机制)
+## 图 2 — 插件机制（业务线插件机制）
 
-How `business_lines/<line>/` becomes a live API + UI without touching core
-code. Three things make this work together: a registry file, an importlib
-loader, and a template.
+`business_lines/<line>/` 如何在不动核心代码的前提下成为活的 API + UI。
+三件事共同发挥作用：注册表文件、importlib 加载器、模板。
 
 ```mermaid
 sequenceDiagram
@@ -139,13 +136,13 @@ sequenceDiagram
     participant FastAPI as uvicorn (startup)
     participant Browser
 
-    Note over Dev,BL: 1. Copy template (5-step add-a-line workflow)
+    Note over Dev,BL: 1. 复制模板（5 步新增业务线工作流）
     Dev->>BL: cp -r business_lines/_template business_lines/test-line<br/>edit manifest.yaml + indicators.yaml<br/>+ sensitivity/forecast/alerts.yaml<br/>+ api/router.py (one FastAPI router)
 
-    Note over Dev,Reg: 2. Register (one line)
+    Note over Dev,Reg: 2. 注册（一行）
     Dev->>Reg: Append: - id: test-line<br/>&nbsp;&nbsp;manifest: business_lines/test-line/manifest.yaml
 
-    Note over FastAPI: 3. Restart API (zero core-code change)
+    Note over FastAPI: 3. 重启 API（核心代码 0 改动）
     FastAPI->>Code: lifespan → load_business_lines()
     Code->>Reg: yaml.safe_load
     Reg-->>Code: lines: [{id: test-line, ...}]
@@ -156,28 +153,28 @@ sequenceDiagram
     end
     FastAPI-->>FastAPI: Routers mounted at /api/lines/&lt;id&gt;/*
 
-    Note over Browser: 4. Use
+    Note over Browser: 4. 使用
     Browser->>FastAPI: GET /api/registry/lines
     FastAPI-->>Browser: 11 lines (incl. test-line)
     Browser->>FastAPI: GET /api/lines/test-line/ping
     FastAPI-->>Browser: {"status":"ok",...}
 ```
 
-**Audit-verified** (universality test passed):
+**已通过审计验证**（通用性测试通过）：
 
-- Add `business_lines/test-line/` + 1 line in `registry.yaml` → 0 core code touched
-- All 4 engines auto-discovered test-line:
-  - `/api/registry/lines` count went 10 → 11
-  - `/api/sensitivity/profiles` count went 9 → 10
-  - `/api/forecast/profiles` count went 9 → 10
-  - `/api/alerts/profiles` count went 9 → 10
-- Remove → API returns to 10 lines, no orphans
+- 新增 `business_lines/test-line/` + 在 `registry.yaml` 添加 1 行 → 0 核心代码改动
+- 4 个引擎全部自动发现 test-line：
+  - `/api/registry/lines` 数量从 10 → 11
+  - `/api/sensitivity/profiles` 数量从 9 → 10
+  - `/api/forecast/profiles` 数量从 9 → 10
+  - `/api/alerts/profiles` 数量从 9 → 10
+- 移除 → API 回到 10 条业务线，无遗留
 
 ---
 
-## Diagram 3 — Universal Engines (4 引擎通用性)
+## 图 3 — 通用引擎（4 引擎通用性）
 
-The same engine code serves 10 business lines. The only difference is YAML.
+同一份引擎代码服务 10 条业务线。唯一的差异是 YAML。
 
 ```mermaid
 graph LR
@@ -217,24 +214,23 @@ graph LR
     style ENDPOINTS fill:#e3f2fd
 ```
 
-**Contract verified by audit** (`grep -r "residential\|retail" apps/api/app/services/`):
+**契约经审计验证**（`grep -r "residential\|retail" apps/api/app/services/`）：
 
-| Engine | Reads from | Writes to | Hardcodes line names? |
+| 引擎 | 读取自 | 写入至 | 是否硬编码业务线名称？ |
 |---|---|---|---|
-| Sensitivity | `business_lines/<line>/sensitivity.yaml` | response only | ❌ no |
-| Copilot | `load_registry()` + `_LINE_ALIAS_SEEDS` | response + debug.parsed | ⚠️ alias dict only (P2) |
-| Forecast | `business_lines/<line>/forecast.yaml` | response only | ❌ no |
-| Alerts | `business_lines/<line>/alerts.yaml` | in-memory store | ❌ no |
+| Sensitivity | `business_lines/<line>/sensitivity.yaml` | 仅响应 | ❌ 否 |
+| Copilot | `load_registry()` + `_LINE_ALIAS_SEEDS` | 响应 + debug.parsed | ⚠️ 仅 alias 字典（P2） |
+| Forecast | `business_lines/<line>/forecast.yaml` | 仅响应 | ❌ 否 |
+| Alerts | `business_lines/<line>/alerts.yaml` | 内存存储 | ❌ 否 |
 
-The **3 P2 issues** flagged in the audit are all about UX completeness
-(catalogs for LLM prompts, suggested questions, UI page-mapping), not about
-core code knowledge. They don't break universality.
+审计中标记的 **3 处 P2 问题** 都与 UX 完整性相关
+（LLM 提示的目录、建议问题、UI 页面映射），而非核心代码知识。不破坏通用性。
 
 ---
 
-## Diagram 4 — AI Copilot Fallback Chain (Copilot 降级链)
+## 图 4 — AI Copilot 降级链
 
-How the LLM backend is selected, and what happens when it fails.
+LLM 后端如何被选中，以及失败时如何兜底。
 
 ```mermaid
 graph TB
@@ -275,19 +271,18 @@ graph TB
     class DSE_OK,OLL_OK warn
 ```
 
-**Contract**: The Copilot endpoint **never returns HTTP 500** for an LLM
-failure. Either the real LLM answers, or the rule engine answers with
-`used_fallback=true` and a `fallback_reason` explaining what went wrong.
+**契约**：Copilot 端点**绝不会因 LLM 失败而返回 HTTP 500**。要么真实 LLM 回答，
+要么规则引擎以 `used_fallback=true` 加 `fallback_reason` 解释哪里出错来回答。
 
-Verified live:
-- `DEEPSEEK_API_KEY=fake-key` → `used_fallback=true`, `fallback_reason="DeepSeekHTTPError: HTTP 401: ..."`, HTTP 200.
-- No key → Mock from the start, `used_fallback=false`, `backend=mock`.
+已线上验证：
+- `DEEPSEEK_API_KEY=fake-key` → `used_fallback=true`，`fallback_reason="DeepSeekHTTPError: HTTP 401: ..."`，HTTP 200。
+- 无 key → 从一开始就是 mock，`used_fallback=false`，`backend=mock`。
 
 ---
 
-## Diagram 5 — Data Flow (数据流)
+## 图 5 — 数据流
 
-Where data comes from, where it lands, and how it gets to the user.
+数据从哪里来，落在哪里，如何到达用户。
 
 ```mermaid
 graph LR
@@ -342,17 +337,17 @@ graph LR
     class SVC,ENG serve
 ```
 
-**Latency budget**:
-- Excel upload → landing: < 1s
-- Airflow DAG → raw.uploads: scheduled (or manual trigger)
-- DBT run: 1-5 minutes
-- API response from marts: < 100ms (Postgres indexed)
+**延迟预算**：
+- Excel 上传 → 落地区：< 1s
+- Airflow DAG → raw.uploads：按计划（或手动触发）
+- DBT 运行：1-5 分钟
+- 从 marts 读取的 API 响应：< 100ms（Postgres 索引）
 
 ---
 
-## Diagram 6 — Docker Compose Deployment (部署)
+## 图 6 — Docker Compose 部署
 
-How the 7 services connect in production.
+7 个服务在生产中如何连接。
 
 ```mermaid
 graph TB
@@ -391,12 +386,12 @@ graph TB
     class AF task
 ```
 
-**Start order enforced by `depends_on: condition: service_healthy`**:
-`postgres` → `api` → `web`, with `redis/minio/clickhouse/airflow` as siblings.
+**启动顺序由 `depends_on: condition: service_healthy` 强制**：
+`postgres` → `api` → `web`，`redis/minio/clickhouse/airflow` 为兄弟节点。
 
 ---
 
-## Audit Summary Table (审查总结)
+## 审计总结表
 
 | # | 承诺 | 实现 | 证据 |
 |---|---|---|---|
@@ -413,6 +408,6 @@ graph TB
 | E | 配置一致 | ✅ | registry.yaml + .env.example + docker-compose |
 | F | env 变量覆盖所有可配置 | ⚠️ P2 | 3 处 catalog 硬编码（不影响功能）|
 
-**Universality score**: 10/11 PASS, 1 PASS-with-P2-notes.
-**P0/P1 issues**: 0.
-**Ready for delivery**: ✅
+**通用性得分**：10/11 PASS，1 PASS-with-P2-notes。
+**P0/P1 问题数**：0。
+**是否可交付**：✅

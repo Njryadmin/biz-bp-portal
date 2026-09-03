@@ -1,12 +1,13 @@
 // apps/web/app/api/ai-models/[[...path]]/route.ts
 //
-// Catch-all BFF proxy for /api/ai-models/* so the admin UI can call
-// list/create/update/delete/test/set-default without CORS gymnastics.
+// /api/ai-models/* 的 BFF 通配代理，使管理后台在调用
+// list / create / update / delete / test / set-default 时无需
+// 处理 CORS 细节。
 //
-// The browser POSTs /api/ai-models (or /api/ai-models/{id} or
-// /api/ai-models/{id}/test) with the httpOnly cookie. The BFF
-// forwards method + body + cookie to the Python API and copies the
-// response status back.
+// 浏览器向 /api/ai-models（或 /api/ai-models/{id}、
+// /api/ai-models/{id}/test）发起请求时携带 httpOnly cookie。
+// BFF 转发 method + body + cookie 到 Python API，并把响应状态码
+// 原样回传。
 
 import { NextResponse } from "next/server";
 

@@ -1,26 +1,24 @@
 """
 apps/api/app/routers/scrapers.py
 
-HTTP router for the web-scraping framework. Mounted at ``/api/scrapers``
-by ``app.main``.
+Web 爬虫框架的 HTTP 路由。由 ``app.main`` 挂载到 ``/api/scrapers``。
 
-Endpoints:
+端点：
 
-* ``GET    /api/scrapers``                  — list all registered scrapers
-                                              (auth required)
-* ``GET    /api/scrapers/{source_id}``      — detail (incl. last 10 runs)
-                                              (auth required)
-* ``POST   /api/scrapers/{source_id}/run``  — run one scraper now
-                                              (admin only)
-* ``POST   /api/scrapers/run-all``          — run every enabled scraper
-                                              (admin only)
-* ``GET    /api/scrapers/history/{source_id}`` — last 10 historical runs
-                                              (auth required)
+* ``GET    /api/scrapers``                  —— 列出全部已注册爬虫
+                                              （需登录）
+* ``GET    /api/scrapers/{source_id}``      —— 详情（含最近 10 次运行）
+                                              （需登录）
+* ``POST   /api/scrapers/{source_id}/run``  —— 立即运行指定爬虫
+                                              （仅 admin）
+* ``POST   /api/scrapers/run-all``          —— 运行全部已启用爬虫
+                                              （仅 admin）
+* ``GET    /api/scrapers/history/{source_id}`` —— 最近 10 次历史运行
+                                              （需登录）
 
-Failures from inside a scraper (network, parsing, validation) are
-handled by the framework's fallback chain; this router should NEVER
-return a 5xx because a scraper failed to fetch. The only way a 4xx
-is returned is for an unknown ``source_id`` or a bad JSON body.
+爬虫内部的失败（网络、解析、校验）由框架的回退链处理；
+本路由绝不应因为爬虫抓取失败而返回 5xx。唯一会返回 4xx
+的情况是未知的 ``source_id`` 或请求体格式错误。
 """
 from __future__ import annotations
 

@@ -1,37 +1,35 @@
 """
 apps/api/app/routers/ai_models.py
 
-Admin endpoints for the runtime-toggleable LLM provider registry.
+运行时可切换的 LLM 厂商注册表的管理端点。
 
-Routes
-------
-GET    /api/ai-models                  — list all registered models
-POST   /api/ai-models                  — admin: create a new model config
-PATCH  /api/ai-models/{id}             — admin: update any field
-DELETE /api/ai-models/{id}             — admin: soft-delete (is_active=False)
-POST   /api/ai-models/{id}/test        — admin: trigger a smoke test
-POST   /api/ai-models/{id}/set-default — admin: mark this model as default
+路由
+----
+GET    /api/ai-models                  —— 列出全部已注册模型
+POST   /api/ai-models                  —— admin：创建新的模型配置
+PATCH  /api/ai-models/{id}             —— admin：更新任意字段
+DELETE /api/ai-models/{id}             —— admin：软删除（is_active=False）
+POST   /api/ai-models/{id}/test        —— admin：触发冒烟测试
+POST   /api/ai-models/{id}/set-default —— admin：把该模型标记为默认
 
-All routes require the ``admin`` role (via ``require_admin_dep``).
-The factory in ``app.services.llm.factory`` reads the table on every
-call, so a POST/PATCH here takes effect on the next LLM request —
-no service restart required.
+所有路由都要求 ``admin`` 角色（通过 ``require_admin_dep``）。
+``app.services.llm.factory`` 中的工厂在每次调用时都会读取本表，
+所以这里的 POST/PATCH 会在下一次 LLM 请求时即时生效——
+无需重启服务。
 
-Test endpoint contract
-----------------------
-The ``/test`` endpoint runs a short prompt through the configured
-provider and returns:
-  * ``ok``         — True iff the provider returned a non-empty answer
-  * ``status``     — "ok" / "error"
-  * ``latency_ms`` — wall-clock time measured at the API layer
-  * ``sample_response`` — short snippet of the answer
-  * ``error``      — error message when ``ok`` is False
+测试端点契约
+-----------
+``/test`` 端点会通过已配置的厂商运行一段简短的 prompt，并返回：
+  * ``ok``         —— 厂商返回非空答案时为 True
+  * ``status``     —— "ok" / "error"
+  * ``latency_ms`` —— API 层测得的端到端耗时
+  * ``sample_response`` —— 答案的简短摘要
+  * ``error``      —— ``ok`` 为 False 时的错误信息
 
-The endpoint ALWAYS records the result in the ``last_tested_at`` /
+无论结果如何，该端点总会把结果写入本行的 ``last_tested_at`` /
 ``last_test_status`` / ``last_test_latency_ms`` /
-``last_test_response`` columns of the row, regardless of outcome.
-This gives the admin UI a "last seen alive" signal even when the
-underlying provider is dead.
+``last_test_response`` 字段。即便底层厂商不可用，管理后台
+也能据此看到"最后一次存活"信号。
 """
 from __future__ import annotations
 

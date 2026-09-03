@@ -1,146 +1,144 @@
 # Biz-BP Portal
 
-A pluggable financial-business-partner analysis portal for real-estate
-consulting firms. The whole backend is built around a **business-line plugin
-framework** — adding a new department (e.g. *industrial real estate*) is a
-copy-and-edit job, not a code change.
+面向房地产咨询公司的可插拔式"业务合伙人"分析门户。整个后端围绕
+**业务线插件框架** 构建——新增一个事业部（例如 *工业地产部*）只需要
+复制一个目录并修改配置，不需要改动核心代码。
 
 ```
-business_lines/<line>/         ← one folder per line
-  manifest.yaml                  ← name, nav, api_prefix, warehouse
-  indicators.yaml                ← 8-10 KPIs
-  api/router.py                  ← FastAPI endpoints
-  sensitivity.yaml               ← 4 inputs × N outputs + coefficients
-  forecast.yaml                  ← time-series definitions
-  alerts.yaml                    ← rules + thresholds
+business_lines/<line>/         ← 每个业务线一个目录
+  manifest.yaml                  ← 名称、导航、api_prefix、数仓 schema
+  indicators.yaml                ← 8-10 个 KPI
+  api/router.py                  ← FastAPI 路由
+  sensitivity.yaml               ← 4 个输入 × N 个输出 + 系数
+  forecast.yaml                  ← 时间序列定义
+  alerts.yaml                    ← 规则 + 阈值
   dbt/models/                    ← staging + marts SQL
-  data/seed/                     ← mock data (real-data swap point)
+  data/seed/                     ← mock 数据（真实数据替换入口）
 ```
 
-Four universal engines read these YAML files at runtime — no `import` of
-business-line code anywhere in `apps/` or `infra/`:
+四个通用引擎在运行时读取这些 YAML 文件——`apps/` 和 `infra/` 中
+没有任何 `business_lines/*` 的 `import`：
 
-| Engine | What it does |
+| 引擎 | 功能 |
 |---|---|
-| **Sensitivity Lab** | 2-factor heatmap + tornado + scenario comparison |
-| **AI Copilot** | Natural-language Q&A over all lines (pluggable LLM: DeepSeek / Ollama / Mock) |
-| **Rolling Forecast** | 12-month projection with MAPE + deviation attribution |
-| **Alert Center** | Rule engine with severity + acknowledge + history |
+| **敏感性 Lab** | 双因子热力图 + 龙卷风图 + 情景对比 |
+| **AI Copilot** | 跨业务线自然语言问答（可插拔 LLM：DeepSeek / Ollama / Mock） |
+| **滚动预测** | 12 个月预测，含 MAPE + 偏差归因 |
+| **告警中心** | 规则引擎，含严重等级 + 确认 + 历史记录 |
 
-Plus an **scraper framework** (NBS 70-city index, Lianjia deals, policy
-crawler) for real-data ingestion.
+外加一个**爬虫框架**（国家统计局 70 城房价指数、链家成交、政策爬虫）
+用于真实数据接入。
 
 ---
 
-## Quick start (Docker)
+## 快速开始（Docker）
 
 ```bash
-# 1. Copy and edit env (the only required secret is DEEPSEEK_API_KEY for real LLM)
+# 1. 复制并编辑环境变量（真实 LLM 唯一必需的密钥是 DEEPSEEK_API_KEY）
 cp .env.example .env
 
-# 2. Build + start everything
+# 2. 构建并启动全部服务
 docker compose -f infra/docker-compose.yml --env-file .env up -d --build
 
-# 3. Open the portal
+# 3. 打开门户
 open http://localhost:3000
 ```
 
-That's it. 7 services come up:
-- **Web** (Next.js prod): http://localhost:3000
-- **API** (FastAPI): http://localhost:8000
-- **Airflow**: http://localhost:8080 (admin/admin)
-- **Postgres**: localhost:5432
-- **Redis**: localhost:6379
-- **ClickHouse**: localhost:8123 (HTTP), localhost:9100 (native)
-- **MinIO**: localhost:9001 (console, finbp/finbp12345)
+就这样。共启动 7 个服务：
+- **Web**（Next.js 生产模式）：http://localhost:3000
+- **API**（FastAPI）：http://localhost:8000
+- **Airflow**：http://localhost:8080（admin/admin）
+- **Postgres**：localhost:5432
+- **Redis**：localhost:6379
+- **ClickHouse**：localhost:8123（HTTP），localhost:9100（原生协议）
+- **MinIO**：localhost:9001（控制台，finbp/finbp12345）
 
-See **[DEPLOY.md](DEPLOY.md)** for production-grade deployment,
-troubleshooting, and the full env-var reference.
+更多生产级部署、故障排查和完整环境变量说明，参见
+**[DEPLOY.md](DEPLOY.md)**。
 
 ---
 
-## Authentication
+## 身份认证
 
-All routes are protected by an RBAC (role-based access control) layer.
-On the very first boot, the API auto-creates the following accounts
-from the business-line registry (idempotent — only runs when `users` is empty):
+所有路由由 RBAC（基于角色的访问控制）层保护。首次启动时，API
+会从业务线注册表自动创建以下账号（幂等——仅当 `users` 表为空时执行）：
 
-| Username | Password | Role | Sees |
+| 用户名 | 密码 | 角色 | 可见范围 |
 |---|---|---|---|
-| `admin` | `admin123` | `admin` + `auditor` | everything |
-| `viewer` | — (set via API) | `viewer` | everything, read-only |
-| `bp-<line>` | `bp123456` | `bp:<line>` | only that line |
+| `admin` | `admin123` | `admin` + `auditor` | 全部 |
+| `viewer` | —（通过 API 设置） | `viewer` | 全部，只读 |
+| `bp-<line>` | `bp123456` | `bp:<line>` | 仅对应业务线 |
 
-Change these defaults in production via `BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD` /
-`BIZ_BP_BOOTSTRAP_BP_PASSWORD` env vars or via
-`PATCH /api/auth/users/{id}/roles` after first boot.
+生产环境请通过 `BIZ_BP_BOOTSTRAP_ADMIN_PASSWORD` /
+`BIZ_BP_BOOTSTRAP_BP_PASSWORD` 环境变量，或在首次启动后通过
+`PATCH /api/auth/users/{id}/roles` 修改默认密码。
 
-Key endpoints:
+关键端点：
 
-- `POST /api/auth/login` — body `{username, password}` → httpOnly cookie `finbp_token`
-- `POST /api/auth/logout` — clear cookie
-- `GET  /api/auth/me` — current user + roles + accessible_lines
-- `GET  /api/auth/accessible-lines` — business lines visible to me
-- `GET  /api/auth/users` (admin) / `POST` (admin) / `PATCH /users/{id}/roles` (admin)
-- `GET  /api/auth/audit-log` (admin/auditor) — paginated request log
+- `POST /api/auth/login` —— body `{username, password}`，返回 httpOnly cookie `finbp_token`
+- `POST /api/auth/logout` —— 清除 cookie
+- `GET  /api/auth/me` —— 当前用户 + 角色 + accessible_lines
+- `GET  /api/auth/accessible-lines` —— 当前用户可见的业务线
+- `GET  /api/auth/users`（admin）/ `POST`（admin）/ `PATCH /users/{id}/roles`（admin）
+- `GET  /api/auth/audit-log`（admin/auditor）—— 分页请求日志
 
-Business-line enforcement: a user with `bp:residential` cannot read
-`/api/lines/retail/*` (403), the registry list returned from
-`/api/registry/lines` is pre-filtered, and the dashboard sidebar only
-shows the lines the user can access.
+业务线访问隔离：拥有 `bp:residential` 角色的用户无法读取
+`/api/lines/retail/*`（返回 403），`/api/registry/lines` 返回的注册表
+已经预过滤，仪表盘侧边栏也只显示该用户有权访问的业务线。
 
-See **[docs/rbac-2026-09-03-deliverable.md](docs/rbac-2026-09-03-deliverable.md)**
-for the full design + 15 curl scenarios + bootstrap walkthrough.
+完整设计 + 15 个 curl 场景 + 引导流程参见
+**[docs/rbac-2026-09-03-deliverable.md](docs/rbac-2026-09-03-deliverable.md)**。
 
 ---
 
-## Quick start (Local dev)
+## 快速开始（本地开发）
 
 ```bash
-# 1. Install
+# 1. 安装依赖
 npm install
 cd apps/api && pip install -e ".[dev]" && cd ../..
 
-# 2. Start infra (Postgres, Redis, ClickHouse, MinIO, Airflow)
+# 2. 启动基础设施（Postgres、Redis、ClickHouse、MinIO、Airflow）
 docker compose -f infra/docker-compose.yml up -d postgres redis minio
 
-# 3. Start API (port 8769)
+# 3. 启动 API（端口 8769）
 $env:PYTHONPATH = "$(pwd)/apps/api"
 python -m uvicorn app.main:app --app-dir apps/api --port 8769 --reload
 
-# 4. Start web (port 3000)
+# 4. 启动 Web（端口 3000）
 npm run web:dev
 ```
 
-Open http://localhost:3000.
+打开 http://localhost:3000。
 
 ---
 
-## Business lines shipped
+## 已上线的业务线
 
-| ID | Display name | Domain |
+| ID | 显示名 | 领域 |
 |---|---|---|
-| `residential` | 住宅分析 | Sales / IRR / red-lines / payment |
-| `retail` | 零售分析 | NOI / efficiency / brand-mix / renovation NPV |
-| `retail-leasing` | 零售租赁与市场报告 | Leasing deals / market benchmark |
-| `valuation` | 估价部 | Reports / accuracy / collection |
-| `advisory` | 地产顾问部 | Projects / renewal / clients |
-| `office-leasing` | 写字楼租赁部 | Deals / buildings / brokers |
-| `investment` | 地产投资部 | Funds / portfolio / exits |
-| `project-management` | 地产项目管理部 | Progress / budget / satisfaction |
-| `industrial` | 工业地产部 | Warehouses / occupancy / tenants |
-| `my-line` | (demo) | Play with the plugin mechanism |
+| `residential` | 住宅分析 | 销售 / IRR / 三道红线 / 回款 |
+| `retail` | 零售分析 | NOI / 坪效 / 品牌组合 / 改造 NPV |
+| `retail-leasing` | 零售租赁与市场报告 | 租赁成交 / 市场对标 |
+| `valuation` | 估价部 | 报告 / 准确度 / 回款 |
+| `advisory` | 地产顾问部 | 项目 / 续约 / 客户 |
+| `office-leasing` | 写字楼租赁部 | 成交 / 楼宇 / 经纪人 |
+| `investment` | 地产投资部 | 基金 / 组合 / 退出 |
+| `project-management` | 地产项目管理部 | 进度 / 预算 / 满意度 |
+| `industrial` | 工业地产部 | 仓储 / 出租率 / 租户 |
+| `my-line` | （演示） | 体验插件机制 |
 
-To add an 11th line, see **[business_lines/README.md](business_lines/README.md)** — it's a 5-step copy-and-edit flow.
+如需新增第 11 条业务线，参见
+**[business_lines/README.md](business_lines/README.md)**——只需 5 步复制-修改。
 
 ---
 
-## Project layout
+## 项目结构
 
 ```
 fin-bp-portal/
 ├── apps/
-│   ├── api/                  # FastAPI + 4 engines + scraper framework
+│   ├── api/                  # FastAPI + 4 个引擎 + 爬虫框架
 │   │   ├── app/
 │   │   │   ├── services/
 │   │   │   │   ├── sensitivity_engine.py
@@ -159,18 +157,18 @@ fin-bp-portal/
 │       │   └── api/                    # BFF proxies
 │       ├── Dockerfile
 │       └── package.json
-├── business_lines/           # Plugin: 10 lines × 8 files each
+├── business_lines/           # 插件：10 条业务线 × 每条 8 个文件
 ├── packages/
-│   ├── types/                # Shared TypeScript types
+│   ├── types/                # 共享 TypeScript 类型
 │   └── ui/                   # UniversalKpiCard, UniversalChart, EmptyState, RoleSwitcher
 ├── infra/
-│   ├── docker-compose.yml    # 7-service stack
+│   ├── docker-compose.yml    # 7-service 编排
 │   ├── airflow/dags/
 │   ├── dbt/                  # DBT models
 │   └── .env.example
-├── data/landing/             # CSV/Excel/JSON drop zone
-├── docs/                     # All deliverables
-├── .env.example              # Env-var template
+├── data/landing/             # CSV/Excel/JSON 落地区
+├── docs/                     # 全部交付文档
+├── .env.example              # 环境变量模板
 ├── .dockerignore
 ├── .gitignore
 └── README.md
@@ -178,18 +176,18 @@ fin-bp-portal/
 
 ---
 
-## Architecture commitments
+## 架构承诺
 
-These are enforced by the codebase and verified in `docs/architecture-audit-*.md`:
+以下承诺由代码库强制执行，并在 `docs/architecture-audit-*.md` 中验证：
 
-1. **No `business_lines/*` imports** anywhere in `apps/` or `infra/`
-2. **Adding a new business line = 0 lines of core code**
-3. **4 universal engines** work for any line that has its YAML configs
-4. **LLM is pluggable** with `MockBackend` fallback when `DEEPSEEK_API_KEY` is absent
-5. **DBT and scrapers** also auto-discover via directory scanning
+1. **禁止 `business_lines/*` 的 import**——`apps/` 和 `infra/` 中都没有
+2. **新增业务线 = 0 行核心代码改动**
+3. **4 个通用引擎** 适用于所有具备 YAML 配置的业务线
+4. **LLM 可插拔**：当 `DEEPSEEK_API_KEY` 缺失时自动回退到 `MockBackend`
+5. **DBT 和爬虫** 也通过目录扫描自动发现
 
 ---
 
-## License
+## 许可证
 
-Internal use.
+内部使用。

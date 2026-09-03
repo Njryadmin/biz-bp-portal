@@ -1,12 +1,11 @@
 // apps/web/app/(dashboard)/admin/layout.tsx
 //
-// Admin-only section. Renders a secondary header (sibling of the
-// dashboard's main Topbar) and enforces the admin role guard for
-// every child route. Non-admin users are redirected to /403.
+// 仅 admin 可见的分区。渲染一个二级头部（与主 Topbar 平级），
+// 并对所有子路由执行 admin 角色守卫。非 admin 用户将被重定向
+// 到 /403。
 //
-// We deliberately keep the main dashboard layout (Topbar + sidebar)
-// active so the admin user keeps their navigation chrome — the admin
-// sub-header just adds breadcrumb + a "back to dashboard" link.
+// 我们有意保留主仪表盘布局（Topbar + 侧边栏）以维持导航框架，
+// admin 子头部只是在主框架之上增加面包屑 + "返回主页"链接。
 
 "use client";
 
@@ -36,9 +35,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // While we're still resolving the current user, show a neutral
-  // loading state (NOT a "no access" page — the user might just be
-  // slow to load).
+  // 仍在解析当前用户时，显示中性的加载态
+  // （不要直接显示"无权访问"——可能只是加载较慢）。
   if (user === undefined) {
     return (
       <div
@@ -56,9 +54,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // Not authenticated at all → bounce to login (the dashboard
-  // layout normally handles this, but we render a friendly fallback
-  // so deep-links to /admin/* don't briefly flash an error).
+  // 完全未登录 → 跳到登录页（仪表盘布局一般会兜底处理，
+  // 这里再多一道友好回退，避免深链 /admin/* 时短暂闪出错误）。
   if (user === null) {
     if (typeof window !== "undefined") {
       router.replace(`/login?from=${encodeURIComponent("/admin/users")}`);
@@ -66,7 +63,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return null;
   }
 
-  // Authenticated but not admin → 403 page.
+  // 已登录但不是 admin → 显示 403 页。
   if (!isAdmin(user)) {
     return (
       <div style={{ padding: 24 }}>
@@ -151,11 +148,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </Space>
       </header>
       <div style={{ flex: 1, padding: 24, background: "#f5f5f5", overflow: "auto" }}>
-        {/* antd <App> provides the context that App.useApp() reads
-            in child pages (e.g. /admin/users and /admin/ai-models
-            both pull { message, notification, modal } from
-            App.useApp()). Without this wrapper the hook returns a
-            placeholder object and message.error() throws. */}
+        {/* antd 的 <App> 提供 App.useApp() 所需的上下文，
+            子页面（如 /admin/users、/admin/ai-models）都通过
+            App.useApp() 拿到 { message, notification, modal }。
+            没有这个包装时，hook 只会返回占位对象，调用
+            message.error() 会直接抛错。 */}
         <App>
           {children}
         </App>

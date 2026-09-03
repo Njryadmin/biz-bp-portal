@@ -1,4 +1,4 @@
-# Architecture
+# 架构
 
 ```
                   ┌─────────────────────────────────────────────┐
@@ -14,9 +14,9 @@
                                │ read          │ read
                                ▼               ▼
                 ┌─────────────────────┐  ┌──────────────────────────┐
-                │ registry.yaml       │  │ dynamic importlib scan   │
-                │ (single source of   │  │ apps/api/app/routers/    │
-                │  truth)             │  │ registry.py              │
+                │ registry.yaml       │  │ 动态 importlib 扫描      │
+                │ (单一来源)          │  │ apps/api/app/routers/    │
+                │                     │  │ registry.py              │
                 └─────────┬───────────┘  └────────────┬─────────────┘
                           │                           │ include_router
                           ▼                           ▼
@@ -24,18 +24,17 @@
         │ apps/web                     │   │ apps/api                    │
         │ (Next.js 14)                 │   │ (FastAPI)                   │
         │  GET /api/registry/lines ────│──▶│  /api/registry/lines        │
-        │  dynamic left nav            │   │  /api/lines/<line>/...      │
+        │  动态左侧导航                │   │  /api/lines/<line>/...      │
         │  UniversalKpiCard / Chart    │   │                            │
         └──────────────┬───────────────┘   └────────────┬───────────────┘
                        │ fetch                           │ asyncpg / ch / s3
                        ▼                                 ▼
         ┌─────────────────────────────────────────────────────────────┐
         │ Postgres 16 · Redis 7 · ClickHouse 24 · MinIO (S3)         │
-        │ Orchestrated by Airflow 2.8 (image apache/airflow:2.8-...)  │
-        │ Raw data lands in data/landing/, dbt -> ClickHouse marts.  │
+        │ 由 Airflow 2.8 编排（镜像 apache/airflow:2.8-...）          │
+        │ 原始数据落在 data/landing/，dbt -> ClickHouse marts。       │
         └─────────────────────────────────────────────────────────────┘
 ```
 
-The whole monorepo has **one rule**: apps/* and infra/* are generic, business
-lines are plugins. Discovery at startup only — no static imports across the
-boundary.
+整个 monorepo 遵循**一条规则**：`apps/*` 和 `infra/*` 是通用代码，
+业务线是插件。仅在启动时发现——边界之间不做静态 import。

@@ -1,22 +1,22 @@
 """
 apps/api/app/routers/auth.py
 
-Authentication + user-management HTTP endpoints.
+身份认证 + 用户管理的 HTTP 端点。
 
-Routes
-------
-POST   /api/auth/login                       — body {username, password} → set cookie + me
-POST   /api/auth/logout                      — clear cookie
-GET    /api/auth/me                          — current user (id/username/roles/lines)
-GET    /api/auth/accessible-lines            — accessible business line ids
-GET    /api/auth/users                       — admin: list all users
-POST   /api/auth/users                       — admin: create a user
-PATCH  /api/auth/users/{id}                  — admin: update display_name/email/password/is_active
-PATCH  /api/auth/users/{id}/roles            — admin: replace a user's roles + lines
-PATCH  /api/auth/users/{id}/lines            — admin: replace a user's accessible_lines only
-POST   /api/auth/users/{id}/reset-password   — admin: rotate a user's password
-DELETE /api/auth/users/{id}                  — admin: deactivate a user (soft delete)
-GET    /api/auth/audit-log                   — admin/auditor: query the audit log
+路由
+----
+POST   /api/auth/login                       —— body {username, password} → 设置 cookie + me
+POST   /api/auth/logout                      —— 清除 cookie
+GET    /api/auth/me                          —— 当前用户（id/username/roles/lines）
+GET    /api/auth/accessible-lines            —— 当前用户可访问的业务线 id
+GET    /api/auth/users                       —— admin：列出全部用户
+POST   /api/auth/users                       —— admin：创建用户
+PATCH  /api/auth/users/{id}                  —— admin：更新 display_name/email/password/is_active
+PATCH  /api/auth/users/{id}/roles            —— admin：替换用户的角色 + 业务线
+PATCH  /api/auth/users/{id}/lines            —— admin：仅替换用户的 accessible_lines
+POST   /api/auth/users/{id}/reset-password   —— admin：轮换用户密码
+DELETE /api/auth/users/{id}                  —— admin：停用用户（软删除）
+GET    /api/auth/audit-log                   —— admin/auditor：查询审计日志
 """
 from __future__ import annotations
 
@@ -114,8 +114,8 @@ def _cookie_max_age() -> int:
 async def login(body: LoginRequest, response: Response) -> CurrentUserResponse:
     user = await _load_user_by_credentials(body.username, body.password)
     if user is None:
-        # Same error message for "no such user" / "wrong password" /
-        # "inactive user" to avoid leaking which usernames exist.
+        # "用户不存在" / "密码错误" / "账号已停用" 返回同一条错误信息，
+        # 避免泄露系统中存在的用户名。
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid credentials",

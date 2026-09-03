@@ -1,8 +1,8 @@
 // apps/web/lib/ai-models.ts
 //
-// Client-side helpers for the runtime-toggleable LLM provider registry
-// (admin-only). Mirrors the pattern of apps/web/lib/auth.ts so the
-// admin UI gets the same cookie-based fetch wrapper with no surprises.
+// 运行时可切换的 LLM 厂商注册表（仅 admin）的浏览器端辅助函数。
+// 沿用 apps/web/lib/auth.ts 的模式，管理后台可直接复用同一套
+// 基于 cookie 的 fetch 包装，无需额外适配。
 
 export type AIProviderName =
   | "openai"
@@ -148,7 +148,7 @@ export async function setDefaultAIModel(modelId: number): Promise<AIModelItem> {
 }
 
 // ---------------------------------------------------------------------------
-// Pure helpers (no fetch) — used by the page component
+// 纯辅助函数（无 fetch）—— 由页面组件调用
 // ---------------------------------------------------------------------------
 
 export function providerLabel(provider: string): string {

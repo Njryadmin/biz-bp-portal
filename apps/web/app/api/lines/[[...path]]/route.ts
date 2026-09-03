@@ -1,17 +1,16 @@
 // apps/web/app/api/lines/[[...path]]/route.ts
 //
-// Catch-all BFF for the per-business-line endpoints. The backend mounts
-// one router per line at startup (e.g. /api/lines/residential/projects,
-// /api/lines/retail-leasing/market-benchmark, ...). The exact set of
-// endpoints is therefore dynamic and varies by deployment; the BFF
-// just forwards whatever path the browser asks for.
+// 业务线相关端点的 BFF 通配路由。后端在启动时会为每条业务线挂载
+// 各自对应的 router（例如 /api/lines/residential/projects、
+// /api/lines/retail-leasing/market-benchmark 等）。端点集合
+// 是动态的、随部署而异；BFF 仅负责原样转发浏览器请求的路径。
 //
-// The page code previously did:
+// 此前的页面代码直接：
 //   fetch(`${API_BASE}${apiPrefix}/projects/${id}/dynamic-pl`)
-// which on a single-host dev box works (cookie is on 127.0.0.1) but
-// breaks as soon as the API and the Next app are on different hosts
-// (no third-party cookies in modern browsers). Routing the page
-// through this BFF keeps everything same-origin.
+// 在单主机开发环境能工作（cookie 落在 127.0.0.1 下），但只要
+// API 与 Next 应用分别位于不同主机就会失败（现代浏览器不再
+// 允许第三方 cookie）。把页面统一走这个 BFF，可以保持完全
+// 同源。
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -29,14 +28,14 @@ async function proxy(request: NextRequest, pathSegments: string[] | undefined) {
     const init: RequestInit = {
       method: request.method,
       headers: {
-        // Forward the user's auth cookie so the upstream get_current_user
-        // resolves the same identity the page expects.
+        // 转发用户的认证 cookie，让上游 get_current_user
+        // 解析出与页面预期一致的身份。
         cookie: request.headers.get("cookie") ?? "",
         "content-type": request.headers.get("content-type") ?? "application/json",
       },
-      // Don't auto-follow redirects; the upstream can decide.
+      // 不自动跟随重定向；由上游自行决定。
       redirect: "manual",
-      // Pass through the body for non-GET methods.
+      // 非 GET 方法透传请求体。
       body: ["GET", "HEAD"].includes(request.method)
         ? undefined
         : await request.arrayBuffer(),
