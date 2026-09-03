@@ -5,8 +5,6 @@
   manifest: business_lines/retail/manifest.yaml
 - id: retail-leasing
   manifest: business_lines/retail-leasing/manifest.yaml
-- id: my-line
-  manifest: business_lines/my-line/manifest.yaml
 - id: valuation
   manifest: business_lines/valuation/manifest.yaml
 - id: advisory
