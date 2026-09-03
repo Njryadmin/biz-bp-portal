@@ -102,10 +102,6 @@ interface ForecastResult {
   attribution: AttributionRow[] | null;
 }
 
-const API_BASE =
-  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) ||
-  "http://localhost:8769";
-
 function fmtPct(x: number, digits = 1): string {
   if (!Number.isFinite(x)) return "—";
   return `${(x * 100).toFixed(digits)}%`;

@@ -34,11 +34,6 @@ import {
 
 const { Title, Paragraph } = Typography;
 
-const API_BASE =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_API_BASE_URL) ||
-  "http://localhost:8769";
-
 interface RegistryResponse {
   version?: string;
   lines: BusinessLine[];
@@ -259,7 +254,7 @@ function useFirstIdAndList(
     }
     let cancelled = false;
     setLoading(true);
-    fetch(`${API_BASE}${apiPrefix}/${listPath}`, { cache: "no-store" })
+    fetch(`${apiPrefix}/${listPath}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (cancelled || !data) return;
@@ -306,7 +301,7 @@ function PropertyDetailView({
     let cancelled = false;
     setDetailLoading(true);
     fetch(
-      `${API_BASE}${apiPrefix}/properties/${firstId}/${detailEndpoint}`,
+      `${apiPrefix}/properties/${firstId}/${detailEndpoint}`,
       { cache: "no-store" },
     )
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
@@ -375,7 +370,7 @@ function ProjectDetailView({
     let cancelled = false;
     setDetailLoading(true);
     fetch(
-      `${API_BASE}${apiPrefix}/projects/${firstId}/${detailEndpoint}`,
+      `${apiPrefix}/projects/${firstId}/${detailEndpoint}`,
       { cache: "no-store" },
     )
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
@@ -962,7 +957,7 @@ function MarketBenchmarkView({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`${API_BASE}${apiPrefix}/market-benchmark`, { cache: "no-store" })
+    fetch(`${apiPrefix}/market-benchmark`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => !cancelled && setData(d))
       .catch((e) => !cancelled && setError(String(e)))
@@ -1054,7 +1049,7 @@ function VacancyAlertsView({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`${API_BASE}${apiPrefix}/vacancy-alerts`, { cache: "no-store" })
+    fetch(`${apiPrefix}/vacancy-alerts`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => !cancelled && setData(d))
       .catch((e) => !cancelled && setError(String(e)))
@@ -1173,7 +1168,7 @@ function PropertiesSummaryView({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`${API_BASE}${apiPrefix}/properties`, { cache: "no-store" })
+    fetch(`${apiPrefix}/properties`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => !cancelled && setData(d))
       .catch((e) => !cancelled && setError(String(e)))

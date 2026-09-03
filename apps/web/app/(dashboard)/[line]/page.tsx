@@ -38,11 +38,6 @@ interface IndicatorsResponse {
   count?: number;
 }
 
-const API_BASE =
-  (typeof process !== "undefined" &&
-    process.env.NEXT_PUBLIC_API_BASE_URL) ||
-  "http://localhost:8769";
-
 function displayName(line: BusinessLine): string {
   return line.display_name ?? line.name ?? line.id;
 }
@@ -104,7 +99,7 @@ export default function LineOverviewPage() {
     let cancelled = false;
     setLoadingIndicators(true);
     setIndicators([]);
-    const url = `${API_BASE}/api/lines/${lineId}/indicators`;
+    const url = `/api/lines/${lineId}/indicators`;
     fetch(url, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data: IndicatorsResponse | null) => {
@@ -350,7 +345,7 @@ function MyLineOverview({ line }: { line: BusinessLine }) {
   const [ping, setPing] = useState<{ ok: boolean; message?: string } | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API_BASE}/api/lines/my-line/ping`, { cache: "no-store" })
+    fetch(`/api/lines/my-line/ping`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (cancelled) return;
