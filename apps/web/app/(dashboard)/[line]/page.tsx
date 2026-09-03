@@ -18,7 +18,12 @@ import { useParams } from "next/navigation";
 import { Card, Col, Row, Skeleton, Space, Spin, Typography } from "antd";
 import { EmptyState, UniversalKpiCard } from "@fin-bp/ui";
 import type { BusinessLine, Indicator } from "@fin-bp/types";
-import { getPageSpec, isKnownLine } from "../_components/linePageConfig";
+import {
+  buildLinePageConfig,
+  getPageSpec,
+  isKnownLine,
+  setLinePageConfig,
+} from "../_components/linePageConfig";
 
 const { Title, Paragraph } = Typography;
 
@@ -72,7 +77,13 @@ export default function LineOverviewPage() {
         const res = await fetch("/api/registry", { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as RegistryResponse;
-        if (!cancelled) setRegistry(data);
+        if (cancelled) return;
+        setRegistry(data);
+        // P2 #3: build the dynamic page-spec table from the registry
+        // so every (line, page) pair declared in `business_lines/<line>/manifest.yaml`
+        // is wired into the App Router automatically. Idempotent — safe
+        // to call from both the [line] and [line]/[page] pages.
+        setLinePageConfig(buildLinePageConfig(data.lines ?? []));
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
       } finally {

@@ -1,4 +1,4 @@
-lines:
+﻿lines:
 - id: residential
   manifest: business_lines/residential/manifest.yaml
 - id: retail
@@ -19,3 +19,5 @@ lines:
   manifest: business_lines/project-management/manifest.yaml
 - id: industrial
   manifest: business_lines/industrial/manifest.yaml
+
+

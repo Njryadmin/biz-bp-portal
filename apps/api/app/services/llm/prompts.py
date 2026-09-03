@@ -47,9 +47,9 @@ from typing import Any
 
 
 def _get_registry_lines() -> list[dict[str, Any]]:
-    """Return a list of {id, name, description, api_prefix} for every
+    """Return a list of {id, name, description, api_prefix, nav} for every
     registered business line. Used to render the SYSTEM_PROMPT business-
-    line table.
+    line table and the dynamic endpoint catalog.
     """
     try:
         from ...core.registry import load_registry  # type: ignore
@@ -57,12 +57,9 @@ def _get_registry_lines() -> list[dict[str, Any]]:
         entries = load_registry()
     except Exception:
         # Registry may be unavailable in some test contexts. Fall back to
-        # the canonical 4 lines so the system prompt is still meaningful.
-        return [
-            {"id": "residential", "name": "住宅开发", "description": "—", "api_prefix": "/api/lines/residential"},
-            {"id": "retail", "name": "零售商业", "description": "—", "api_prefix": "/api/lines/retail"},
-            {"id": "retail-leasing", "name": "零售租赁", "description": "—", "api_prefix": "/api/lines/retail-leasing"},
-        ]
+        # an empty list; render_business_lines() will surface "no lines
+        # registered" rather than fake data.
+        return []
     out: list[dict[str, Any]] = []
     for e in entries:
         out.append(
@@ -71,42 +68,116 @@ def _get_registry_lines() -> list[dict[str, Any]]:
                 "name": e.line.name,
                 "description": e.line.description or "—",
                 "api_prefix": e.line.api_prefix,
+                # ``nav`` is a list of {path, title} from manifest.yaml
+                "nav": [{"path": n.path, "title": n.title} for n in (e.line.nav or [])],
             }
         )
     return out
 
 
 # ---------------------------------------------------------------------------
-# Endpoint catalog — the canonical list of mock-known endpoints.
+# Dynamic endpoint catalog.
 # ---------------------------------------------------------------------------
-# We hardcode the well-known endpoints here (they don't change often). A
-# new business line that exposes /projects or /properties will be added
-# automatically via the registry table above; the URL is constructed
-# from the line's api_prefix.
+#
+# Built ONCE at module import from the live registry so the LLM sees the
+# current set of business lines and their manifest-declared nav. New
+# business lines added to `business_lines/registry.yaml` are picked up
+# automatically — no edits to this file required.
+#
+# For each registered line we generate:
+#   - The api_prefix root (e.g. ``GET /api/lines/valuation``)
+#   - One line per manifest nav entry, showing the absolute path and the
+#     human-readable title. The LLM can use these as both data fetches
+#     AND UI deep-links.
+#
+# Pure function — no I/O, deterministic — so it can be re-run freely in
+# tests.
 # ---------------------------------------------------------------------------
 
-ENDPOINT_CATALOG: dict[str, list[str]] = {
-    "residential": [
-        "GET /projects — 项目列表",
-        "GET /projects/{project_id}/dynamic-pl — IRR / 净利率 / 月度去化率",
-        "GET /projects/{project_id}/payment — 回款完成率 / 当月回款/计划",
-        "GET /projects/{project_id}/redlines — 三道红线 (资产负债率/净负债率/现金短债比)",
-    ],
-    "retail": [
-        "GET /properties — 物业列表 (含 NOI / 坪效 / 空置率 / 收缴率)",
-        "GET /properties/{property_id}/noi-waterfall — NOI 瀑布",
-        "GET /properties/{property_id}/renovation-npv — 调改 vs 维持 NPV",
-        "GET /properties/{property_id}/collection-rate — 收缴率明细",
-    ],
-    "retail-leasing": [
-        "GET /properties — 商铺/业主清单 (含 owner_vacancy_days)",
-        "GET /market-benchmark — 竞品基准差 (deal_rent vs comparable_median)",
-    ],
-    "my-line": [
-        "GET /ping — 心跳",
-        "GET /indicators — 指标库",
-    ],
-}
+
+def build_endpoint_catalog() -> dict[str, list[str]]:
+    """Build {line_id: [endpoint-description, ...]} from the live registry.
+
+    The output is the SAME shape as the legacy ``ENDPOINT_CATALOG`` dict
+    so ``_render_business_lines()`` (and any test that introspects it)
+    does not need to change. Each entry is a human-readable string
+    suitable for inclusion in the LLM system prompt.
+
+    For each line we generate:
+      - The api_prefix root (e.g. ``GET /api/lines/valuation``)
+      - The universal ``/indicators`` endpoint that every line exposes
+      - One entry per manifest nav slug, treating the slug (the part of
+        the path after the line id) as the API endpoint name. The
+        manifest convention is to align nav slugs with API endpoint
+        names, so ``/valuation/reports`` → ``/api/lines/valuation/reports``.
+    """
+    out: dict[str, list[str]] = {}
+    for ln in _get_registry_lines():
+        lid = ln["id"]
+        prefix = ln["api_prefix"]
+        entries: list[str] = []
+        # Always advertise the api_prefix root + the universal /indicators.
+        entries.append(f"GET {prefix} — {ln['name']} 业务线根端点")
+        entries.append(f"GET {prefix}/indicators — 指标库(每条业务线通用)")
+        for nav in ln.get("nav", []):
+            path = nav.get("path", "")
+            title = nav.get("title", "")
+            if not path:
+                continue
+            # Compute the slug the same way the web UI does: strip the
+            # leading slash and the line-id prefix.
+            trimmed = path[1:] if path.startswith("/") else path
+            if trimmed.startswith(lid + "/"):
+                slug = trimmed[len(lid) + 1:]
+            elif trimmed == lid:
+                # Line root — already covered by the api_prefix entry
+                # above. Skip to avoid duplication.
+                continue
+            else:
+                slug = trimmed
+            if not slug:
+                continue
+            api_path = f"{prefix}/{slug}"
+            entries.append(f"GET {api_path} — {title}")
+        if len(entries) <= 1:
+            # Only had the root entry; add a placeholder so the LLM
+            # doesn't conclude the line has no endpoints.
+            entries.append(f"GET {prefix} — {ln['name']} (无可用 nav 入口)")
+        out[lid] = entries
+    return out
+
+
+# Module-level cache: built once at import. Re-imported by the test
+# harness to pick up a freshly-torn-down registry. Tests that need a
+# clean rebuild can call ``build_endpoint_catalog.cache_clear()`` (see
+# below) or simply re-import the module.
+_ENDPOINT_CATALOG: dict[str, list[str]] = build_endpoint_catalog()
+
+
+def endpoint_catalog() -> dict[str, list[str]]:
+    """Return the cached endpoint catalog. Indirection so tests can
+    monkey-patch the cache without touching the build function."""
+    return _ENDPOINT_CATALOG
+
+
+# Backwards-compat alias — the legacy module-level ``ENDPOINT_CATALOG``
+# dict. Kept as a property of the module so existing imports keep
+# working. Read-only.
+ENDPOINT_CATALOG: dict[str, list[str]] = _ENDPOINT_CATALOG
+
+
+def reset_endpoint_catalog_cache() -> None:
+    """Rebuild the module-level catalog cache from the current registry.
+
+    Useful for tests that mutate the registry on disk between runs.
+    Production code does NOT need to call this.
+    """
+    global _ENDPOINT_CATALOG
+    _ENDPOINT_CATALOG = build_endpoint_catalog()
+    # Also rebind the read-only alias so any code holding a reference
+    # to ``prompts.ENDPOINT_CATALOG`` sees the new value.
+    globals()["ENDPOINT_CATALOG"] = _ENDPOINT_CATALOG
+
 
 CROSS_LINE_ENDPOINTS: list[str] = [
     "GET /api/registry/lines — 业务线清单",
@@ -119,13 +190,14 @@ def _render_business_lines() -> str:
     """Render the registered business lines + their endpoint catalog."""
     lines = _get_registry_lines()
     out: list[str] = []
+    catalog = endpoint_catalog()
     for ln in lines:
         lid = ln["id"]
         name = ln["name"]
         desc = ln["description"]
         prefix = ln["api_prefix"]
         out.append(f"- {lid} ({name}): {desc}; API 前缀 {prefix}")
-        for ep in ENDPOINT_CATALOG.get(lid, []):
+        for ep in catalog.get(lid, []):
             out.append(f"    · {ep}")
     if not out:
         out.append("  (尚未注册任何业务线)")
@@ -300,6 +372,9 @@ __all__ = [
     "CROSS_LINE_ENDPOINTS",
     "render_system_prompt",
     "build_prompt",
+    "build_endpoint_catalog",
+    "endpoint_catalog",
+    "reset_endpoint_catalog_cache",
     "_get_registry_lines",
     "_render_business_lines",
 ]

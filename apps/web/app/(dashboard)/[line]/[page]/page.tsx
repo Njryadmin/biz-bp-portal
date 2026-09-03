@@ -25,7 +25,12 @@ import {
 } from "antd";
 import { EmptyState, UniversalChart, UniversalKpiCard } from "@fin-bp/ui";
 import type { BusinessLine } from "@fin-bp/types";
-import { getPageSpec, isKnownLine } from "../../_components/linePageConfig";
+import {
+  buildLinePageConfig,
+  getPageSpec,
+  isKnownLine,
+  setLinePageConfig,
+} from "../../_components/linePageConfig";
 
 const { Title, Paragraph } = Typography;
 
@@ -78,7 +83,12 @@ export default function LineSubPage() {
         const res = await fetch("/api/registry", { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as RegistryResponse;
-        if (!cancelled) setRegistry(data);
+        if (cancelled) return;
+        setRegistry(data);
+        // P2 #3: build the dynamic page-spec table from the registry
+        // so every (line, page) pair declared in `business_lines/<line>/manifest.yaml`
+        // is wired into the App Router automatically.
+        setLinePageConfig(buildLinePageConfig(data.lines ?? []));
       } catch (e) {
         if (!cancelled) setRegistryError((e as Error).message);
       }

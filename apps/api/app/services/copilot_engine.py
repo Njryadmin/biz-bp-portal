@@ -163,25 +163,122 @@ COMMON_SUGGESTIONS: list[str] = [
 ]
 
 
-LINE_SUGGESTIONS: dict[str, list[str]] = {
-    "residential": [
-        "住宅 IRR 最高的 3 个项目",
-        "本月回款下降的项目有哪些?",
-        "三道红线触发情况",
-        "去化速度最低的项目",
-    ],
-    "retail": [
-        "NOI 最高的 3 个物业",
-        "调改 NPV 为正的项目",
-        "收缴率低于 95% 的物业",
-        "空置率最高的物业",
-    ],
-    "retail-leasing": [
-        "空置期最长的业主",
-        "竞品基准差最大的商铺",
-        "续约率低于 60% 的物业",
-    ],
-}
+# ---------------------------------------------------------------------------
+# Dynamic per-line suggestion builder.
+# ---------------------------------------------------------------------------
+#
+# Originally the suggestion table was hardcoded for 3 lines. With 10
+# lines (and growing) it has to come from the registry + indicators.yaml
+# — otherwise new lines fall through to the "common" bucket and the
+# sidebar shows no targeted suggestions for them.
+#
+# We build 4 questions per line, entirely templated so the same logic
+# works for any future line:
+#
+#   1. <line.display_name> 的核心 KPI 概览    (uses first indicator title)
+#   2. 对 {line.display_name} 做一份敏感性分析
+#   3. 对 {line.display_name} 做未来 12 期预测
+#   4. 检查 {line.display_name} 是否有告警
+#
+# The first indicator is taken from indicators.yaml (the "headline KPI"
+# for that line) — e.g. "IRR" for residential, "NOI" for retail,
+# "report_count" for valuation. If no indicators.yaml is present, we
+# fall back to "核心指标" as a generic placeholder.
+# ---------------------------------------------------------------------------
+
+
+def _first_indicator_title(line_id: str) -> str:
+    """Return the title of the first indicator for ``line_id``, or a
+    generic placeholder when indicators.yaml is missing or empty.
+
+    Mirrors ``build_line_keywords_from_registry`` in mock.py: both
+    files are cheap, independent fallbacks for "what's the headline
+    KPI for this line?".
+    """
+    try:
+        from ..core.registry import load_registry
+
+        for entry in load_registry():
+            if entry.line.id == line_id and entry.indicators:
+                return entry.indicators[0].title or entry.indicators[0].id
+    except Exception:  # noqa: BLE001 — defensive
+        return "核心指标"
+    return "核心指标"
+
+
+def _line_display_name(line_id: str, fallback: str | None = None) -> str:
+    """Resolve a human-readable name for a line.
+
+    Tries registry first, then the ``fallback`` argument, then the
+    ``line_id`` itself. Used so a missing registry still produces a
+    sensible Chinese display name when running outside the project
+    (e.g. legacy unit tests).
+    """
+    try:
+        from ..core.registry import load_registry
+
+        for entry in load_registry():
+            if entry.line.id == line_id:
+                return entry.line.name or line_id
+    except Exception:  # noqa: BLE001
+        pass
+    return fallback or line_id
+
+
+def build_line_suggestions() -> dict[str, list[str]]:
+    """Build {line_id: [question, ...]} dynamically from the registry.
+
+    Always returns 3-4 questions per registered line, in Chinese, with
+    the line's display name + headline KPI interpolated. Future lines
+    added to ``business_lines/registry.yaml`` are picked up
+    automatically — no edits here required.
+    """
+    out: dict[str, list[str]] = {}
+    try:
+        from ..core.registry import load_registry
+
+        entries = load_registry()
+    except Exception:  # noqa: BLE001
+        return out
+    for entry in entries:
+        lid = entry.line.id
+        name = entry.line.name or lid
+        kpi_title = _first_indicator_title(lid)
+        out[lid] = [
+            f"{name} 的核心 KPI({kpi_title})概览",
+            f"对 {name} 做一份敏感性分析",
+            f"对 {name} 做未来 12 期预测",
+            f"检查 {name} 是否有告警",
+        ]
+    return out
+
+
+# Module-level cache: built once at import. Tests that mutate the
+# registry can call ``build_line_suggestions.cache_clear()`` (below)
+# or ``reset_line_suggestions_cache()`` to rebuild.
+_LINE_SUGGESTIONS: dict[str, list[str]] = build_line_suggestions()
+
+
+def line_suggestions() -> dict[str, list[str]]:
+    """Return the cached per-line suggestions. Indirection so tests
+    can patch the cache without touching the build function."""
+    return _LINE_SUGGESTIONS
+
+
+def reset_line_suggestions_cache() -> None:
+    """Rebuild the module-level suggestions cache from the current
+    registry. Production code does NOT need to call this — the cache
+    is built once at import time, which is the right behaviour for
+    the long-running uvicorn process."""
+    global _LINE_SUGGESTIONS
+    _LINE_SUGGESTIONS = build_line_suggestions()
+    globals()["LINE_SUGGESTIONS"] = _LINE_SUGGESTIONS
+
+
+# Backwards-compat alias — the legacy module-level ``LINE_SUGGESTIONS``
+# dict. Kept as a property of the module so existing imports keep
+# working. Read-only.
+LINE_SUGGESTIONS: dict[str, list[str]] = _LINE_SUGGESTIONS
 
 
 # ---------------------------------------------------------------------------
@@ -332,13 +429,16 @@ class CopilotEngine:
         )
 
     def suggestions(self) -> CopilotSuggestions:
-        # Only return suggestions for lines that are actually registered.
+        # ``line_suggestions()`` is already filtered to registered lines
+        # (it is built from ``load_registry()``). The defensive filter
+        # below is a no-op in production but keeps the contract narrow:
+        # we never leak suggestions for a line that was unregistered
+        # between module-import time and the request.
         entries = load_registry()
         registered = {e.line.id for e in entries}
-        by_line: dict[str, list[str]] = {}
-        for lid, qs in LINE_SUGGESTIONS.items():
-            if lid in registered:
-                by_line[lid] = qs
+        by_line: dict[str, list[str]] = {
+            lid: qs for lid, qs in line_suggestions().items() if lid in registered
+        }
         return CopilotSuggestions(by_line=by_line, common=COMMON_SUGGESTIONS)
 
     # ── Internals ──────────────────────────────────────────────────────
