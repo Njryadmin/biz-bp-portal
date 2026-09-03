@@ -127,7 +127,22 @@ export default function LineOverviewPage() {
     [registry, lineId],
   );
 
-  // ── Unknown line id → friendly empty state, NOT a 404 ──
+  // ── Registry still loading: render a skeleton, NOT an error ──
+  // `isKnownLine()` is only correct after the registry fetch has
+  // populated the live spec table. Until then, every line looks
+  // "unknown" — flashing the "未知业务线" empty state during the
+  // pre-hydration paint looks like a broken page even though the
+  // line is valid. Show a skeleton instead and only fall through
+  // to the genuine-unknown empty state once loadingRegistry is false.
+  if (loadingRegistry) {
+    return (
+      <div style={{ padding: 24 }}>
+        <Skeleton active paragraph={{ rows: 4 }} />
+      </div>
+    );
+  }
+
+  // ── Unknown line id (after registry loaded) → friendly empty state, NOT a 404 ──
   if (!known) {
     return (
       <div style={{ padding: 24 }}>
@@ -137,14 +152,6 @@ export default function LineOverviewPage() {
           docsHref="/docs/plugin-howto.md"
           docsLabel="查看插件编写指南"
         />
-      </div>
-    );
-  }
-
-  if (loadingRegistry) {
-    return (
-      <div style={{ padding: 24, textAlign: "center" }}>
-        <Spin size="large" tip="加载 registry..." />
       </div>
     );
   }
