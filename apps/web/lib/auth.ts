@@ -57,6 +57,11 @@ export interface UpdateUserPayload {
   email?: string;
   is_active?: boolean;
   password?: string;
+  // Set to true to explicitly clear the user's email column to NULL.
+  // Pydantic EmailStr rejects empty strings so we use a separate
+  // signal. The backend treats clear_email=true as "set email to
+  // NULL", which wins over any value in the email field.
+  clear_email?: boolean;
 }
 
 export interface UpdateUserLinesPayload {

@@ -63,6 +63,12 @@ class UpdateUserRequest(BaseModel):
     display_name: Optional[str] = Field(default=None, min_length=1, max_length=128)
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
+    # Explicit "set email to NULL" flag. The UI can't pass an empty
+    # string (Pydantic EmailStr would reject it), so we expose a
+    # separate signal: clear_email=True writes SQL NULL, clear_email=
+    # False leaves the column untouched. This mirrors the pattern
+    # used by the AI model router for clearing api_key.
+    clear_email: bool = False
     password: Optional[str] = Field(
         default=None,
         min_length=6,

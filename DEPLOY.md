@@ -95,23 +95,23 @@ in production.
                   │ (Next.js SSR + BFF proxy /api/* → :8000)
                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  web (Next.js 14, production)            :3000                    │
-│  ├─ reads NEXT_PUBLIC_API_BASE_URL=http://api:8000             │
+│  web (Next.js 14, production)            :3000                  │
+│  ├─ reads NEXT_PUBLIC_API_BASE_URL=http://api:8000              │
 └─────────────────┬───────────────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  api (FastAPI + uvicorn)               :8000                     │
-│  ├─ 4 universal engines (Sensitivity, Copilot, Forecast, Alts)│
-│  ├─ 3 scrapers (NBS, Lianjia, Policy)                         │
-│  ├─ dynamic business-line discovery via importlib             │
-│  └─ BIZ_BP_API_BASE=http://api:8000 (self-call for engines)  │
+│  api (FastAPI + uvicorn)               :8000                    │
+│  ├─ 4 universal engines (Sensitivity, Copilot, Forecast, Alts)  │
+│  ├─ 3 scrapers (NBS, Lianjia, Policy)                           │
+│  ├─ dynamic business-line discovery via importlib               │
+│  └─ BIZ_BP_API_BASE=http://api:8000 (self-call for engines)     │
 └─────────────────┬───────────────────────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Airflow (scheduler + webserver)     :8080                      │
-│  └─ runs ingest_daily + scrape_weekly DAGs                    │
+│  └─ runs ingest_daily + scrape_weekly DAGs                      │
 └─────────────────┬───────────────────────────────────────────────┘
                   │
         ┌─────────┴─────────┐

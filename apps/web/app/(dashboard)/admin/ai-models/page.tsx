@@ -116,6 +116,12 @@ export default function AdminAIModelsPage() {
     result: TestAIModelResponse;
   } | null>(null);
   const [testingId, setTestingId] = useState<number | null>(null);
+  // When true, the next save of the edit form will explicitly clear
+  // the stored API key (the input field is disabled in this state
+  // and the submit handler sends api_key=""). The backend router
+  // already interprets an explicit empty string as "set api_key to
+  // NULL" (apps/api/app/routers/ai_models.py:317-319).
+  const [clearApiKey, setClearApiKey] = useState(false);
 
   const [createForm] = Form.useForm<CreateAIModelPayload>();
   const [editForm] = Form.useForm<EditFormValues>();
@@ -166,6 +172,9 @@ export default function AdminAIModelsPage() {
       enabled: row.enabled,
       is_default: row.is_default,
     });
+    // Always start with clearApiKey=false on a fresh edit modal so
+    // the previous "clear pending" toggle doesn't leak across rows.
+    setClearApiKey(false);
     setEditOpen(true);
   };
 
@@ -201,10 +210,13 @@ export default function AdminAIModelsPage() {
       if (values.base_url !== undefined) {
         payload.base_url = values.base_url;
       }
-      // Only send api_key when the user typed something. Empty string
-      // would clear the stored value; we don't want that on every
-      // edit.
-      if (values.api_key && values.api_key.length > 0) {
+      // api_key handling:
+      //  - clearApiKey=true  → send api_key=""  (backend writes NULL)
+      //  - clearApiKey=false AND user typed something → send the new value
+      //  - clearApiKey=false AND input empty → omit the field (keep current)
+      if (clearApiKey) {
+        payload.api_key = "";
+      } else if (values.api_key && values.api_key.length > 0) {
         payload.api_key = values.api_key;
       }
       if (values.is_default !== editing.is_default) {
@@ -614,7 +626,45 @@ export default function AdminAIModelsPage() {
             label="API Key (可选,支持 env:VAR_NAME 引用)"
             tooltip="如不想把 key 写入数据库,填写 env:DEEPSEEK_API_KEY 这样的引用,运行时从环境变量读取"
           >
-            <Input.Password placeholder="sk-... 或 env:VAR_NAME" aria-label="API Key" />
+            <Input.Password
+              placeholder={
+                clearApiKey
+                  ? "将清空已存的 API Key"
+                  : editing?.api_key_set
+                    ? "留空保持不变 · 输入新值覆盖 · 点清空按钮清除"
+                    : "sk-... 或 env:VAR_NAME"
+              }
+              disabled={clearApiKey}
+              aria-label="API Key"
+              addonAfter={
+                clearApiKey ? (
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => {
+                      setClearApiKey(false);
+                      editForm.setFieldsValue({ api_key: "" });
+                    }}
+                    aria-label="取消清空"
+                  >
+                    取消
+                  </Button>
+                ) : (
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => {
+                      setClearApiKey(true);
+                      editForm.setFieldsValue({ api_key: "" });
+                    }}
+                    aria-label="清空 API Key"
+                    disabled={!editing?.api_key_set}
+                  >
+                    清空
+                  </Button>
+                )
+              }
+            />
           </Form.Item>
           <Space size="large">
             <Form.Item name="enabled" label="启用" valuePropName="checked">
@@ -633,7 +683,10 @@ export default function AdminAIModelsPage() {
       <Modal
         title={editing ? `编辑模型 — ${editing.name}` : "编辑模型"}
         open={editOpen}
-        onCancel={() => setEditOpen(false)}
+        onCancel={() => {
+          setEditOpen(false);
+          setClearApiKey(false);
+        }}
         onOk={submitEdit}
         okText="保存"
         cancelText="取消"

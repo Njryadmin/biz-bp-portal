@@ -127,6 +127,10 @@ export default function AdminUsersPage() {
   const [editing, setEditing] = useState<AdminUserItem | null>(null);
   const [pwOpen, setPwOpen] = useState(false);
   const [pwTarget, setPwTarget] = useState<AdminUserItem | null>(null);
+  // When true, the next save of the edit form will explicitly clear
+  // the user's email column to NULL (the input field is disabled in
+  // this state and the submit handler sends clear_email=true).
+  const [clearEmail, setClearEmail] = useState(false);
 
   const [createForm] = Form.useForm<CreateUserPayload>();
   const [editForm] = Form.useForm<UpdateUserPayload & { roles: string[]; accessible_lines: string[] }>();
@@ -343,6 +347,9 @@ export default function AdminUsersPage() {
       roles: row.roles,
       accessible_lines: row.accessible_lines,
     });
+    // Always start with clearEmail=false on a fresh edit modal so
+    // the previous "clear pending" toggle doesn't leak across rows.
+    setClearEmail(false);
     setEditOpen(true);
   };
 
@@ -373,10 +380,20 @@ export default function AdminUsersPage() {
       // Split the form into three PATCHes so each endpoint owns its
       // own field set. The order doesn't matter — they're idempotent
       // and the last write wins.
+      //
+      // Email handling: when the operator clicks the "清空邮箱" button
+      // (which sets clearEmail=true and disables the input), we send
+      // clear_email:true so the backend writes SQL NULL. Pydantic
+      // EmailStr would reject "" so we can't just send an empty
+      // string in the email field.
+      const emailPayload: string | undefined = clearEmail
+        ? undefined
+        : (email || undefined);
       await updateUser(editing.id, {
         display_name,
-        email: email || undefined,
+        email: emailPayload,
         is_active,
+        clear_email: clearEmail,
       } as UpdateUserPayload);
       // roles + lines: use the unified /roles endpoint so a single
       // transaction recomputes the bp:<line> ↔ accessible_lines union.
@@ -598,7 +615,10 @@ export default function AdminUsersPage() {
           ) : null
         }
         open={editOpen}
-        onCancel={() => setEditOpen(false)}
+        onCancel={() => {
+          setEditOpen(false);
+          setClearEmail(false);
+        }}
         onOk={submitEdit}
         okText="保存"
         cancelText="取消"
@@ -615,9 +635,45 @@ export default function AdminUsersPage() {
           <Form.Item
             name="email"
             label="邮箱"
-            rules={[{ type: "email", message: "邮箱格式不正确" }]}
+            rules={
+              clearEmail
+                ? []
+                : [{ type: "email", message: "邮箱格式不正确" }]
+            }
           >
-            <Input placeholder="可选" aria-label="邮箱" />
+            <Input
+              placeholder={clearEmail ? "将清空已有邮箱" : "可选"}
+              disabled={clearEmail}
+              aria-label="邮箱"
+              suffix={
+                clearEmail ? (
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => {
+                      setClearEmail(false);
+                      editForm.setFieldsValue({ email: editing?.email ?? "" });
+                    }}
+                    aria-label="取消清空"
+                  >
+                    取消
+                  </Button>
+                ) : (
+                  <Button
+                    type="link"
+                    size="small"
+                    onClick={() => {
+                      setClearEmail(true);
+                      editForm.setFieldsValue({ email: "" });
+                    }}
+                    aria-label="清空邮箱"
+                    disabled={!editing?.email}
+                  >
+                    清空
+                  </Button>
+                )
+              }
+            />
           </Form.Item>
           <Form.Item name="is_active" label="启用" valuePropName="checked">
             <Switch checkedChildren="启用" unCheckedChildren="停用" aria-label="启用" />

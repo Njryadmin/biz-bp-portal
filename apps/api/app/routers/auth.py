@@ -445,8 +445,10 @@ async def update_user(
     if all(
         v is None
         for v in (body.display_name, body.email, body.is_active, body.password)
-    ):
+    ) and not body.clear_email:
         # Nothing to do — return current state so the UI can re-fetch cheaply.
+        # NOTE: clear_email is checked separately because it's a bool flag
+        # (not None when the caller wants to clear the email column).
         item = await _load_user_with_perms(user_id)
         if item is None:
             raise HTTPException(
@@ -497,7 +499,10 @@ async def update_user(
     if body.display_name is not None:
         set_clauses.append("display_name = :display_name")
         params["display_name"] = body.display_name
-    if body.email is not None:
+    if body.clear_email:
+        # Explicit clear wins over any other email value.
+        set_clauses.append("email = NULL")
+    elif body.email is not None:
         set_clauses.append("email = :email")
         params["email"] = body.email
     if body.is_active is not None:

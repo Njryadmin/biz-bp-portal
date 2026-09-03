@@ -161,21 +161,41 @@ export default function AlertsPage() {
     let cancelled = false;
     (async () => {
       try {
-        // /api/registry gives us all known lines, including those
-        // without alerts.yaml — we filter to only those that have a
-        // rules endpoint by trying the rules call. Simpler: try the
-        // dedicated /api/alerts/profiles list.
-        const res = await fetch("/api/alerts/profiles", { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as {
+        // Fetch both /api/alerts/profiles (for per-line rule_count)
+        // and /api/registry/lines (for display_name) in parallel.
+        // /api/alerts/profiles only returns line_id + rule_count;
+        // we need the registry to show "住宅分析" instead of
+        // "residential" in the dropdown. Failures on the registry
+        // call are non-fatal: we fall back to the line_id as the
+        // display name.
+        const [profilesRes, registryRes] = await Promise.all([
+          fetch("/api/alerts/profiles", { cache: "no-store" }),
+          fetch("/api/registry/lines", { cache: "no-store" }),
+        ]);
+        if (!profilesRes.ok) {
+          throw new Error(`HTTP ${profilesRes.status} from /api/alerts/profiles`);
+        }
+        const data = (await profilesRes.json()) as {
           count: number;
           lines: { line_id: string; rule_count: number }[];
         };
+        let displayLookup: Record<string, string> = {};
+        if (registryRes.ok) {
+          const reg = (await registryRes.json()) as {
+            lines?: { id: string; name?: string; display_name?: string }[];
+          };
+          for (const r of reg.lines ?? []) {
+            displayLookup[r.id] = r.display_name ?? r.name ?? r.id;
+          }
+        }
         if (!cancelled) {
           setLines(
             data.lines.map((l) => ({
               id: l.line_id,
-              name: l.line_id,
+              // Prefer the registry display_name; fall back to the
+              // profile's line_id if the registry didn't have it
+              // (older line or transient registry fetch failure).
+              name: displayLookup[l.line_id] ?? l.line_id,
               rule_count: l.rule_count,
             })),
           );
