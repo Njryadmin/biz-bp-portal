@@ -19,6 +19,7 @@ from .db import init_db
 from .db.seed_users import seed_initial_users
 from .middleware import AuditMiddleware
 from .routers import build_registry_router
+from .routers.admin_business_lines import router as admin_business_lines_router
 from .routers.ai_models import router as ai_models_router
 from .routers.alerts import router as alerts_router
 from .routers.auth import router as auth_router
@@ -115,6 +116,9 @@ def create_app() -> FastAPI:
 
     # AI 模型注册表（运行时可切换的 LLM 厂商开关）
     app.include_router(ai_models_router)
+
+    # Admin: 业务线 manifest / indicators 增删改 (D1, 2026-09-04)
+    app.include_router(admin_business_lines_router)
 
     @app.get("/")
     async def root() -> dict:

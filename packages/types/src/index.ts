@@ -142,3 +142,131 @@ export interface UserV2RolesResponse {
   user_id: number;
   bindings: UserRoleBinding[];
 }
+
+/* ----------------------- Admin: business lines (D1) ----------------------- */
+
+// 5 v2 data domains (see apps/api/app/core/rbac_v2.py:DataDomain).
+export type V2DataDomain = "business" | "finance" | "hr" | "client" | "project";
+
+// 4 v2 keys allowed in the access_matrix (line-scoped roles only).
+// Global roles (admin/auditor/viewer/fin_bp_global/hr_bp_global) are
+// always full-access and never appear here.
+export type V2AccessRole =
+  | "fin_bp"
+  | "hr_bp"
+  | "line_owner"
+  | "line_member";
+
+// data_scope.domains subset (defaults to all 5 when the manifest predates v2).
+export interface BusinessLineDataScope {
+  domains: V2DataDomain[];
+}
+
+// owner_role_assignments: maps a v2 role to its "<role>:<line_id>"
+// string. These are HINTS for the admin UI — the real user→role
+// bindings live in the DB (user_roles table).
+export interface BusinessLineOwnerRoleAssignments {
+  finance_bp?: string;   // e.g. "fin_bp:residential"
+  hr_bp?: string;        // e.g. "hr_bp:residential"
+  line_owner?: string;   // e.g. "line_owner:residential"
+}
+
+// access_matrix: each key is a line-scoped v2 role; each value is
+// the subset of the 5 data domains that role can see.
+export interface BusinessLineAccessMatrix {
+  fin_bp?: V2DataDomain[];
+  hr_bp?: V2DataDomain[];
+  line_owner?: V2DataDomain[];
+  line_member?: V2DataDomain[];
+}
+
+// Single KPI definition (one of fin_view / hr_view / shared_view).
+export interface BusinessLineKpiItem {
+  id: string;
+  title: string;
+  source?: string;   // mart table, optional
+  formula?: string;  // derived metric expression, optional
+}
+
+// kpis block: three lists, one per viewpoint.
+export interface BusinessLineKpis {
+  fin_view: BusinessLineKpiItem[];
+  hr_view: BusinessLineKpiItem[];
+  shared_view: BusinessLineKpiItem[];
+}
+
+// GET /api/admin/business-lines — one row per business line.
+export interface BusinessLineSummary {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  owner: string;
+  icon: string;
+  /** Optional — only present when the manifest has v2 data_scope. */
+  data_scope?: BusinessLineDataScope;
+  /** Computed server-side at list time. */
+  indicators_count: number;
+  /** True if the on-disk manifest has any of the 4 v2 blocks. */
+  has_v2_fields: boolean;
+}
+
+// GET /api/admin/business-lines/{id} — full record (manifest + indicators).
+export interface BusinessLineFull extends BusinessLineSummary {
+  // v1 technical
+  api_prefix: string;
+  warehouse: { schema: string; dbt_schema: string; mart_schema: string };
+  refresh: { schedule: string; enabled: boolean };
+  features: { universal_kpi: boolean; universal_chart: boolean; ag_grid: boolean };
+  nav: BusinessLineNavItem[];
+  // v2 (optional — defaults to {}/[]/{}/etc. when the manifest predates v2)
+  owner_role_assignments?: BusinessLineOwnerRoleAssignments;
+  access_matrix?: BusinessLineAccessMatrix;
+  kpis?: BusinessLineKpis;
+  // indicators — read from indicators.yaml next to the manifest
+  indicators: Array<{
+    id: string;
+    title: string;
+    unit: string;
+    format: string;
+    aggregation: string;
+    source: string;
+    description: string;
+  }>;
+  charts: Array<{
+    id: string;
+    title: string;
+    type: string;
+    x: string;
+    y: string[];
+    source: string;
+    description: string;
+  }>;
+}
+
+// PATCH /api/admin/business-lines/{id} body. Every field is optional;
+// only the keys present in the body are touched. indicators / charts
+// are full replacements (NOT deltas).
+export interface UpdateBusinessLinePayload {
+  // v1 human-readable
+  name?: string;
+  description?: string;
+  owner?: string;
+  icon?: string;
+  // v1 technical
+  api_prefix?: string;
+  // v2
+  data_scope?: BusinessLineDataScope;
+  owner_role_assignments?: BusinessLineOwnerRoleAssignments;
+  access_matrix?: BusinessLineAccessMatrix;
+  kpis?: BusinessLineKpis;
+  // indicators / charts — full replacement
+  indicators?: BusinessLineFull["indicators"];
+  charts?: BusinessLineFull["charts"];
+}
+
+// GET /api/admin/business-lines response.
+export interface BusinessLineListResponse {
+  count: number;
+  lines: BusinessLineSummary[];
+}
