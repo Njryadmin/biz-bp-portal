@@ -26,6 +26,7 @@ from .routers.auth import router as auth_router
 from .routers.copilot import router as copilot_router
 from .routers.dashboard import router as dashboard_router
 from .routers.forecast import router as forecast_router
+from .routers.migrations import router as migrations_router
 from .routers.registry import mount_business_line_routers
 from .routers.scrapers import router as scrapers_router
 from .routers.sensitivity import router as sensitivity_router
@@ -123,6 +124,9 @@ def create_app() -> FastAPI:
 
     # Per-perspective dashboard MVP (E, 2026-09-04) — fin / hr / shared
     app.include_router(dashboard_router)
+
+    # Migration runner (F, 2026-09-04) — admin-only status / apply / verify
+    app.include_router(migrations_router)
 
     @app.get("/")
     async def root() -> dict:
