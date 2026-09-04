@@ -124,6 +124,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               用户管理
             </Button>
           </Link>
+          <Link href="/admin/business-lines">
+            <Button
+              type="default"
+              size="small"
+              aria-label="业务线管理"
+              style={{ background: "rgba(255,255,255,0.1)", color: "#fff", border: 0 }}
+            >
+              业务线管理
+            </Button>
+          </Link>
           <Link href="/admin/ai-models">
             <Button
               type="default"
