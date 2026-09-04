@@ -175,6 +175,10 @@ class CurrentUserV2:
     新增:
       • bindings: 完整角色绑定列表(role + scope + line_id)
       • active_view: 当前激活的视角 ("fin" / "hr" / "line_owner" / "admin" ...)
+
+    M2 新增:
+      • is_super_admin / tenant_id: 多租户中间件读 (tenant_context dep).
+        这两个字段不会暴露到任何 v2 公共响应 (见 load_user_v2).
     """
     id: int
     username: str
@@ -185,6 +189,9 @@ class CurrentUserV2:
     accessible_lines: list[str]
     bindings: list[UserRoleBinding]
     active_view: str | None = None  # 视角切换: "fin" / "hr" / None (= 按请求路由自动)
+    # M2 多租户 (2026-09-04)
+    is_super_admin: bool = False
+    tenant_id: str | None = None  # UUID 字符串
 
     def has_role(self, *roles: str | Role) -> bool:
         if not roles:

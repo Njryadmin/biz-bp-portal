@@ -68,6 +68,11 @@ os.environ.setdefault(
 )
 
 
+# M2 (2026-09-04): 多租户 — 显式带 tenant_id 走 DEFAULT_TENANT_ID.
+# 测试 helper 直接写默认值, 不依赖 trigger set_tenant_from_guc() 的 fallback.
+DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000000"
+
+
 # ---------------------------------------------------------------------------
 # DB 鍙揪鎬?+ connection helper
 # ---------------------------------------------------------------------------
@@ -216,9 +221,14 @@ def _create_user(username: str, *, password: str = "pw1234567") -> int:
         async with factory() as session:
             uid = (await session.execute(
                 text(
+                    # M2: 多租户 — INSERT 显式带 tenant_id.
+                    # 不依赖 trigger set_tenant_from_guc() (那个是 router
+                    # 走 tenant_session() 时的兜底; test helper 直接写
+                    # DEFAULT_TENANT_ID 更明确, 也不会因 GUC 没设触发
+                    # 触发器 fallback 路径造成混淆).
                     """
-                    INSERT INTO users (username, display_name, email, password_hash, is_active)
-                    VALUES (:u, :u, :e, :h, TRUE)
+                    INSERT INTO users (username, display_name, email, password_hash, is_active, tenant_id)
+                    VALUES (:u, :u, :e, :h, TRUE, :tid)
                     RETURNING id
                     """
                 ),
@@ -226,6 +236,7 @@ def _create_user(username: str, *, password: str = "pw1234567") -> int:
                     "u": username,
                     "e": f"{username}@test.local",
                     "h": pwd_hash,
+                    "tid": DEFAULT_TENANT_ID,
                 },
             )).scalar_one()
             await session.commit()
@@ -259,11 +270,18 @@ def _add_role(
         factory = get_session_factory()
         async with factory() as session:
             await session.execute(
+                # M2: 多租户 — INSERT 显式带 tenant_id (走 DEFAULT_TENANT_ID).
                 text(
-                    "INSERT INTO user_roles (user_id, role, scope, line_id) "
-                    "VALUES (:uid, :role, :scope, :line_id)"
+                    "INSERT INTO user_roles (user_id, role, scope, line_id, tenant_id) "
+                    "VALUES (:uid, :role, :scope, :line_id, :tid)"
                 ),
-                {"uid": user_id, "role": role, "scope": scope, "line_id": line_id},
+                {
+                    "uid": user_id,
+                    "role": role,
+                    "scope": scope,
+                    "line_id": line_id,
+                    "tid": DEFAULT_TENANT_ID,
+                },
             )
             await session.commit()
     _run_async(_do())

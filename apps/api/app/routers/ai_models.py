@@ -44,7 +44,8 @@ from ..core.auth import CurrentUser
 from ..core.logging import get_logger
 from ..core.rbac import require_admin_dep
 from ..core.secret import encrypt_secret, is_env_reference
-from ..db.session import get_session_factory
+from ..core.tenant_context import TenantContext, get_tenant_context
+from ..db.tenant import tenant_session
 from ..schemas.ai_models import (
     AIModelItem,
     AIModelListResponse,
@@ -122,9 +123,8 @@ def _to_item(m: Any) -> AIModelItem:
     )
 
 
-async def _fetch_row(model_id: int) -> Optional[AIModelItem]:
-    factory = get_session_factory()
-    async with factory() as session:
+async def _fetch_row(model_id: int, ctx: TenantContext) -> Optional[AIModelItem]:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         row = (
             await session.execute(
                 text(f"SELECT {_ROW_FIELDS} FROM ai_models WHERE id = :id"),
@@ -148,9 +148,9 @@ async def _fetch_row(model_id: int) -> Optional[AIModelItem]:
 )
 async def list_models(
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> AIModelListResponse:
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         rows = (
             await session.execute(
                 text(
@@ -180,9 +180,9 @@ async def list_models(
 async def create_model(
     body: CreateAIModelRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> AIModelItem:
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         existing = (
             await session.execute(
                 text("SELECT id FROM ai_models WHERE name = :n"),
@@ -242,7 +242,7 @@ async def create_model(
             )
         await session.commit()
 
-    item = await _fetch_row(int(new_id))
+    item = await _fetch_row(int(new_id), ctx)
     assert item is not None
     logger.info(
         "create_model: admin=%s created id=%s name=%s provider=%s",
@@ -265,9 +265,9 @@ async def update_model(
     model_id: int = Path(..., ge=1),
     body: UpdateAIModelRequest = ...,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> AIModelItem:
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         # Confirm the row exists. We use a separate SELECT (instead of
         # relying on rowcount) so the 404 carries a clear message and
         # doesn't race with the "last enabled" guard below.
@@ -423,7 +423,7 @@ async def update_model(
                 )
         await session.commit()
 
-    item = await _fetch_row(model_id)
+    item = await _fetch_row(model_id, ctx)
     assert item is not None
     logger.info("update_model: admin=%s updated id=%s", user.username, model_id)
     return item
@@ -443,9 +443,9 @@ async def update_model(
 async def soft_delete_model(
     model_id: int = Path(..., ge=1),
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> AIModelItem:
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         existing = (
             await session.execute(
                 text(
@@ -510,7 +510,7 @@ async def soft_delete_model(
                     {"id": int(replacement[0])},
                 )
         await session.commit()
-    item = await _fetch_row(model_id)
+    item = await _fetch_row(model_id, ctx)
     assert item is not None
     logger.info(
         "soft_delete_model: admin=%s deactivated id=%s",
@@ -533,6 +533,7 @@ async def test_model(
     model_id: int = Path(..., ge=1),
     body: TestAIModelRequest = TestAIModelRequest(),
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> TestAIModelResponse:
     """Run a short prompt through the model and record the result.
 
@@ -542,8 +543,7 @@ async def test_model(
     UI can show "last seen alive: 5 min ago" for healthy rows and
     "last seen: HTTP 401" for misconfigured ones.
     """
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         row = (
             await session.execute(
                 text(
@@ -582,6 +582,7 @@ async def test_model(
             latency_ms=latency_ms,
             sample_response="",
             error=f"config: {exc}",
+            ctx=ctx,
         )
         return TestAIModelResponse(
             ok=False,
@@ -628,6 +629,7 @@ async def test_model(
         latency_ms=latency_ms,
         sample_response=sample_snip,
         error=err_msg,
+        ctx=ctx,
     )
     return TestAIModelResponse(
         ok=ok,
@@ -645,6 +647,7 @@ async def _record_test_result(
     latency_ms: int,
     sample_response: str,
     error: Optional[str],
+    ctx: TenantContext,
 ) -> None:
     """Write the test result back to the row.
 
@@ -653,8 +656,7 @@ async def _record_test_result(
     smoke-test result, not to write to the row).
     """
     try:
-        factory = get_session_factory()
-        async with factory() as session:
+        async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
             await session.execute(
                 text(
                     """
@@ -699,9 +701,9 @@ async def _record_test_result(
 async def set_default_model(
     model_id: int = Path(..., ge=1),
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> AIModelItem:
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         existing = (
             await session.execute(
                 text(
@@ -732,7 +734,7 @@ async def set_default_model(
             {"id": model_id},
         )
         await session.commit()
-    item = await _fetch_row(model_id)
+    item = await _fetch_row(model_id, ctx)
     assert item is not None
     logger.info(
         "set_default_model: admin=%s set id=%s as default",

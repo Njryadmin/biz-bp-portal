@@ -96,7 +96,10 @@ async def load_user_v2(user_id: int) -> CurrentUserV2 | None:
             user_row = (
                 await session.execute(
                     text(
-                        "SELECT id, username, display_name, email, is_active "
+                        # M2: 多读 is_super_admin + tenant_id (tenant_id 字段
+                        # CurrentUserV2 还没有 — 用 getattr 回退, M3 再加).
+                        "SELECT id, username, display_name, email, is_active, "
+                        "is_super_admin, tenant_id "
                         "FROM users WHERE id = :uid"
                     ),
                     {"uid": user_id},
@@ -209,6 +212,9 @@ async def load_user_v2(user_id: int) -> CurrentUserV2 | None:
         accessible_lines=accessible_lines,
         bindings=bindings,
         active_view=None,
+        # M2: 多租户中间件读
+        is_super_admin=bool(user_row.get("is_super_admin", False)),
+        tenant_id=str(user_row["tenant_id"]) if user_row.get("tenant_id") else None,
     )
 
 
@@ -240,7 +246,7 @@ async def get_current_user_v2(
     if service_token:
         supplied = request.headers.get("x-service-token")
         if supplied and supplied == service_token:
-            return CurrentUserV2(
+            user = CurrentUserV2(
                 id=0,
                 username="__service__",
                 display_name="Internal Service",
@@ -261,7 +267,12 @@ async def get_current_user_v2(
                     ),
                 ],
                 active_view="admin",
+                is_super_admin=True,  # M2: service account 当 super admin
+                tenant_id=None,  # 走默认 tenant (DEFAULT_TENANT_ID)
             )
+            # M2: 写 request.state 给 tenant_context 读
+            request.state.current_user = user
+            return user
 
     # 1. cookie (parameter name 匹配默认 cookie 名 "finbp_token";
     #    若环境变量 BIZ_BP_COOKIE_NAME 改过名,fallback 到 request.cookies)
@@ -303,6 +314,8 @@ async def get_current_user_v2(
     if active_view:
         user = switch_view(user, active_view)
 
+    # M2: 写 request.state 给 tenant_context 读
+    request.state.current_user = user
     return user
 
 

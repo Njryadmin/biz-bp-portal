@@ -47,7 +47,9 @@ from ..core.rbac import (
     require_auditor_or_admin_dep,
 )
 from ..core.registry import load_registry
-from ..db.session import get_session_factory
+from ..core.tenant_context import TenantContext, get_tenant_context
+from ..db.session import get_session_factory  # kept for test mocks / plugin extensions
+from ..db.tenant import tenant_session
 from ..schemas.auth import (
     AccessibleLinesResponse,
     AuditLogItem,
@@ -287,9 +289,12 @@ async def accessible_lines(
 # ---------------------------------------------------------------------------
 
 
-async def _load_user_with_perms(user_id: int) -> UserListItem | None:
-    factory = get_session_factory()
-    async with factory() as session:
+async def _load_user_with_perms(
+    user_id: int, ctx: TenantContext
+) -> UserListItem | None:
+    # M2: 用 tenant_session 让 RLS policy 放行; bypass_rls=True 让 super admin
+    # 能查任意租户的用户 (admin 跨租户用户管理用)
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         u = (
             await session.execute(
                 text(
@@ -361,9 +366,11 @@ async def _load_user_with_perms(user_id: int) -> UserListItem | None:
 )
 async def list_users(
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListResponse:
-    factory = get_session_factory()
-    async with factory() as session:
+    # M2: 走 tenant_session 满足 RLS. 跨租户场景下 super admin 通过
+    # bypass_rls 看全部; 普通 admin 只看自己租户.
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         rows = (
             await session.execute(
                 text("SELECT id FROM users ORDER BY id")
@@ -371,7 +378,7 @@ async def list_users(
         ).scalars().all()
     items: list[UserListItem] = []
     for uid in rows:
-        item = await _load_user_with_perms(int(uid))
+        item = await _load_user_with_perms(int(uid), ctx)
         if item is not None:
             items.append(item)
     return UserListResponse(count=len(items), users=items)
@@ -386,10 +393,11 @@ async def list_users(
 async def create_user(
     body: CreateUserRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListItem:
-    factory = get_session_factory()
     pwd_hash = hash_password(body.password)
-    async with factory() as session:
+    # M2: 走 tenant_session; trigger set_tenant_from_guc 会从 GUC 自动填 tenant_id.
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         # Check for duplicate username
         existing = (
             await session.execute(
@@ -442,7 +450,7 @@ async def create_user(
                 {"uid": int(new_id), "line_id": line},
             )
         await session.commit()
-    item = await _load_user_with_perms(int(new_id))
+    item = await _load_user_with_perms(int(new_id), ctx)
     assert item is not None
     return item
 
@@ -456,6 +464,7 @@ async def update_user_roles(
     user_id: int,
     body: UpdateUserRolesRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListItem:
     if not body.roles and body.accessible_lines is None:
         raise HTTPException(
@@ -465,8 +474,7 @@ async def update_user_roles(
     # Refuse to demote the only admin (safety: at least one admin must exist)
     if "admin" in body.roles or "admin" not in body.roles:
         # only check if the target currently has admin and we're demoting
-        factory = get_session_factory()
-        async with factory() as session:
+        async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
             target_roles = set(
                 (
                     await session.execute(
@@ -476,7 +484,7 @@ async def update_user_roles(
                 ).scalars().all()
             )
         if "admin" in target_roles and "admin" not in body.roles:
-            async with factory() as session:
+            async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
                 other_admins = (
                     await session.execute(
                         text(
@@ -491,7 +499,7 @@ async def update_user_roles(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="cannot demote the last admin",
                 )
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         await session.execute(
             text("DELETE FROM user_roles WHERE user_id = :uid"),
             {"uid": user_id},
@@ -537,7 +545,7 @@ async def update_user_roles(
                 {"uid": user_id, "line_id": line},
             )
         await session.commit()
-    item = await _load_user_with_perms(user_id)
+    item = await _load_user_with_perms(user_id, ctx)
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -560,6 +568,7 @@ async def update_user(
     user_id: int,
     body: UpdateUserRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListItem:
     """Edit a single user's profile fields. Empty body = no-op (still 200).
 
@@ -573,7 +582,7 @@ async def update_user(
         # Nothing to do — return current state so the UI can re-fetch cheaply.
         # NOTE: clear_email is checked separately because it's a bool flag
         # (not None when the caller wants to clear the email column).
-        item = await _load_user_with_perms(user_id)
+        item = await _load_user_with_perms(user_id, ctx)
         if item is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -591,8 +600,7 @@ async def update_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="cannot deactivate yourself",
             )
-        factory = get_session_factory()
-        async with factory() as session:
+        async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
             target_roles = set(
                 (
                     await session.execute(
@@ -602,7 +610,7 @@ async def update_user(
                 ).scalars().all()
             )
         if "admin" in target_roles:
-            async with factory() as session:
+            async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
                 other_admins = (
                     await session.execute(
                         text(
@@ -642,8 +650,7 @@ async def update_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="no updatable fields supplied",
         )
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         result = await session.execute(
             text(
                 f"UPDATE users SET {', '.join(set_clauses)} WHERE id = :uid"
@@ -657,7 +664,7 @@ async def update_user(
                 detail=f"user not found: {user_id}",
             )
         await session.commit()
-    item = await _load_user_with_perms(user_id)
+    item = await _load_user_with_perms(user_id, ctx)
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -680,6 +687,7 @@ async def update_user_lines(
     user_id: int,
     body: UpdateUserLinesRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListItem:
     """Single-purpose endpoint so the admin UI can edit the line list
     without re-sending the full role set.
@@ -690,8 +698,7 @@ async def update_user_lines(
     the existing ``bp:`` roles intact and only replace the explicit
     rows.
     """
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         # Reject unknown user (FK would also reject, but the 404 message
         # is friendlier).
         target_exists = (
@@ -732,7 +739,7 @@ async def update_user_lines(
                 {"uid": user_id, "line_id": line},
             )
         await session.commit()
-    item = await _load_user_with_perms(user_id)
+    item = await _load_user_with_perms(user_id, ctx)
     assert item is not None
     return item
 
@@ -772,9 +779,9 @@ async def update_user_lines(
 async def get_user_v2_roles(
     user_id: int,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserV2RolesResponse:
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         target_exists = (
             await session.execute(
                 text("SELECT 1 FROM users WHERE id = :uid"),
@@ -819,6 +826,7 @@ async def update_user_v2_roles(
     user_id: int,
     body: UpdateUserV2RolesRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserV2RolesResponse:
     """Replace a user's complete v2 role binding set.
 
@@ -897,12 +905,11 @@ async def update_user_v2_roles(
     #    demote one of them; an admin can give up their own admin
     #    role only if at least one peer admin remains.
     new_has_admin = any(b.role == "admin" for b in body.bindings)
-    factory = get_session_factory()
     # Always verify the user exists, regardless of the new bindings'
     # admin status — the FK on user_roles would otherwise turn a
     # missing user into a 500 instead of a friendly 404. We also
     # need the current role set for the last-admin check below.
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         target_exists = (
             await session.execute(
                 text("SELECT 1 FROM users WHERE id = :uid"),
@@ -924,7 +931,7 @@ async def update_user_v2_roles(
         )
     if not new_has_admin:
         if "admin" in target_roles:
-            async with factory() as session:
+            async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
                 other_admins = (
                     await session.execute(
                         text(
@@ -943,7 +950,7 @@ async def update_user_v2_roles(
     # 3) Persist. We rewrite user_roles from scratch and resync
     #    user_business_lines from the union of the new line_ids so
     #    v1 endpoints (which read user_business_lines) stay accurate.
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         await session.execute(
             text("DELETE FROM user_roles WHERE user_id = :uid"),
             {"uid": user_id},
@@ -997,10 +1004,10 @@ async def reset_user_password(
     user_id: int,
     body: ResetPasswordRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> ResetPasswordResponse:
-    factory = get_session_factory()
     new_hash = hash_password(body.new_password)
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         result = await session.execute(
             text(
                 "UPDATE users SET password_hash = :h WHERE id = :uid"
@@ -1033,14 +1040,14 @@ async def reset_user_password(
 async def deactivate_user(
     user_id: int,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> LogoutResponse:
     if user_id == user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="cannot deactivate yourself",
         )
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         # If demoting an admin, refuse when it's the last one
         target_roles = set(
             (
@@ -1094,6 +1101,7 @@ async def get_audit_log(
     user_id: Optional[int] = Query(None, description="filter by user_id"),
     path_prefix: Optional[str] = Query(None, description="filter by path prefix"),
     user: CurrentUser = Depends(require_auditor_or_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> AuditLogResponse:
     where = ["1=1"]
     params: dict[str, object] = {"limit": limit, "offset": offset}
@@ -1104,8 +1112,7 @@ async def get_audit_log(
         where.append("path LIKE :pfx")
         params["pfx"] = f"{path_prefix}%"
     where_sql = " AND ".join(where)
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         count_row = (
             await session.execute(
                 text(f"SELECT COUNT(*) FROM raw.audit_log WHERE {where_sql}"),
