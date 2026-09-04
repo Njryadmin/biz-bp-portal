@@ -542,11 +542,24 @@ class MigrationRunner:
                     )
                     return None
                 # 3. Execute the migration SQL.
-                # We use ``exec_driver_sql`` to bypass SQLAlchemy's
-                # parameter binding (raw SQL migrations may contain
-                # PL/pgSQL dollar-quoted blocks and other constructs
-                # that confuse the parameter compiler).
-                await conn.exec_driver_sql(file_obj.sql)
+                # SQLAlchemy's ``exec_driver_sql`` uses prepared
+                # statements via asyncpg, which refuse multi-statement
+                # SQL ("cannot insert multiple commands into a
+                # prepared statement"). Real migration files almost
+                # always have multiple statements (DDL + DO blocks +
+                # INSERTs), so we bypass SQLAlchemy here and use the
+                # raw asyncpg connection directly. asyncpg's
+                # ``Connection.execute(str)`` happily handles
+                # multi-statement SQL as long as no parameterised
+                # placeholders are used (which is true for our
+                # stripped migration files).
+                raw = await conn.get_raw_connection()
+                asyncpg_conn = raw.driver_connection
+                if asyncpg_conn is None:  # pragma: no cover — defensive
+                    raise RuntimeError(
+                        "no underlying asyncpg connection available"
+                    )
+                await asyncpg_conn.execute(file_obj.sql)
                 # 4. Record the migration.
                 duration_ms = int((time.perf_counter() - started_at) * 1000)
                 await conn.execute(
