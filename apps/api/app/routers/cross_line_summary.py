@@ -232,6 +232,42 @@ def _parse_lines_query(
     return allowed, unknown
 
 
+def _check_cross_line_access(
+    user: CurrentUserV2,
+    line_id: str,
+    domain: DataDomain,
+    require_global: bool = False,
+) -> bool:
+    """Per-line access predicate used by other routers that wrap the
+    cross-line summary.
+
+    Returns True iff the user can VIEW ``domain`` on ``line_id``.
+
+    * ``require_global=True``  — only ``*_global`` / line_owner /
+      admin / auditor / viewer may pass. Line-scoped roles (fin_bp /
+      hr_bp) are rejected even on their own line.
+    * ``require_global=False`` — line-scoped roles pass on their own
+      line; global roles always pass.
+
+    Note: the cross-line summary router itself uses
+    ``_resolve_accessible_lines`` for the silent-downgrade policy
+    (line-scoped users get their own line regardless of the param).
+    This helper is provided for callers that need a strict per-line
+    check (e.g. a future drill-down endpoint).
+    """
+    if user.has_role(Role.ADMIN, Role.AUDITOR, Role.VIEWER):
+        return True
+    if require_global:
+        # Only the matching global role for the requested domain.
+        return user.has_role(
+            Role.FIN_BP_GLOBAL
+            if domain == DataDomain.FINANCE
+            else Role.HR_BP_GLOBAL
+        )
+    # Line-scoped: user must have explicit view access on the line.
+    return user.can_access_domain(line_id, domain, write=False)
+
+
 def _is_summable_kpi(kpi_id: str, unit: str, title: str) -> bool:
     """True if the KPI is a "sum" type (revenue, headcount) rather than
     a "rate" type (margin, variance).
@@ -586,6 +622,7 @@ __all__ = [
     "hr_summary",
     # Helpers exported for unit tests in test_cross_line_summary.py
     "_parse_lines_query",
+    "_check_cross_line_access",
     "_is_summable_kpi",
     "_resolve_accessible_lines",
     "_compute_totals",
