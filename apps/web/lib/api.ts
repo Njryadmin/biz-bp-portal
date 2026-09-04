@@ -44,8 +44,17 @@ export function writeActiveView(view: DashboardView | null): void {
 }
 
 export interface ApiFetchOptions extends Omit<RequestInit, "headers"> {
-  /** Active view to forward via X-Active-View. Defaults to localStorage. */
-  view?: DashboardView | null;
+  /**
+   * Active view to forward via X-Active-View.
+   *
+   * Default: localStorage (`biz-bp.active_view`). Pass `null` to explicitly
+   * skip the header (e.g. the Copilot page's "auto" mode, which means
+   * "follow the Topbar — do not override").
+   *
+   * Accepts the full set of backend `switch_view()` values, which is a
+   * superset of the Topbar's `DashboardView` (fin / hr / shared).
+   */
+  view?: DashboardView | "line_owner" | "admin" | "auditor" | "viewer" | "none" | null;
   headers?: Record<string, string>;
 }
 
