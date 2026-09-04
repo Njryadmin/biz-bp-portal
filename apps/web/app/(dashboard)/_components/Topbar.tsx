@@ -6,6 +6,8 @@
 //     ``biz-bp.active_view`` to localStorage on change.
 //   - RoleSwitcher (now backed by /api/auth/me — read-only display of
 //     the active user's roles)
+//   - TenantBadge + TenantSwitcher (M3 2026-09-04) — current tenant
+//     name; super admin can pick a different tenant via the modal.
 //   - User menu with logout button (POST /api/auth/logout then
 //     redirect to /login)
 
@@ -21,6 +23,8 @@ import { useCallback } from "react";
 import type { CurrentUser } from "../../../lib/auth";
 import { isAdmin, logout } from "../../../lib/auth";
 import { PerspectiveSwitcher } from "./PerspectiveSwitcher";
+import { TenantBadge } from "./TenantBadge";
+import { TenantSwitcher } from "./TenantSwitcher";
 
 export interface TopbarProps {
   /**
@@ -161,10 +165,32 @@ export function Topbar({ lines, user, v2User }: TopbarProps) {
             <Icons.RobotOutlined />
             AI 模型
           </Link>
+          {user?.is_super_admin ? (
+            <Link
+              href="/admin/tenants"
+              aria-label="租户管理"
+              style={{
+                color: "#ffd591",
+                fontSize: 13,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "2px 8px",
+                border: "1px solid rgba(255,213,145,0.45)",
+                borderRadius: 4,
+              }}
+              title="租户管理 (super admin only)"
+            >
+              <Icons.ClusterOutlined />
+              租户管理
+            </Link>
+          ) : null}
         </>
       ) : null}
       <RoleSwitcher lines={lines} activeRoles={user?.roles ?? null} />
       <PerspectiveSwitcher user={v2User ?? null} />
+      {user ? <TenantBadge /> : null}
+      {user?.is_super_admin ? <TenantSwitcher /> : null}
       <Dropdown
         menu={{
           items: [

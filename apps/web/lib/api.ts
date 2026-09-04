@@ -5,9 +5,15 @@
 // backend's CurrentUserV2.active_view is recorded correctly for audit
 // and downstream consumers (Copilot prompt etc.).
 //
+// M3 (2026-09-04) — also forwards ``X-Tenant-ID`` so super admin can
+// switch tenant from the Topbar. The header is read from localStorage
+// (``biz-bp.tenant_id``) by default; the explicit ``tenantId`` option
+// is an override for code that already knows the value.
+//
 // Usage:
 //   const data = await apiFetch<DashboardResponse>("/api/dashboard/fin", {
 //     view: "fin",
+//     tenantId: "<uuid>",   // override
 //   });
 //
 // The helper reads the active view from localStorage
@@ -18,6 +24,7 @@
 import type { DashboardView } from "@biz-bp/types";
 
 const ACTIVE_VIEW_STORAGE_KEY = "biz-bp.active_view";
+const TENANT_ID_STORAGE_KEY = "biz-bp.tenant_id";
 
 /** Read the active view from localStorage. Safe on SSR. */
 export function readActiveView(): DashboardView | null {
@@ -43,6 +50,27 @@ export function writeActiveView(view: DashboardView | null): void {
   }
 }
 
+/** Read the active tenant id (super-admin override) from localStorage. Safe on SSR. */
+export function readTenantId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(TENANT_ID_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Write the active tenant id to localStorage. Safe on SSR. */
+export function writeTenantId(tenantId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (tenantId) window.localStorage.setItem(TENANT_ID_STORAGE_KEY, tenantId);
+    else window.localStorage.removeItem(TENANT_ID_STORAGE_KEY);
+  } catch {
+    // ignore quota / privacy-mode errors
+  }
+}
+
 export interface ApiFetchOptions extends Omit<RequestInit, "headers"> {
   /**
    * Active view to forward via X-Active-View.
@@ -55,20 +83,28 @@ export interface ApiFetchOptions extends Omit<RequestInit, "headers"> {
    * superset of the Topbar's `DashboardView` (fin / hr / shared).
    */
   view?: DashboardView | "line_owner" | "admin" | "auditor" | "viewer" | "none" | null;
+  /**
+   * Tenant id to forward via X-Tenant-ID. M3 (2026-09-04) — super admin
+   * only. Default: localStorage (`biz-bp.tenant_id`). Pass `null` to
+   * explicitly skip the header.
+   */
+  tenantId?: string | null;
   headers?: Record<string, string>;
 }
 
-/** Tiny GET wrapper that auto-forwards the X-Active-View header. */
+/** Tiny GET wrapper that auto-forwards the X-Active-View + X-Tenant-ID headers. */
 export async function apiFetch<T>(
   path: string,
   options: ApiFetchOptions = {},
 ): Promise<T> {
   const view = options.view ?? readActiveView();
+  const tenantId = options.tenantId ?? readTenantId();
   const headers: Record<string, string> = {
     credentials: "include",
     ...(options.headers ?? {}),
   };
   if (view) headers["x-active-view"] = view;
+  if (tenantId) headers["x-tenant-id"] = tenantId;
   const res = await fetch(path, {
     ...options,
     credentials: "include",

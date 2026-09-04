@@ -20,6 +20,7 @@ from .db.seed_users import seed_initial_users
 from .middleware import AuditMiddleware
 from .routers import build_registry_router
 from .routers.admin_business_lines import router as admin_business_lines_router
+from .routers.admin_tenants import router as admin_tenants_router
 from .routers.ai_models import router as ai_models_router
 from .routers.alerts import router as alerts_router
 from .routers.auth import router as auth_router
@@ -122,6 +123,9 @@ def create_app() -> FastAPI:
 
     # Admin: 业务线 manifest / indicators 增删改 (D1, 2026-09-04)
     app.include_router(admin_business_lines_router)
+
+    # Admin: 多租户 tenant 增删改 (M3, 2026-09-04) — super_admin only
+    app.include_router(admin_tenants_router)
 
     # Per-perspective dashboard MVP (E, 2026-09-04) — fin / hr / shared
     app.include_router(dashboard_router)

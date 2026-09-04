@@ -11,6 +11,8 @@
 // 5. Topbar 显示真实用户名 + 登出按钮。
 // 6. E (2026-09-04): 同时拉 /api/auth/me-v2 拿 bindings + active_view
 //    推给 Topbar (PerspectiveSwitcher 用来挑默认 view).
+// 7. M3 (2026-09-04): 同时拉 /api/auth/me-tenant 拿 is_super_admin +
+//    自己的 tenant, 推给 Topbar (TenantBadge + TenantSwitcher 用).
 
 'use client';
 
@@ -22,6 +24,7 @@ import type { BusinessLine, V2CurrentUser } from "@biz-bp/types";
 import { SidebarMenu } from "./_components/SidebarMenu";
 import { Topbar } from "./_components/Topbar";
 import { getCurrentUser, getCurrentUserV2, type CurrentUser } from "../../lib/auth";
+import { getMyTenant } from "../../lib/tenants";
 
 interface RegistryResponse {
   version?: string;
@@ -49,8 +52,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           router.replace("/login?from=/dashboard");
           return;
         }
+        // 1b. M3 (2026-09-04) — also pull /api/auth/me-tenant so the
+        // local CurrentUser carries the is_super_admin flag. The flag
+        // isn't on v1 /me (v1 contract is locked) but the Topbar +
+        // TenantSwitcher want it.
+        getMyTenant()
+          .then((t) => {
+            if (cancelled) return;
+            if (t?.is_super_admin !== undefined) {
+              setUser({ ...me, is_super_admin: t.is_super_admin });
+            }
+          })
+          .catch(() => {
+            // 401 → not logged in (already handled above); 404 → no
+            // tenant row (degraded but non-fatal). Leave user as-is.
+          });
         setUser(me);
-        // 1b. v2 user — fetched in parallel; failure here is non-fatal
+        // 1c. v2 user — fetched in parallel; failure here is non-fatal
         // (the v1 user alone is enough to render the layout).
         getCurrentUserV2()
           .then((u) => {

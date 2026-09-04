@@ -23,6 +23,18 @@ export interface CurrentUser {
   is_active: boolean;
   roles: RoleName[];
   accessible_lines: string[];
+  /**
+   * M3 (2026-09-04): super admin flag. NOT exposed in the v1
+   * /api/auth/me response (the v1 contract is locked) — instead
+   * the frontend learns it from /api/auth/me-tenant which adds the
+   * field. The layout reads the me-tenant response once and merges
+   * `is_super_admin` into the local CurrentUser object so existing
+   * isAdmin(...) call sites can keep using a single `user` object.
+   *
+   * Optional on the type because legacy /me responses (and
+   * synthetic users created in tests) don't carry it.
+   */
+  is_super_admin?: boolean;
 }
 
 export interface AccessibleLines {
@@ -108,6 +120,11 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const data = (await readJson(res)) as CurrentUser | null;
   return data;
 }
+
+// M3 (2026-09-04): Tenant self-view. Re-exported from
+// lib/tenants.ts so existing callers can keep importing from
+// lib/auth.ts (a single canonical location for "who am I" helpers).
+export { getMyTenant as getCurrentUserTenant } from "./tenants";
 
 // ---------------------------------------------------------------------------
 // v2 CurrentUser (E, 2026-09-04)

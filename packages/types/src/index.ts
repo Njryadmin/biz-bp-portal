@@ -355,3 +355,54 @@ export interface CrossLineSummaryResponse {
   kpis: DashboardKpiItem[];
   generated_at: string;
 }
+
+/* -------------------- Tenant management (M3) ----------------------------- */
+
+// Mirrors apps/api/app/schemas/tenant.py:TenantInfo. The slug is the
+// stable identifier; name + plan + is_active are mutable.
+export type TenantPlan = "standard" | "enterprise" | "demo";
+
+export interface TenantInfo {
+  id: string;
+  slug: string;
+  name: string;
+  plan: TenantPlan;
+  is_active: boolean;
+  created_at: string;
+  /** Number of users in this tenant. Admin endpoints only (omitted from /me-tenant). */
+  user_count?: number;
+  /** Number of business lines accessible to this tenant. Admin endpoints only; MOCKED. */
+  business_line_count?: number;
+  /**
+   * M3 (2026-09-04): the calling user's super-admin flag. Only
+   * present on the /api/auth/me-tenant response so the frontend can
+   * decide whether to render the TenantSwitcher button. NOT part of
+   * the admin endpoints (which always return 200/403, never a tenant
+   * belonging to a single user).
+   */
+  is_super_admin?: boolean;
+}
+
+// POST /api/admin/tenants body. The slug is url-safe, ^[a-z0-9-]+$,
+// and is the unique identifier — it cannot be changed after creation.
+export interface CreateTenantPayload {
+  slug: string;
+  name: string;
+  plan?: TenantPlan;
+  is_active?: boolean;
+}
+
+// PATCH /api/admin/tenants/{id} body. slug is intentionally absent
+// (and the server rejects unknown fields with 422). Every present
+// field is touched; absent fields are left alone.
+export interface UpdateTenantPayload {
+  name?: string;
+  plan?: TenantPlan;
+  is_active?: boolean;
+}
+
+// GET /api/admin/tenants response envelope.
+export interface TenantListResponse {
+  count: number;
+  tenants: TenantInfo[];
+}

@@ -264,6 +264,105 @@ async def me_v2(user: CurrentUserV2 = Depends(get_current_user_v2)) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# /api/auth/me-tenant — M3 (2026-09-04)
+#
+# Returns the current user's tenant (id + slug + name + plan). The
+# frontend layout (TenantBadge + the super-admin Tenant switcher)
+# calls this once on mount and renders the result. The response is
+# intentionally lean: no user_count, no is_active — those are
+# operator-facing fields, not a current-user self-view.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/me-tenant",
+    summary="Return the tenant the current user belongs to (any logged-in user)",
+)
+async def me_tenant(
+    user: CurrentUser = Depends(get_current_user),
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> dict:
+    """Look up the tenant row for the current user.
+
+    Behaviour
+    ---------
+    * The tenant id is sourced from ``ctx.tenant_id`` (resolved by
+      :func:`app.core.tenant_context.get_tenant_context`). For a
+      regular user that always equals ``user.tenant_id``; for a
+      super admin it can be overridden via the ``X-Tenant-ID``
+      header (so the "switcher" modal can preview a target tenant
+      before committing).
+    * 404 is returned when the tenant row is missing — the most
+      common cause is a fresh test DB whose seed users got inserted
+      before M1's backfill migration ran. Real deployments cannot
+      hit this path because every user has a non-null tenant_id
+      after M1's NOT NULL constraint.
+    """
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
+        row = (
+            await session.execute(
+                text(
+                    "SELECT id, slug, name, plan, is_active, created_at "
+                    "FROM tenants WHERE id = :tid"
+                ),
+                {"tid": str(ctx.tenant_id)},
+            )
+        ).mappings().first()
+    if row is None:
+        # Fall back to the user's stored tenant_id (ctx may be
+        # pointing at a header-overridden tenant that was just
+        # deleted). We don't 404 here — that would 500 the
+        # dashboard layout for any super admin in mid-switch.
+        logger.warning(
+            "me_tenant: tenant %s not found for user=%s; falling back to user.tenant_id",
+            ctx.tenant_id, user.username,
+        )
+        fallback = getattr(user, "tenant_id", None)
+        if fallback is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"current user has no tenant binding; "
+                    f"user.tenant_id is null and ctx resolved to {ctx.tenant_id}"
+                ),
+            )
+        async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT id, slug, name, plan, is_active, created_at "
+                        "FROM tenants WHERE id = :tid"
+                    ),
+                    {"tid": str(fallback)},
+                )
+            ).mappings().first()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"user {user.username!r} has no resolvable tenant "
+                    f"(user.tenant_id={fallback}, ctx.tenant_id={ctx.tenant_id})"
+                ),
+            )
+    return {
+        "id": str(row["id"]),
+        "slug": str(row["slug"]),
+        "name": str(row["name"]),
+        "plan": str(row["plan"]),
+        "is_active": bool(row["is_active"]),
+        "created_at": row["created_at"].isoformat()
+        if hasattr(row["created_at"], "isoformat")
+        else str(row["created_at"]),
+        # M3 (2026-09-04): expose is_super_admin so the frontend
+        # Topbar can decide whether to render the TenantSwitcher
+        # button. This is the only place the v1 frontend learns
+        # about super-admin status (deliberately not exposed in
+        # /api/auth/me to keep the v1 contract lean).
+        "is_super_admin": bool(user.is_super_admin),
+    }
+
+
+# ---------------------------------------------------------------------------
 # /api/auth/accessible-lines
 # ---------------------------------------------------------------------------
 
