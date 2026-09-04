@@ -4,6 +4,14 @@
 // 不依赖 React，可在任意组件中复用（包括服务端组件，通过
 // ``accessToken`` 辅助函数支持 SSR）。
 
+import type {
+  UpdateUserV2RolesPayload,
+  UserRoleBinding,
+  UserV2RolesResponse,
+  V2Role,
+  V2Scope,
+} from "@biz-bp/types";
+
 export type RoleName = string;
 
 export interface CurrentUser {
@@ -35,6 +43,13 @@ export interface AdminUserItem {
   roles: string[];
   accessible_lines: string[];
   created_at: string;
+  /**
+   * v2 RBAC bindings (role + scope + line_id). Additive — v1 clients
+   * that only read `roles` / `accessible_lines` keep working. Populated
+   * by GET /api/auth/users (C1 added it to UserListItem). Optional so
+   * older API responses don't break the type.
+   */
+  v2_bindings?: UserRoleBinding[];
 }
 
 export interface AdminUserListResponse {
@@ -264,4 +279,53 @@ export function filterAccessibleLines<T extends { id: string }>(
     if (r.startsWith("bp:")) allowed.add(r.slice(3));
   }
   return all.filter((x) => allowed.has(x.id));
+}
+
+// ---------------------------------------------------------------------------
+// v2 RBAC bindings (C2, 2026-09-04)
+//
+// 8 roles × 2 scopes × N line_ids. The server (apps/api/app/routers/auth.py
+// PATCH /api/auth/users/{id}/v2-roles) owns the cross-field validation; the
+// client only displays + transports. V2_ROLES is the source of truth for
+// the dropdown labels/colors in the admin UI — when the API role set grows,
+// update the union in packages/types/src/index.ts first, then this list.
+// ---------------------------------------------------------------------------
+
+export interface V2RoleSpec {
+  value: V2Role;
+  label: string;
+  color: string;
+  scope: V2Scope;
+}
+
+export const V2_ROLES: V2RoleSpec[] = [
+  { value: "admin",         label: "admin (集团 IT)",         color: "red",    scope: "global" },
+  { value: "auditor",       label: "auditor (内审)",          color: "purple", scope: "global" },
+  { value: "viewer",        label: "viewer (高管)",           color: "blue",   scope: "global" },
+  { value: "fin_bp_global", label: "fin_bp_global (集团 FIN)", color: "orange", scope: "global" },
+  { value: "hr_bp_global",  label: "hr_bp_global (集团 HR)",  color: "cyan",   scope: "global" },
+  { value: "line_owner",    label: "line_owner (业务线总监)", color: "gold",   scope: "business_line" },
+  { value: "fin_bp",        label: "fin_bp (业务线 FINBP)",   color: "lime",   scope: "business_line" },
+  { value: "hr_bp",         label: "hr_bp (业务线 HRBP)",     color: "green",  scope: "business_line" },
+];
+
+export function v2RoleSpec(role: string): V2RoleSpec | undefined {
+  return V2_ROLES.find((r) => r.value === role);
+}
+
+export async function getUserV2Roles(userId: number): Promise<UserV2RolesResponse> {
+  return apiJson<UserV2RolesResponse>(
+    `/api/auth/users/${userId}/v2-roles`,
+    { method: "GET" },
+  );
+}
+
+export async function updateUserV2Roles(
+  userId: number,
+  payload: UpdateUserV2RolesPayload,
+): Promise<UserV2RolesResponse> {
+  return apiJson<UserV2RolesResponse>(
+    `/api/auth/users/${userId}/v2-roles`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+  );
 }

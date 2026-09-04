@@ -16,6 +16,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import {
+  Alert,
   App,
   Button,
   Card,
@@ -27,9 +28,12 @@ import {
   Popconfirm,
   Select,
   Space,
+  Spin,
   Switch,
   Table,
+  Tabs,
   Tag,
+  Tooltip,
   Typography,
   message as antdMessage,
 } from "antd";
@@ -42,15 +46,20 @@ import {
   ReloadOutlined,
   UserAddOutlined,
 } from "@ant-design/icons";
+import type { UserRoleBinding, V2Role, V2Scope } from "@biz-bp/types";
 
 import {
+  V2_ROLES,
   createUser,
   deactivateUser,
+  getUserV2Roles,
   listUsers,
   resetUserPassword,
   updateUser,
   updateUserLines,
   updateUserRoles,
+  updateUserV2Roles,
+  v2RoleSpec,
   type AdminUserItem,
   type CreateUserPayload,
   type UpdateUserPayload,
@@ -132,6 +141,19 @@ export default function AdminUsersPage() {
   // this state and the submit handler sends clear_email=true).
   const [clearEmail, setClearEmail] = useState(false);
 
+  // v2 RBAC bindings (loaded when the edit modal opens; saved
+  // independently of the v1 form so the two tabs are decoupled).
+  const [v2Bindings, setV2Bindings] = useState<UserRoleBinding[]>([]);
+  const [v2BindingsLoading, setV2BindingsLoading] = useState(false);
+  const [v2BindingsDirty, setV2BindingsDirty] = useState(false);
+  const [v2Saving, setV2Saving] = useState(false);
+  // Draft for the "add binding" sub-form at the bottom of the v2 tab.
+  const [v2Draft, setV2Draft] = useState<{
+    role: V2Role | undefined;
+    scope: V2Scope | undefined;
+    line_id: string | undefined;
+  }>({ role: undefined, scope: undefined, line_id: undefined });
+
   const [createForm] = Form.useForm<CreateUserPayload>();
   const [editForm] = Form.useForm<UpdateUserPayload & { roles: string[]; accessible_lines: string[] }>();
   const [pwForm] = Form.useForm<{ new_password: string; confirm: string; reveal: boolean }>();
@@ -199,6 +221,141 @@ export default function AdminUsersPage() {
   }, [lines]);
 
   // ---------------------------------------------------------------------
+  // v2 binding helpers
+  // ---------------------------------------------------------------------
+
+  /**
+   * Reload v2 bindings for the user currently being edited. Called
+   * when the edit modal opens so the v2 tab always reflects server
+   * state (and not stale data from a previous edit).
+   */
+  const loadV2Bindings = useCallback(
+    async (userId: number) => {
+      setV2BindingsLoading(true);
+      try {
+        const data = await getUserV2Roles(userId);
+        setV2Bindings(data.bindings);
+        setV2BindingsDirty(false);
+      } catch (e) {
+        // Keep the previous bindings visible so the operator can
+        // still see what was set; the error message tells them why
+        // the refresh failed.
+        message.error(`加载 v2 角色失败: ${getErrorMessage(e)}`);
+      } finally {
+        setV2BindingsLoading(false);
+      }
+    },
+    [message],
+  );
+
+  /**
+   * Add the current v2Draft to the binding list. Validates the
+   * (role, scope, line_id) triplet locally so the user gets instant
+   * feedback before the server's 400 round-trip.
+   */
+  const addV2BindingFromDraft = () => {
+    const { role, scope, line_id } = v2Draft;
+    if (!role) {
+      message.warning("请选择角色");
+      return;
+    }
+    if (!scope) {
+      message.warning("请选择 scope");
+      return;
+    }
+    const spec = v2RoleSpec(role);
+    if (!spec) {
+      message.error(`未知的角色: ${role}`);
+      return;
+    }
+    // Lock scope to the role's allowed scope so the form can't drift
+    // out of sync with what the API will accept.
+    const effectiveScope = spec.scope;
+    if (scope !== effectiveScope) {
+      message.warning(
+        `${role} 必须是 ${effectiveScope} scope (已自动锁定)`,
+      );
+      setV2Draft((d) => ({ ...d, scope: effectiveScope }));
+      return;
+    }
+    if (effectiveScope === "business_line" && !line_id) {
+      message.warning("business_line 角色必须选择业务线");
+      return;
+    }
+    const next: UserRoleBinding = {
+      role,
+      scope: effectiveScope,
+      line_id: effectiveScope === "business_line" ? line_id! : null,
+    };
+    // Local dedup — the server will 400 anyway, but a friendly
+    // message here saves a round-trip.
+    const dup = v2Bindings.some(
+      (b) => b.role === next.role && b.line_id === next.line_id,
+    );
+    if (dup) {
+      message.warning("该角色+业务线组合已存在");
+      return;
+    }
+    setV2Bindings((bs) => [...bs, next]);
+    setV2BindingsDirty(true);
+    setV2Draft({ role: undefined, scope: undefined, line_id: undefined });
+  };
+
+  const removeV2Binding = (idx: number) => {
+    setV2Bindings((bs) => bs.filter((_, i) => i !== idx));
+    setV2BindingsDirty(true);
+  };
+
+  /**
+   * Persist the v2 bindings to the server. The server is the source of
+   * truth — if a binding is rejected we surface the upstream detail and
+   * leave the local state untouched so the operator can fix it.
+   */
+  const saveV2Bindings = async () => {
+    if (!editing) return;
+    if (!v2BindingsDirty) {
+      message.info("v2 角色未修改,无需保存");
+      return;
+    }
+    setV2Saving(true);
+    try {
+      const resp = await updateUserV2Roles(editing.id, {
+        bindings: v2Bindings,
+      });
+      setV2Bindings(resp.bindings);
+      setV2BindingsDirty(false);
+      message.success(`v2 角色已更新 (${resp.bindings.length} 条)`);
+      // Refresh the user list so the v2 column reflects the saved set.
+      loadUsers();
+    } catch (e) {
+      const err = e as Error & { status?: number };
+      // 409 (last-admin) and 400 (rule violation) get the upstream
+      // detail verbatim — the server's messages are operator-friendly.
+      message.error(`保存 v2 角色失败: ${getErrorMessage(e)}`);
+      // Refresh from server to recover from any partial state the
+      // server may have committed before rejecting.
+      if (err.status === 409 || err.status === 400) {
+        loadV2Bindings(editing.id);
+      }
+    } finally {
+      setV2Saving(false);
+    }
+  };
+
+  // Soft warning when the operator removes every admin binding —
+  // the server will 409 but a heads-up here saves a click.
+  const v2HasNoAdmin = useMemo(
+    () => v2Bindings.length > 0 && !v2Bindings.some((b) => b.role === "admin"),
+    [v2Bindings],
+  );
+
+  const v2DraftRoleSpec = v2Draft.role ? v2RoleSpec(v2Draft.role) : undefined;
+  // When a role is picked, lock the scope to what that role allows —
+  // this prevents the form from drifting out of sync with the API.
+  const v2DraftEffectiveScope: V2Scope | undefined = v2DraftRoleSpec?.scope;
+  const v2DraftLineDisabled = v2DraftEffectiveScope !== "business_line";
+
+  // ---------------------------------------------------------------------
   // Column defs
   // ---------------------------------------------------------------------
   const columns: ColumnsType<AdminUserItem> = [
@@ -259,6 +416,55 @@ export default function AdminUsersPage() {
             ))}
           </Space>
         ),
+    },
+    {
+      title: "V2 角色",
+      key: "v2_bindings",
+      width: 220,
+      render: (_, record: AdminUserItem) => {
+        const bs = record.v2_bindings ?? [];
+        if (bs.length === 0) {
+          return (
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              无
+            </Text>
+          );
+        }
+        const visible = bs.slice(0, 2);
+        const rest = bs.length - visible.length;
+        return (
+          <Tooltip
+            title={
+              <Space size={[2, 4]} wrap>
+                {bs.map((b, i) => (
+                  <Tag
+                    key={i}
+                    color={v2RoleSpec(b.role)?.color ?? "default"}
+                    style={{ margin: 0 }}
+                  >
+                    {b.role}
+                    {b.line_id ? `:${b.line_id}` : ""}
+                  </Tag>
+                ))}
+              </Space>
+            }
+          >
+            <Space size={[2, 4]} wrap>
+              {visible.map((b, i) => (
+                <Tag
+                  key={i}
+                  color={v2RoleSpec(b.role)?.color ?? "default"}
+                  style={{ margin: 0 }}
+                >
+                  {b.role}
+                  {b.line_id ? `:${b.line_id}` : ""}
+                </Tag>
+              ))}
+              {rest > 0 && <Tag style={{ margin: 0 }}>+{rest}</Tag>}
+            </Space>
+          </Tooltip>
+        );
+      },
     },
     {
       title: "状态",
@@ -350,7 +556,13 @@ export default function AdminUsersPage() {
     // Always start with clearEmail=false on a fresh edit modal so
     // the previous "clear pending" toggle doesn't leak across rows.
     setClearEmail(false);
+    // Reset v2 state and kick off the async load. The v2 tab shows a
+    // Spin while loading and re-renders the list when it arrives.
+    setV2Bindings(row.v2_bindings ?? []);
+    setV2BindingsDirty(false);
+    setV2Draft({ role: undefined, scope: undefined, line_id: undefined });
     setEditOpen(true);
+    loadV2Bindings(row.id);
   };
 
   const openResetPassword = (row: AdminUserItem) => {
@@ -620,91 +832,324 @@ export default function AdminUsersPage() {
           setClearEmail(false);
         }}
         onOk={submitEdit}
-        okText="保存"
+        okText="保存 v1"
         cancelText="取消"
-        width={640}
+        width={720}
         destroyOnClose
       >
-        <Form form={editForm} layout="vertical">
-          <Form.Item label="用户名 (不可改)">
-            <Input value={editing?.username ?? ""} disabled aria-label="用户名" />
-          </Form.Item>
-          <Form.Item name="display_name" label="显示名">
-            <Input placeholder="显示名" aria-label="显示名" />
-          </Form.Item>
-          <Form.Item
-            name="email"
-            label="邮箱"
-            rules={
-              clearEmail
-                ? []
-                : [{ type: "email", message: "邮箱格式不正确" }]
-            }
-          >
-            <Input
-              placeholder={clearEmail ? "将清空已有邮箱" : "可选"}
-              disabled={clearEmail}
-              aria-label="邮箱"
-              suffix={
-                clearEmail ? (
-                  <Button
-                    type="link"
-                    size="small"
-                    onClick={() => {
-                      setClearEmail(false);
-                      editForm.setFieldsValue({ email: editing?.email ?? "" });
+        <Tabs
+          defaultActiveKey="v2"
+          items={[
+            {
+              key: "v2",
+              label: "V2 角色 (推荐)",
+              children: (
+                <div data-testid="v2-tab">
+                  <Alert
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    message="v2 角色绑定 = role + scope + line_id"
+                    description={
+                      <ul style={{ marginBottom: 0, paddingLeft: 18 }}>
+                        <li>
+                          <b>global</b> 角色 (admin / auditor / viewer /
+                          fin_bp_global / hr_bp_global): line_id 必空
+                        </li>
+                        <li>
+                          <b>business_line</b> 角色 (line_owner / fin_bp /
+                          hr_bp): line_id 必填
+                        </li>
+                        <li>同一 (role, line_id) 组合不能重复</li>
+                        <li>
+                          系统至少保留一个 admin 绑定,后端会 409 拦截
+                          (前端软提示)
+                        </li>
+                      </ul>
+                    }
+                  />
+                  {v2HasNoAdmin && (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message="当前 binding 列表中没有任何 admin 角色"
+                      description="如果保存,后端会 409 拒绝(系统最后一个 admin 不能被移除)。请至少保留一个 admin。"
+                    />
+                  )}
+                  <Spin spinning={v2BindingsLoading}>
+                    <Table<UserRoleBinding>
+                      rowKey={(_, idx) => `binding-${idx ?? 0}`}
+                      size="small"
+                      pagination={false}
+                      dataSource={v2Bindings.map((b, i) => ({ ...b, __idx: i }))}
+                      columns={[
+                        {
+                          title: "角色",
+                          dataIndex: "role",
+                          width: 220,
+                          render: (role: string) => {
+                            const spec = v2RoleSpec(role);
+                            return (
+                              <Tag color={spec?.color ?? "default"}>
+                                {spec?.label ?? role}
+                              </Tag>
+                            );
+                          },
+                        },
+                        {
+                          title: "Scope",
+                          dataIndex: "scope",
+                          width: 130,
+                          render: (scope: V2Scope) => (
+                            <Tag
+                              color={scope === "global" ? "geekblue" : "gold"}
+                            >
+                              {scope}
+                            </Tag>
+                          ),
+                        },
+                        {
+                          title: "业务线",
+                          dataIndex: "line_id",
+                          render: (lineId: string | null) =>
+                            lineId ? (
+                              <Tag color={lineTagColor(lineId)}>{lineId}</Tag>
+                            ) : (
+                              <Text type="secondary">—</Text>
+                            ),
+                        },
+                        {
+                          title: "操作",
+                          key: "actions",
+                          width: 80,
+                          render: (_, record) => {
+                            const idx = (record as UserRoleBinding & { __idx: number }).__idx;
+                            return (
+                              <Button
+                                size="small"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={() => removeV2Binding(idx)}
+                                aria-label="删除 binding"
+                              >
+                                删除
+                              </Button>
+                            );
+                          },
+                        },
+                      ]}
+                      locale={{
+                        emptyText: v2BindingsLoading
+                          ? "加载中..."
+                          : "暂无 v2 角色绑定,使用下方表单添加",
+                      }}
+                    />
+                  </Spin>
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 12,
+                      background: "#fafafa",
+                      border: "1px dashed #d9d9d9",
+                      borderRadius: 4,
                     }}
-                    aria-label="取消清空"
                   >
-                    取消
-                  </Button>
-                ) : (
-                  <Button
-                    type="link"
-                    size="small"
-                    onClick={() => {
-                      setClearEmail(true);
-                      editForm.setFieldsValue({ email: "" });
+                    <Space.Compact style={{ width: "100%" }}>
+                      <Select
+                        placeholder="选择角色"
+                        value={v2Draft.role}
+                        style={{ width: "32%" }}
+                        options={V2_ROLES.map((r) => ({
+                          value: r.value,
+                          label: r.label,
+                        }))}
+                        onChange={(v: V2Role) =>
+                          setV2Draft({
+                            role: v,
+                            scope: v2RoleSpec(v)?.scope,
+                            line_id:
+                              v2RoleSpec(v)?.scope === "business_line"
+                                ? v2Draft.line_id
+                                : undefined,
+                          })
+                        }
+                        aria-label="v2 角色"
+                      />
+                      <Select
+                        placeholder="scope"
+                        value={v2Draft.scope}
+                        style={{ width: "22%" }}
+                        options={[
+                          { value: "global", label: "global" },
+                          { value: "business_line", label: "business_line" },
+                        ]}
+                        disabled={!v2Draft.role}
+                        onChange={(v: V2Scope) =>
+                          setV2Draft((d) => ({ ...d, scope: v }))
+                        }
+                        aria-label="v2 scope"
+                      />
+                      <Select
+                        placeholder="业务线 (仅 business_line)"
+                        value={v2Draft.line_id}
+                        style={{ width: "30%" }}
+                        options={lineOptions}
+                        disabled={v2DraftLineDisabled}
+                        showSearch
+                        optionFilterProp="label"
+                        onChange={(v: string) =>
+                          setV2Draft((d) => ({ ...d, line_id: v }))
+                        }
+                        aria-label="v2 业务线"
+                      />
+                      <Button
+                        type="primary"
+                        onClick={addV2BindingFromDraft}
+                        aria-label="添加 binding"
+                      >
+                        添加
+                      </Button>
+                    </Space.Compact>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      display: "flex",
+                      justifyContent: "flex-end",
                     }}
-                    aria-label="清空邮箱"
-                    disabled={!editing?.email}
                   >
-                    清空
-                  </Button>
-                )
-              }
-            />
-          </Form.Item>
-          <Form.Item name="is_active" label="启用" valuePropName="checked">
-            <Switch checkedChildren="启用" unCheckedChildren="停用" aria-label="启用" />
-          </Form.Item>
-          <Form.Item
-            name="roles"
-            label="角色"
-            tooltip="bp:<line> 角色会自动给该用户分配对应业务线访问权限"
-          >
-            <Select
-              mode="multiple"
-              allowClear
-              placeholder="选择角色"
-              options={roleOptions}
-              aria-label="角色"
-            />
-          </Form.Item>
-          <Form.Item
-            name="accessible_lines"
-            label="可见业务线"
-            tooltip="由 bp:<line> 角色隐含的业务线会自动包含在此列表中"
-          >
-            <Select
-              mode="multiple"
-              allowClear
-              placeholder="选择业务线"
-              options={lineOptions}
-              aria-label="可见业务线"
-            />
-          </Form.Item>
-        </Form>
+                    <Space>
+                      {v2BindingsDirty && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          有未保存的修改
+                        </Text>
+                      )}
+                      <Button
+                        onClick={() => editing && loadV2Bindings(editing.id)}
+                        disabled={v2BindingsLoading || v2Saving}
+                        aria-label="重载"
+                      >
+                        重载
+                      </Button>
+                      <Button
+                        type="primary"
+                        loading={v2Saving}
+                        disabled={!v2BindingsDirty || v2BindingsLoading}
+                        onClick={saveV2Bindings}
+                        aria-label="保存 v2 角色"
+                      >
+                        保存 v2 角色
+                      </Button>
+                    </Space>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: "v1",
+              label: "V1 角色 (兼容)",
+              children: (
+                <Form form={editForm} layout="vertical">
+                  <Form.Item label="用户名 (不可改)">
+                    <Input
+                      value={editing?.username ?? ""}
+                      disabled
+                      aria-label="用户名"
+                    />
+                  </Form.Item>
+                  <Form.Item name="display_name" label="显示名">
+                    <Input placeholder="显示名" aria-label="显示名" />
+                  </Form.Item>
+                  <Form.Item
+                    name="email"
+                    label="邮箱"
+                    rules={
+                      clearEmail
+                        ? []
+                        : [{ type: "email", message: "邮箱格式不正确" }]
+                    }
+                  >
+                    <Input
+                      placeholder={clearEmail ? "将清空已有邮箱" : "可选"}
+                      disabled={clearEmail}
+                      aria-label="邮箱"
+                      suffix={
+                        clearEmail ? (
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => {
+                              setClearEmail(false);
+                              editForm.setFieldsValue({
+                                email: editing?.email ?? "",
+                              });
+                            }}
+                            aria-label="取消清空"
+                          >
+                            取消
+                          </Button>
+                        ) : (
+                          <Button
+                            type="link"
+                            size="small"
+                            onClick={() => {
+                              setClearEmail(true);
+                              editForm.setFieldsValue({ email: "" });
+                            }}
+                            aria-label="清空邮箱"
+                            disabled={!editing?.email}
+                          >
+                            清空
+                          </Button>
+                        )
+                      }
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="is_active"
+                    label="启用"
+                    valuePropName="checked"
+                  >
+                    <Switch
+                      checkedChildren="启用"
+                      unCheckedChildren="停用"
+                      aria-label="启用"
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="roles"
+                    label="角色"
+                    tooltip="bp:<line> 角色会自动给该用户分配对应业务线访问权限"
+                  >
+                    <Select
+                      mode="multiple"
+                      allowClear
+                      placeholder="选择角色"
+                      options={roleOptions}
+                      aria-label="角色"
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="accessible_lines"
+                    label="可见业务线"
+                    tooltip="由 bp:<line> 角色隐含的业务线会自动包含在此列表中"
+                  >
+                    <Select
+                      mode="multiple"
+                      allowClear
+                      placeholder="选择业务线"
+                      options={lineOptions}
+                      aria-label="可见业务线"
+                    />
+                  </Form.Item>
+                </Form>
+              ),
+            },
+          ]}
+        />
       </Modal>
 
       {/* --------------------------------------------------------------- */}
