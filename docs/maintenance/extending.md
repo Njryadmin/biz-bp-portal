@@ -594,3 +594,228 @@ python -m pytest tests\test_registry.py -v
 ```
 
 第一个验证"加 / 删业务线 0 核心代码改动"；第二个验证 YAML schema 校验。
+
+---
+
+## 8. v2 manifest 字段（PR #1, 2026-09-04）
+
+**v2 manifest 在 v1 schema 基础上加 4 块**。完整字段定义见 `business_lines/_template/manifest.yaml.v2.example` + `business_lines/project-management/manifest.yaml`（P0 升级示范）。
+
+### 8.1 `data_scope.domains` 块
+
+```yaml
+data_scope:
+  domains: [business, finance, hr, client, project]   # 必填 v2: 本业务线包含哪些域
+```
+
+Pydantic 校验：`apps/api/app/core/registry.py:67-72`（`field_validator`）。`domains` 必须是 5 个合法域 (`business` / `finance` / `hr` / `client` / `project`) 的子集，**至少 1 个**。
+
+### 8.2 `owner_role_assignments` 块
+
+```yaml
+owner_role_assignments:
+  finance_bp: "fin_bp:residential"     # 本线 FINBP 绑定
+  hr_bp:      "hr_bp:residential"      # 本线 HRBP 绑定
+  line_owner: "line_owner:residential" # 业务线总监
+```
+
+admin 在 admin UI 创建 v2 角色绑定时从 manifest 读取这些值，**避免角色字符串拼错**（如 `fin_bp:residentail` 拼写错误）。
+
+格式校验：`{role_id}:{line_id}`，role_id 必须是 8 个 v2 角色之一。
+
+### 8.3 `access_matrix` 块（域 × 角色过滤）
+
+```yaml
+access_matrix:
+  fin_bp:      [business, finance, project]    # 本线 FINBP 可见域
+  hr_bp:       [business, hr, client]           # 本线 HRBP 可见域
+  line_owner:  [business, finance, hr, client, project]
+  line_member: [business, project, client]
+```
+
+4 个角色 × 5 域 = 20 个 chip。**作用**：
+- UI 自动渲染"角色可访问域"提示
+- 后端 `filter_accessible_lines` 二次校验
+
+### 8.4 `kpis` 块 (3 视角 KPI)
+
+```yaml
+kpis:
+  fin_view:    # FINBP 视角 KPI
+    - { id: monthly_revenue, title: "月度营收", source: "mart_xxx.fct_revenue" }
+    - { id: ar_aging,        title: "应收账款账龄", unit: "天" }
+  hr_view:     # HRBP 视角 KPI
+    - { id: headcount_fte,   title: "在职 FTE" }
+    - { id: attrition_q,     title: "季度离职率", unit: "%" }
+  shared_view: # FIN/HR 共关注
+    - { id: revenue_per_fte, title: "人均营收", formula: "monthly_revenue / headcount_fte" }
+```
+
+`id` / `title` 必填；`unit` / `source` / `formula` 可选。
+
+读取路径：`apps/api/app/routers/dashboard.py:_gather_kpis()` 按 view_keys 从 manifest 拉 KPI 列表，组装 `DashboardKpiItem`。
+
+### 8.5 v1 → v2 兼容
+
+- v1 manifest（无新字段）仍可加载：`data_scope` 缺省 → 全 5 域；`access_matrix` 缺省 → 全员全权限；`kpis` 缺省 → 空
+- v2 manifest 在 v1 路由仍可工作（`registry.py` 校验向后兼容）
+
+---
+
+## 9. v2 角色（PR #1, 2026-09-04）
+
+**v2 角色 8 个**：`admin` / `auditor` / `viewer` / `line_owner` / `fin_bp` / `hr_bp` / `fin_bp_global` / `hr_bp_global`。
+
+### 9.1 加新角色（不推荐）
+
+**只有 1 个理由**加新角色：5 大行级别客户组织结构变了（如新增 "compliance_officer"）。**其它场景用现有 8 角色 + 多 binding 组合**。
+
+如果一定要加：
+
+1. 改 `apps/api/app/core/rbac_v2.py:37-46`（`Role` 枚举）
+2. 改 `apps/api/app/core/rbac_v2.py:70-137`（`PERMISSION_MATRIX` 加行）
+3. 改 `apps/api/app/core/rbac_v2.py:141-150`（`ROLE_SCOPE` 加映射）
+4. 写 migration `infra/migrations/00N_add_<role>.sql` 改 CHECK 约束
+5. admin UI 加 PATCH `/api/auth/users/{id}/v2-roles` 的 role 选项
+6. 加 145+ 测试覆盖新角色 × 5 域 × 读/写
+
+**复杂、风险大**。先问人类。
+
+### 9.2 加 v2 角色到用户（admin 操作）
+
+**生产路径**：
+
+1. admin 登录 → `/admin/users` 页
+2. 选用户 → "Add Binding" 弹窗
+3. role 下拉（8 选 1） + scope radio（global / business_line） + line_id 下拉（仅 business_line）
+4. 保存 → `PATCH /api/auth/users/{id}/v2-roles`
+
+**API 直接调**：
+
+```bash
+curl -b /tmp/c.txt -X PATCH http://localhost:8000/api/auth/users/5/v2-roles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bindings": [
+      {"role": "fin_bp", "scope": "business_line", "business_line_id": "residential"},
+      {"role": "line_owner", "scope": "business_line", "business_line_id": "retail"}
+    ]
+  }' | jq .
+```
+
+### 9.3 域检查（域级权限）
+
+新写 router **必须**用 `require_domain_access`（不用老的 `require_role`）：
+
+```python
+from apps.api.app.core.rbac_v2 import DataDomain, require_domain_access
+
+@router.get("/lines/{line_id}/finance/summary",
+            dependencies=[Depends(require_domain_access(DataDomain.FINANCE))])
+async def finance_summary(line_id: str, ...):
+    ...
+```
+
+`write=True` 用于 POST/PATCH/DELETE；`write=False`（默认）用于 GET。
+
+### 9.4 v1 角色字符串兼容
+
+`bp:<line>` 角色字符串仍在 v2 工作（`infra/migrations/001_rbac_v2.sql` 自动 backfill 到 `line_owner:<line>` 等价 binding）。**不要在 v2 新代码里写 `bp:<line>`** — 走 v2 binding 三元组。
+
+---
+
+## 10. v2 租户（PR #1, 2026-09-04）
+
+**多租户 M1-M3 已落地**（详见 [`../multi-tenant-deliverable.md`](../multi-tenant-deliverable.md)）。
+
+### 10.1 加新租户（super admin 操作）
+
+**生产路径**：
+
+1. super admin 登录 → `/admin/tenants` 页
+2. "Create Tenant" 弹窗 → slug / name / plan
+3. 保存 → `POST /api/admin/tenants`
+
+**API 直接调**：
+
+```bash
+curl -b /tmp/c.txt -X POST http://localhost:8000/api/admin/tenants \
+  -H "Content-Type: application/json" \
+  -d '{"slug":"acme","name":"Acme Realty","plan":"enterprise"}' | jq .
+```
+
+返回 `id` (UUID) — super admin 切租户时用：
+
+```bash
+curl -b /tmp/c.txt -H "X-Tenant-ID: <uuid>" \
+  http://localhost:8000/api/auth/me-tenant | jq .
+```
+
+### 10.2 加新租户表（业务需要新数据域）
+
+如果新租户需要自己的业务表（如 `tenant_<id>.custom_kpis`）：
+
+1. 写 migration `infra/migrations/00N_tenant_<feature>.sql` — 加新表 + RLS policy
+2. router 走 `tenant_session(ctx.tenant_id)`
+3. 测试：M1 / M2 / M3 pattern 复制
+
+**不推荐** — 多租户 schema 复杂化会让 RLS 难维护。先评估能否塞到现有 6 张表。
+
+### 10.3 提升 / 降级 super admin
+
+当前通过 SQL：
+
+```sql
+UPDATE users SET is_super_admin = TRUE WHERE username = 'newadmin';
+```
+
+P1 follow-up：admin UI 加 toggle（`PATCH /api/admin/users/{id}/super-admin`）。
+
+---
+
+## 11. v2 migration（PR #1, 2026-09-04）
+
+**新加 migration 文件** 命名规范：`00N_description.sql`（3 位 prefix 锁定顺序）。
+
+### 11.1 写新 migration
+
+1. 命名：`00N_<short_description>.sql`（N 是 3 位数字，比当前最大 +1）
+2. 内容：用 `BEGIN;` / `COMMIT;` 包装（runner 自动剥离）
+3. **idempotent**：`CREATE TABLE IF NOT EXISTS` / `ON CONFLICT DO NOTHING` / `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
+4. 验证：跑 2 遍结果相同
+
+例：
+
+```sql
+-- 005_add_user_last_login.sql
+BEGIN;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
+COMMIT;
+```
+
+### 11.2 跑新 migration
+
+**自动**：API 重启时 `lifespan` 自动跑 pending migration。
+
+**手动**（应急）：
+
+```bash
+# 列出 pending
+curl -b /tmp/c.txt http://localhost:8000/api/admin/migrations/status | jq .
+
+# apply
+curl -b /tmp/c.txt -X POST http://localhost:8000/api/admin/migrations/apply | jq .
+
+# 验证 checksum (drift)
+curl -b /tmp/c.txt -X POST http://localhost:8000/api/admin/migrations/verify | jq .
+```
+
+### 11.3 写新 migration 的注意事项
+
+- **不要**改已 apply 的 migration 文件（drift 检测会标，**不**自动重跑）
+- **不要**用 `DROP TABLE`（防数据丢失）
+- **不要**用 `DROP COLUMN` 在已生产表上（必须先写兼容代码 + 双写 + 灰度 + 删）
+- 必须用 `tenant_id` 列（如果表有 RLS）

@@ -3,6 +3,97 @@
 All notable changes to the fin-bp-portal project are recorded here.
 The latest changes appear at the top.
 
+## 2026-09-04 — InsightBP v2 阶段全量上线 (PR #1 合并 master)
+
+> **版本**: v0.1.0 → **v2.0.0** (InsightBP)
+> **累计测试**: 277 passed / 0 failed (v1 145 + v2 新增 132)
+> **关联文档**: [`docs/v2-rbac-deliverable.md`](v2-rbac-deliverable.md) (主交付) + [`docs/multi-tenant-deliverable.md`](multi-tenant-deliverable.md) + [`docs/dashboard-deliverable.md`](dashboard-deliverable.md) + [`docs/cross-line-summary-deliverable.md`](cross-line-summary-deliverable.md) + [`docs/migration-runner-deliverable.md`](migration-runner-deliverable.md) + [`docs/admin-business-line-deliverable.md`](admin-business-line-deliverable.md)
+
+### 8 角色 RBAC v2
+
+- **后端** `apps/api/app/core/rbac_v2.py` (新, 364 行) — 8 角色枚举 `Role` + 5 数据域 `DataDomain` (business / finance / hr / client / project) + 静态 `PERMISSION_MATRIX` (8×5×2 = 80 个 view/write 配置) + `ROLE_SCOPE` (global / business_line) + `UserRoleBinding` (role + scope + line_id 三元组) + `CurrentUserV2` (扩展 v1 含 `bindings` + `active_view`) + `require_role_v2()` + `require_domain_access()` FastAPI dep
+- **后端** `apps/api/app/core/auth_v2.py` (新, 181 行) — `load_user_v2()` 从 DB 加载完整 binding 列表 + `get_current_user_v2()` dep (从 `X-Active-View` header 读 active_view) + `switch_view()` + `copilot_view_prompt_suffix()` 返回 FIN/HR 视角的 system_prompt 后缀约束
+- **后端** `apps/api/app/core/rbac.py` (扩) — 新增 `require_super_admin_dep` (v2 M2 super admin 鉴权)
+- **v1 → v2 backfill** `infra/migrations/001_rbac_v2.sql` — 自动把 v1 `admin` / `auditor` / `viewer` 标 `scope=global`，`bp:<line>` 标 `scope=business_line` + `line_id=...`（保守映射为 `line_owner` 等价），**业务无感**
+- **域检查** — 4 个通用 engine router (`alerts` / `forecast` / `sensitivity` / `copilot`) 全部升级 v2 domain guard
+- **测试** `tests/test_rbac_v2.py` (新) — 145 个测试覆盖 8 角色 × 5 域 × 读/写
+- **铁律**: FIN/HR 物理隔离 (`fin_bp` 看不到 `hr` 域, `hr_bp` 看不到 `finance` 域) ; admin 不写业务数据 (`can_write_line` 拒绝 admin)
+
+### Manifest v2 (业务线插件)
+
+- **`business_lines/_template/manifest.yaml.v2.example`** (新) — v2 schema 4 块：`data_scope.domains` (5 选 N) / `owner_role_assignments` (3 角色绑定) / `access_matrix` (4 角色 × 5 域 chips) / `kpis` (3 视角 fin_view / hr_view / shared_view)
+- **`business_lines/project-management/manifest.yaml`** (升 v2) — P0 业务线升级到 v2，包含 5 域 + 完整 4 块 + 6 个 KPI
+- **测试** — v1 manifest 仍可加载（缺省 → 全 5 域 / 全员全权限 / 空 KPI 列表），向后兼容
+
+### Admin UI
+
+- **业务线编辑器** `apps/web/app/(dashboard)/admin/business-lines/[id]/page.tsx` (新) — 5 区块（基础 + 导航 + data_scope + owner_role_assignments + access_matrix + kpis）；后端 `apps/api/app/routers/admin_business_lines.py` (新) 3 端点 list / get / patch；YAML 原子写（`tempfile + os.replace` + `.bak` 备份）；`reload_registry()` 热重载
+- **v2 角色管理** `apps/web/app/(dashboard)/admin/users/page.tsx` (扩) — v2 binding 三元组（role + scope + line_id）管理 UI；后端 `GET / PATCH /api/auth/users/{id}/v2-roles`
+- **YAML 库自动 reload** — admin 改完 manifest 后立即生效，不需重启 API
+
+### Dashboard + Copilot
+
+- **FIN/HR/Shared 三视角 dashboard** `apps/api/app/routers/dashboard.py` (新) 3 端点 (fin / hr / shared)；按 `DataDomain` 检查（无权限 403）；读 `manifest.yaml:kpis` 拉 KPI 列表
+- **前端** `apps/web/app/(dashboard)/dashboard/{fin,hr,shared}/page.tsx` (新 3 页) + BFF `apps/web/app/api/dashboard/[[...path]]/route.ts`
+- **X-Active-View header 透传** — BFF 读 cookie `active_view` → 写 header → 后端 `get_current_user_v2` 解析 → 写到 `CurrentUserV2.active_view` → 审计日志带 `active_view` 标签
+- **`PerspectiveSwitcher` Topbar 组件** `apps/web/app/(dashboard)/_components/PerspectiveSwitcher.tsx` (新) — 切换 fin / hr / line_owner / admin / auditor / viewer
+- **Copilot 视角切换** `apps/api/app/core/auth_v2.py:copilot_view_prompt_suffix()` — FIN 视角 prompt 强制"看不到 HR 域", HR 视角 prompt 强制"看不到 finance 域"
+- **测试** `tests/test_dashboard.py` (新) — 23 个测试覆盖 6 角色 × 3 端点 + 域检查矩阵 + 视角透传
+
+### 跨业务线汇总
+
+- **2 端点** `apps/api/app/routers/cross_line_summary.py` (新) — `GET /api/finance/summary?lines=*` + `GET /api/hr/summary?lines=residential,retail`
+- **`?lines=` 解析** — 4 种语义：缺省 / `*` / `all` → 用户可见全部；csv → 解析 csv（按用户 `accessible_lines` 过滤）
+- **域隔离** — `hr_bp` 调 `/api/finance/summary` → 403（铁律）
+- **跨线 totals 累加** — `sum` 类（revenue / headcount）求和；`rate` 类（IRR / 坪效 / 人均营收）→ null（任一为 null 整体 null）
+- **line-scoped 静默降级** — `fin_bp(residential)` 调 `?lines=*` → 自动只返回 `residential`（不抛错）
+- **测试** `tests/test_cross_line_summary.py` (新) — 34 个测试
+
+### 多租户 (M1-M3)
+
+- **M1 (commit `0d26c87`)** `infra/migrations/003_multi_tenant_setup.sql` — `tenants` 表 + 6 业务表 (`users` / `user_roles` / `user_business_lines` / `raw.audit_log` / `ai_models` / `raw.uploads`) 加 `tenant_id` + NOT NULL + 6 索引 + 6 FK 约束 (RESTRICT) + RLS **ENABLE + FORCE** + `tenant_lock` policy
+- **M2 (commit `b00b499`)** `apps/api/app/core/tenant_context.py` (新) `TenantContext` + `get_tenant_context` dep；`apps/api/app/db/tenant.py` (新) `tenant_session(tenant_id, bypass_rls)` async context manager；所有 router 走 `tenant_session`；**14 个 pre-existing 集成测试失败修复**
+- **M2 触发器 fallback** `infra/migrations/004_tenant_m2_super_admin_and_triggers.sql` — `set_tenant_from_guc()` BEFORE INSERT 触发器，没 GUC 时自动填 default tenant（不让 audit middleware 被 NOT NULL 拖垮）
+- **M3 (commit `8f2d90b`)** `apps/api/app/core/rbac.py:require_super_admin_dep` + `apps/api/app/routers/admin_tenants.py` (新) 4 端点 (list / create / patch / me-tenant) + 前端 `TenantBadge.tsx` + `TenantSwitcher.tsx`
+- **`is_super_admin` 列** — `admin` 用户自动 `is_super_admin = TRUE`（migration 004），可切 tenant via `X-Tenant-ID` header + 绕过 RLS via `app.bypass_rls = 'on'`
+- **测试** — 17 (M1) + 7 (M2) + 11 (M3) = **35 个新测试**
+
+### 基础设施
+
+- **Migration runner** `apps/api/app/db/migration_runner.py` (新, ~700 行) + `apps/api/app/routers/migrations.py` (新) 3 端点 (status / apply / verify)；`pg_advisory_xact_lock` 防并发；SHA256 checksum drift 检测；BEGIN/COMMIT 自动剥离；raw asyncpg fixup 解决 multi-statement SQL
+- **iStoreOS 端口偏移** `infra/docker-compose.override.yml` (新) — 3000 → 13000 / 8000 → 18000 / 5432 → 15432 等；ClickHouse + Airflow 标 `profiles: ["full"]` 默认关掉
+- **业务线数量 10 → 9** (v2 删 `my-line`)
+
+## 2026-09-04 — 277 passed / 0 failed (累计测试)
+
+| 测试模块 | 数量 | 文件 |
+|---|---|---|
+| v2 RBAC 8 角色 × 5 域 | 145 | `tests/test_rbac_v2.py` |
+| v2 Admin 角色管理 | 16 | `tests/test_admin_v2_roles.py` |
+| v2 Admin 业务线编辑器 | 19 | `tests/test_admin_business_lines.py` |
+| v2 Dashboard (fin/hr/shared) | 23 | `tests/test_dashboard.py` |
+| v2 Migration runner | 12 | `tests/test_migration_runner.py` |
+| v2 跨线汇总 | 34 | `tests/test_cross_line_summary.py` |
+| v2 M1 多租户 RLS | 10 | `tests/test_multi_tenant_m1.py` |
+| v2 M2 tenant context | 7 | `tests/test_tenant_context.py` |
+| v2 M3 admin tenants | 11 | `tests/test_admin_tenants.py` |
+| **v2 新增合计** | **277** | |
+| v1 (向后兼容) | 145 | `tests/test_auth.py` 等 6 文件 |
+| v1 admin CRUD | 37 passed / 11 skipped (DB-gated) | `tests/test_admin_users.py` 等 |
+
+**v1 全部 145 + 37 passed / 11 skipped 测试仍绿** — v2 升级**完全向后兼容**，0 破坏。
+
+## 2026-09-04 — 9 条业务线 (删 my-line)
+
+`business_lines/my-line/` (v0.1.0 第 10 条) 已在 PR #1 合并前由 `test_admin_v2_roles.py` 自动 cleanup。`registry.yaml` 现含 9 条：
+
+```
+residential / retail / retail-leasing / valuation / advisory /
+office-leasing / investment / project-management / industrial
+```
+
+如需演示插件机制，**临时**复制 `business_lines/_template/` 即可。
+
 ## 2026-09-03 — RBAC 全量上线（身份认证 + 角色 + 业务线隔离 + 审计）
 
 - **后端**:

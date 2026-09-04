@@ -1,22 +1,23 @@
-# MAINTENANCE — Biz-BP Portal 维护与交接手册
+# MAINTENANCE — InsightBP / Biz-BP Portal 维护与交接手册
 
 > **仓库**：<https://github.com/Njryadmin/biz-bp-portal>（private）
 > **本地路径**：`C:\Users\mozzi\.mavis\workspace\biz-bp-portal`
 > **远程 origin**：`https://github.com/Njryadmin/biz-bp-portal.git`
-> **本手册最近一次更新**：2026-09-03
+> **本手册最近一次更新**：2026-09-04（v2.0.0 — InsightBP 阶段）
 
 ---
 
 ## TL;DR
 
-Biz-BP Portal 是一个面向房地产咨询公司的**可插拔式"业务合伙人"分析门户**。
+InsightBP (Biz-BP Portal v2) 是一个面向房地产咨询公司的**可插拔式"业务合伙人"分析门户**。
 **后端**是 FastAPI（`apps/api/`），**前端**是 Next.js 14 + Ant Design 5（`apps/web/`），
 业务线代码完全隔离在 `business_lines/<line>/` 目录下，**新增业务线 = 0 行核心代码改动**。
-所有 RBAC（JWT + httpOnly cookie）、审计、AI 模型注册表、3 个真实数据爬虫、4 个通用引擎
-（敏感性 / 预测 / 告警 / Copilot）均已上线，**默认就绪**。
+**v2 阶段 (PR #1 合并 master, 2026-09-04)** 升级为 **8 角色 RBAC + 5 数据域 + 多租户 (M1-M3) + manifest v2**。
+所有 RBAC v2 (JWT + httpOnly cookie + 域检查)、多租户 (RLS + tenant context)、Admin UI、AI 模型注册表、3 个真实数据爬虫、4 个通用引擎
+（敏感性 / 预测 / 告警 / Copilot）均已上线，**默认就绪**。**277 passed / 0 failed**。
 
 如需寻求帮助，先看 [§6 常见操作](#6-常见操作) 和 [§10 已知陷阱](#10-已知陷阱)。
-新增业务线请按 [§7 扩展系统](#7-扩展系统) 走 5 步流程。
+新增业务线请按 [§7 扩展系统](#7-扩展系统) 走 5 步流程（v2 manifest 4 块必填）。
 
 ---
 
@@ -30,9 +31,10 @@ Biz-BP Portal 是一个面向房地产咨询公司的**可插拔式"业务合伙
 | **数据库** | PostgreSQL 16（生产 = compose；本地 = `pgserver_runner.py` 嵌入式实例） |
 | **依赖** | Airflow 2.8 / Redis 7 / ClickHouse 24 / MinIO（生产可选） |
 | **仓库结构** | 单一 monorepo（`apps/` + `business_lines/` + `packages/` + `infra/` + `docs/`） |
-| **业务线数量** | 10（`residential` / `retail` / `retail-leasing` / `valuation` / `advisory` / `office-leasing` / `investment` / `project-management` / `industrial`） |
-| **当前版本** | 0.1.0（API + Web） |
-| **代码规模** | ~15k LOC Python + ~3k LOC TypeScript（含全部 9 个业务线） |
+| **业务线数量** | 9（`residential` / `retail` / `retail-leasing` / `valuation` / `advisory` / `office-leasing` / `investment` / `project-management` / `industrial`）— **v2 删 my-line** |
+| **当前版本** | **v2.0.0**（InsightBP — post PR #1 merge, 2026-09-04）|
+| **多租户** | **M1-M3 已落地**：tenants 表 + RLS + tenant context middleware + super admin UI |
+| **代码规模** | ~20k LOC Python + ~4k LOC TypeScript（含 9 业务线 + RBAC v2 + 多租户 + Admin UI） |
 
 ### 1.1 关键 URL（本地 dev）
 
@@ -43,8 +45,11 @@ Biz-BP Portal 是一个面向房地产咨询公司的**可插拔式"业务合伙
 | Postgres | `127.0.0.1:11667` | 嵌入式 `pgserver` |
 | API 文档 | <http://127.0.0.1:8769/docs> | FastAPI 自动生成的 Swagger |
 | 登录 | <http://127.0.0.1:3000/login> | 用户名 `admin` / 密码 `admin123`（首次启动默认值） |
+| v2 关键端点 | `/api/auth/me-v2` `/api/auth/me-tenant` `/api/dashboard/{fin,hr,shared}` `/api/finance/summary` `/api/hr/summary` `/api/admin/business-lines` `/api/admin/tenants` `/api/admin/migrations/status` | v2 新增端点（详见 `docs/v2-rbac-deliverable.md`） |
 
 ### 1.2 关键 URL（生产 docker compose）
+
+**标准 compose**（默认端口）：
 
 | 服务 | 地址 | 默认凭据 |
 |---|---|---|
@@ -54,6 +59,26 @@ Biz-BP Portal 是一个面向房地产咨询公司的**可插拔式"业务合伙
 | MinIO 控制台 | <http://localhost:9001> | `finbp` / `finbp12345` |
 | Postgres | `localhost:5432` | `finbp` / `finbp` |
 | ClickHouse | `localhost:8123` | `finbp` / `finbp` |
+
+**iStoreOS 端口偏移 compose**（用 `infra/docker-compose.override.yml`）：
+
+| 服务 | 默认端口 | 偏移后端口 | 备注 |
+|---|---|---|---|
+| Web | 3000 | **13000** | 避 moontv-core (3000) |
+| API | 8000 | **18000** | |
+| Airflow | 8080 | 18080 | profiles=["full"] |
+| MinIO | 9000/9001 | 19000/19001 | |
+| Postgres | 5432 | 15432 | |
+| Redis | 6379 | 16379 | |
+| ClickHouse | 8123/9100 | 18123/19100 | profiles=["full"] |
+
+启动命令（iStoreOS）：
+
+```powershell
+docker compose -f infra\docker-compose.yml -f infra\docker-compose.override.yml --env-file .env up -d --build
+```
+
+详细部署参见 [`DEPLOY.md`](DEPLOY.md) §3 / §iStoreOS 段。
 
 ---
 
@@ -71,53 +96,73 @@ biz-bp-portal/
 ├── package.json                    ← npm workspace 根（web + packages）
 │
 ├── apps/
-│   ├── api/                        ← FastAPI 后端
+│   ├── api/                        ← FastAPI 后端 (v2 17 routers)
 │   │   ├── app/
-│   │   │   ├── main.py             ← uvicorn 入口；lifespan 挂载业务线 + 初始化 DB
-│   │   │   ├── core/               ← auth, rbac, registry, config, secret, logging
-│   │   │   ├── db/                 ← bootstrap (DDL) + session + seed_users
-│   │   │   ├── middleware/         ← AuditMiddleware（重试一次写审计）
-│   │   │   ├── routers/            ← 11 个 APIRouter
-│   │   │   ├── schemas/            ← Pydantic v2 响应模型
+│   │   │   ├── main.py             ← uvicorn 入口；lifespan 挂载业务线 + 初始化 DB + migration runner
+│   │   │   ├── core/
+│   │   │   │   ├── auth.py         ← v1 JWT + cookie (保留)
+│   │   │   │   ├── auth_v2.py      ← v2 CurrentUserV2 + 视角切换 (NEW)
+│   │   │   │   ├── rbac.py         ← v1 RBAC + require_super_admin_dep (v2 扩展)
+│   │   │   │   ├── rbac_v2.py      ← v2 8 角色 × 5 域 PERMISSION_MATRIX (NEW)
+│   │   │   │   ├── tenant_context.py ← v2 M2 多租户 dep (NEW)
+│   │   │   │   ├── registry.py     ← 业务线 manifest 解析 + reload
+│   │   │   │   ├── config.py / secret.py / logging.py
+│   │   │   ├── db/
+│   │   │   │   ├── bootstrap.py    ← DDL (SCHEMA / AUTH / AI_MODELS)
+│   │   │   │   ├── seed_users.py   ← 1 admin + 9 BP user (v1 → v2 自动 backfill)
+│   │   │   │   ├── tenant.py       ← v2 tenant_session helper (NEW)
+│   │   │   │   └── migration_runner.py ← v2 F 任务核心 (NEW)
+│   │   │   ├── middleware/         ← AuditMiddleware（重试一次写审计；v2 +active_view 字段）
+│   │   │   ├── routers/            ← 17 个 APIRouter (v2 扩到 17)
+│   │   │   │   ├── auth.py         ← v1 + me-v2 + me-tenant + v2-roles (v2 扩)
+│   │   │   │   ├── dashboard.py    ← v2 3 端点 (NEW)
+│   │   │   │   ├── cross_line_summary.py ← v2 2 端点 (NEW)
+│   │   │   │   ├── admin_business_lines.py ← v2 在线编辑 (NEW)
+│   │   │   │   ├── admin_tenants.py ← v2 M3 4 端点 (NEW)
+│   │   │   │   ├── migrations.py   ← v2 F 任务 3 端点 (NEW)
+│   │   │   │   ├── registry.py / sensitivity.py / forecast.py / alerts.py / copilot.py
+│   │   │   │   └── upload.py / scrapers.py / ai_models.py
+│   │   │   ├── schemas/            ← Pydantic v2 响应模型 (+ tenant/dashboard/cross_line_summary v2)
 │   │   │   └── services/
 │   │   │       ├── sensitivity_engine.py
 │   │   │       ├── forecast_engine.py
 │   │   │       ├── alert_engine.py
-│   │   │       ├── copilot_engine.py
+│   │   │       ├── copilot_engine.py (+ v2 视角 prompt)
 │   │   │       ├── llm/            ← base + deepseek + ollama + mock + factory
 │   │   │       ├── parsers/        ← CSV / Excel / 银行流水解析
 │   │   │       └── scrapers/       ← base + registry + utils + 3 个真实爬虫
 │   │   ├── pgserver_runner.py      ← 嵌入式 Postgres 控制脚本（端口 11667）
 │   │   ├── pyproject.toml
-│   │   └── tests/                  ← 100+ pytest 用例
+│   │   └── tests/                  ← 277 pytest 用例 (v2 新增 132 个)
 │   └── web/                        ← Next.js 14 前端
 │       ├── app/
 │       │   ├── (dashboard)/        ← 受保护页面（layout 要求 cookie）
-│       │   │   ├── dashboard/      ← 总览
+│       │   │   ├── dashboard/      ← 总览 + v2 fin/hr/shared (NEW)
 │       │   │   ├── sensitivity/    ← 通用敏感性 Lab
-│       │   │   ├── copilot/        ← AI 问答
+│       │   │   ├── copilot/        ← AI 问答 (v2 + 视角切换)
 │       │   │   ├── forecast/       ← 滚动预测
 │       │   │   ├── alerts/         ← 告警中心
 │       │   │   ├── scrapers/       ← 爬虫面板
-│       │   │   ├── admin/          ← 用户 / AI 模型管理
+│       │   │   ├── admin/          ← 用户 / AI 模型 / 业务线 / 租户 (v2 +2)
 │       │   │   └── [line]/         ← 动态业务线路由
+│       │   ├── _components/        ← Topbar + PerspectiveSwitcher + TenantBadge + TenantSwitcher (v2 +3)
 │       │   ├── api/                ← BFF 代理（/api/* → API:8769）
 │       │   ├── login/, 403/        ← 公共页
 │       │   └── layout.tsx
 │       ├── middleware.ts           ← 全站 cookie 守卫
 │       └── package.json
 │
-├── business_lines/                 ← 唯一的"业务线代码"区
+├── business_lines/                 ← 唯一的"业务线代码"区 (v2 9 条, 删 my-line)
 │   ├── registry.yaml               ← 9 条业务线的清单（每次新增要 +1 行）
-│   ├── _template/                  ← 5 步复制-修改模板
-│   ├── residential/                ← 住宅分析（参考实现，含全部 5 个引擎配置）
+│   ├── _template/                  ← 5 步复制-修改模板 + manifest.yaml.v2.example (v2 4 块)
+│   ├── residential/                ← 住宅分析
 │   ├── retail/                     ← 零售分析
 │   ├── retail-leasing/             ← 零售租赁
 │   ├── valuation/                  ← 估价
 │   ├── advisory/                   ← 顾问
 │   ├── office-leasing/             ← 写字楼租赁
 │   ├── investment/                 ← 投资
-│   ├── project-management/         ← 项目管理
+│   ├── project-management/         ← 项目管理 (v2 P0 升级, 5 域 + 4 v2 块齐全)
 │   └── industrial/                 ← 工业地产
 │
 ├── packages/
@@ -126,23 +171,31 @@ biz-bp-portal/
 │
 ├── infra/                          ← 部署与编排
 │   ├── docker-compose.yml          ← 7 服务栈
+│   ├── docker-compose.override.yml ← v2 iStoreOS 端口偏移 (NEW, 3000→13000)
+│   ├── migrations/                 ← v2 4 份 migration (001_rbac_v2 / 002_placeholder / 003_multi_tenant / 004_tenant_m2)
 │   ├── airflow/dags/               ← ingest_daily + scrape_weekly
 │   └── dbt/                        ← 全局 DBT 项目
 │
-├── docs/                           ← 全部历史交付文档
-│   ├── README.md                   ← 文档索引（新增）
+├── docs/                           ← 全部交付文档 (v2 新增 6 份)
+│   ├── README.md                   ← 文档索引
 │   ├── architecture-overview.md     ← 5 张架构图
-│   ├── rbac-2026-09-03-deliverable.md
+│   ├── v2-rbac-deliverable.md      ← v2 RBAC 完整设计 (NEW)
+│   ├── multi-tenant-deliverable.md ← v2 M1-M3 多租户 (NEW)
+│   ├── dashboard-deliverable.md    ← v2 E 任务 (NEW)
+│   ├── cross-line-summary-deliverable.md ← v2 G 任务 (NEW)
+│   ├── migration-runner-deliverable.md   ← v2 F 任务 (NEW)
+│   ├── admin-business-line-deliverable.md ← v2 D1+D2 (NEW)
+│   ├── rbac-2026-09-03-deliverable.md    ← v1 RBAC (superseded, 保留为历史)
 │   ├── ai-models-deliverable.md
 │   ├── admin-users-deliverable.md
 │   ├── scrapers-deliverable.md
-│   ├── ...                         ← 其它 deliverable*.md
+│   ├── ...                         ← 其它 v1 deliverable*.md
 │   ├── plugin-howto.md             ← 5 步新增业务线（旧版，可作补遗）
-│   └── maintenance/                ← 主题维护手册（新增）
-│       ├── operations.md           ← 日常运维
-│       ├── extending.md            ← 扩展系统
+│   └── maintenance/                ← 主题维护手册
+│       ├── operations.md           ← 日常运维 (v2 + migration runner / 跨租户查询)
+│       ├── extending.md            ← 扩展系统 (v2 + manifest v2 / v2 角色 / tenant / migration)
 │       ├── troubleshooting.md      ← 故障排查
-│       ├── architecture-decisions.md
+│       ├── architecture-decisions.md (v2 + 6 新决策)
 │       └── conventions.md          ← 编码规范
 │
 ├── data/landing/                   ← 落地区（上传 / 爬虫文件）
@@ -227,15 +280,25 @@ docker compose -f infra\docker-compose.yml --env-file .env up -d --build
 
 | 关注点 | 位置 | 备注 |
 |---|---|---|
-| **API 启动 / 路由挂载** | `apps/api/app/main.py:1` | uvicorn 入口；`lifespan` 调用 `mount_business_line_routers` + `init_db` + `seed_initial_users` |
-| **JWT / 认证** | `apps/api/app/core/auth.py:1` | HS256 + bcrypt + httpOnly cookie；`get_current_user` 是所有路由的依赖 |
-| **RBAC 守卫** | `apps/api/app/core/rbac.py:1` | `require_role` / `business_line_dep` / `require_admin_dep` / `require_auditor_or_admin_dep` |
-| **业务线注册表** | `business_lines/registry.yaml:1` + `apps/api/app/core/registry.py:1` | 1 行 + 1 个 YAML → 0 行核心代码 |
+| **API 启动 / 路由挂载** | `apps/api/app/main.py:1` | uvicorn 入口；`lifespan` 调用 `mount_business_line_routers` + `init_db` + `seed_initial_users` + (v2) migration runner |
+| **JWT / 认证 (v1)** | `apps/api/app/core/auth.py:1` | HS256 + bcrypt + httpOnly cookie；`get_current_user` 是所有路由的依赖 |
+| **v2 认证 (CurrentUserV2)** | `apps/api/app/core/auth_v2.py:1` | v2 shape: bindings + active_view；`load_user_v2` + `get_current_user_v2` + `copilot_view_prompt_suffix` |
+| **v1 RBAC 守卫** | `apps/api/app/core/rbac.py:1` | `require_role` / `business_line_dep` / `require_admin_dep` / `require_auditor_or_admin_dep` (+ v2 `require_super_admin_dep`) |
+| **v2 RBAC 核心** | `apps/api/app/core/rbac_v2.py:1` | 8 角色枚举 + 5 数据域 + PERMISSION_MATRIX + `CurrentUserV2`; `require_domain_access()` FastAPI dep |
+| **多租户 dep (v2 M2)** | `apps/api/app/core/tenant_context.py:1` | `TenantContext` dataclass + `get_tenant_context` dep (header / user_default / default 优先级) |
+| **多租户 session (v2 M2)** | `apps/api/app/db/tenant.py:1` | `tenant_session(tenant_id, bypass_rls=False)` 包装 SQLAlchemy；自动 SET LOCAL GUC |
+| **业务线注册表** | `business_lines/registry.yaml:1` + `apps/api/app/core/registry.py:1` | 1 行 + 1 个 YAML → 0 行核心代码；`reload_registry()` 热重载 (v2 写入立即生效) |
 | **业务线动态加载** | `apps/api/app/routers/registry.py:1` | importlib 加载 `business_lines/<id>/api/router.py` |
-| **审计中间件** | `apps/api/app/middleware/audit.py:1` | 写 `raw.audit_log`；重试一次 + 3s 超时，绝不阻塞响应 |
+| **审计中间件** | `apps/api/app/middleware/audit.py:1` | 写 `raw.audit_log`；重试一次 + 3s 超时；v2 +`active_view` 字段 + `tenant_id` 字段 |
 | **DB 模式（DDL）** | `apps/api/app/db/bootstrap.py:1` | 3 组：`SCHEMA_DDL` / `AUTH_DDL` / `AI_MODELS_DDL`；幂等 |
-| **首次启动用户** | `apps/api/app/db/seed_users.py:1` | admin + 每条业务线 1 个 BP 用户；幂等 |
-| **4 个通用引擎** | `apps/api/app/services/{sensitivity,forecast,alert,copilot}_engine.py` | 全部 0 业务线硬编码 |
+| **首次启动用户** | `apps/api/app/db/seed_users.py:1` | admin + 9 BP user；v1 → v2 自动 backfill (bp:\<line\> → line_owner:\<line\>) |
+| **Migration runner (v2 F)** | `apps/api/app/db/migration_runner.py:1` | `pg_advisory_xact_lock` + SHA256 checksum + drift 检测 + BEGIN/COMMIT 剥离 |
+| **Dashboard (v2 E)** | `apps/api/app/routers/dashboard.py:1` | 3 端点 fin / hr / shared；按 `DataDomain` 检查；读 manifest kpis |
+| **跨线汇总 (v2 G)** | `apps/api/app/routers/cross_line_summary.py:1` | 2 端点 finance / hr summary；`?lines=` csv/glob；rate 类 null |
+| **Admin 业务线 (v2 D1)** | `apps/api/app/routers/admin_business_lines.py:1` | 3 端点 list / get / patch；YAML 原子写 + .bak + 热重载 |
+| **Admin tenants (v2 M3)** | `apps/api/app/routers/admin_tenants.py:1` | 4 端点 list / create / patch / me-tenant；仅 super admin |
+| **Migration 路由 (v2 F)** | `apps/api/app/routers/migrations.py:1` | 3 端点 status / apply / verify |
+| **4 个通用引擎** | `apps/api/app/services/{sensitivity,forecast,alert,copilot}_engine.py` | 全部 0 业务线硬编码；v2 + 视角切换 |
 | **LLM 后端** | `apps/api/app/services/llm/{base,deepseek,ollama,mock,factory}.py` | 工厂模式 + 失败回退到 mock |
 | **爬虫框架** | `apps/api/app/services/scrapers/{base,registry,utils}.py` + `scrapers/*.py` | 3 个真实源 + 自动发现 |
 | **加密 / 密钥** | `apps/api/app/core/secret.py:1` | Fernet；`BIZ_BP_AI_SECRET_KEY` 控制 |
@@ -423,20 +486,26 @@ HTTPS 的 GitHub URL 偶尔会大小写重定向（`Njryadmin/biz-bp-portal` vs 
 
 | 主题 | 文件 |
 |---|---|
-| 5 分钟上手 | [`README.md`](README.md) |
-| 生产部署 | [`DEPLOY.md`](DEPLOY.md) |
+| 5 分钟上手 (v2) | [`README.md`](README.md) |
+| 生产部署 (含 iStoreOS 端口偏移) | [`DEPLOY.md`](DEPLOY.md) |
 | 维护手册（你正在读） | [`MAINTENANCE.md`](MAINTENANCE.md) |
-| AI 代理交接 | [`AGENTS.md`](AGENTS.md) |
+| AI 代理交接 (v2) | [`AGENTS.md`](AGENTS.md) |
 | 架构图（5 张） | [`docs/architecture-overview.md`](docs/architecture-overview.md) |
 | 架构审计 | [`docs/architecture-audit-2026-09-03.md`](docs/architecture-audit-2026-09-03.md) |
-| RBAC 设计 | [`docs/rbac-2026-09-03-deliverable.md`](docs/rbac-2026-09-03-deliverable.md) |
+| **v2 RBAC + Manifest v2 + Admin + Dashboard + Cross-line 全量交付** | [`docs/v2-rbac-deliverable.md`](docs/v2-rbac-deliverable.md) |
+| **v2 多租户 M1-M3** | [`docs/multi-tenant-deliverable.md`](docs/multi-tenant-deliverable.md) |
+| **v2 Dashboard (E 任务)** | [`docs/dashboard-deliverable.md`](docs/dashboard-deliverable.md) |
+| **v2 跨业务线汇总 (G 任务)** | [`docs/cross-line-summary-deliverable.md`](docs/cross-line-summary-deliverable.md) |
+| **v2 Migration Runner (F 任务)** | [`docs/migration-runner-deliverable.md`](docs/migration-runner-deliverable.md) |
+| **v2 Admin 业务线编辑器 (D1+D2)** | [`docs/admin-business-line-deliverable.md`](docs/admin-business-line-deliverable.md) |
+| v1 RBAC (superseded, 保留历史) | [`docs/rbac-2026-09-03-deliverable.md`](docs/rbac-2026-09-03-deliverable.md) |
 | AI 模型注册表 | [`docs/ai-models-deliverable.md`](docs/ai-models-deliverable.md) |
 | 用户管理 | [`docs/admin-users-deliverable.md`](docs/admin-users-deliverable.md) |
 | 爬虫框架 | [`docs/scrapers-deliverable.md`](docs/scrapers-deliverable.md) |
-| 5 步新增业务线（旧） | [`docs/plugin-howto.md`](docs/plugin-howto.md) |
+| 5 步新增业务线（旧，可作补遗） | [`docs/plugin-howto.md`](docs/plugin-howto.md) |
 | 维护手册子目录 | [`docs/maintenance/`](docs/maintenance/) |
 | 完整文档索引 | [`docs/README.md`](docs/README.md) |
-| 变更日志 | [`docs/changelog.md`](docs/changelog.md) |
+| 变更日志 (v2 在顶部) | [`docs/changelog.md`](docs/changelog.md) |
 
 ---
 
@@ -445,4 +514,5 @@ HTTPS 的 GitHub URL 偶尔会大小写重定向（`Njryadmin/biz-bp-portal` vs 
 - **问题报告**：GitHub Issues（私有仓）
 - **Code review**：所有 PR 必须有 1 个 reviewer 签字
 - **变更规范**：commit message 用 `feat(...)` / `fix(...)` / `chore(...)` / `docs(...)` 前缀
-- **升级路径**：参见 [§10.1](#101-仓库的-reparse-point-假象)（reparse-point）+ 各 deliverable 文档
+- **v2 升级路径**：从 v0.1.0 (4 角色) → v2.0.0 (8 角色) **自动 backfill**（`infra/migrations/001_rbac_v2.sql`），**业务无感**。详细见 [`docs/v2-rbac-deliverable.md`](docs/v2-rbac-deliverable.md) §14。
+- **多租户升级**：v0.1.0 数据自动 backfill 到 default tenant (UUID `00000000-...`)，**0 数据丢失**。详细见 [`docs/multi-tenant-deliverable.md`](docs/multi-tenant-deliverable.md) §8。

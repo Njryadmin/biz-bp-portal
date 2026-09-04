@@ -474,5 +474,103 @@ python apps\api\pgserver_runner.py --bg
 | pgserver 连接数 | `pg_stat_activity` |
 | LLM API 错误率 | `copilot_engine` 的 `used_fallback=true` 计数 |
 | 爬虫 degraded 比例 | `raw.uploads.run_status = 'degraded'` 计数 |
+| v2 RLS 跨租户尝试 | 失败 403 / 0 行计数（应接近 0） |
+| v2 migration 失败 | `schema_migrations` 表 ERROR log |
+| v2 视角切换分布 | `raw.audit_log.active_view` group by |
 
 详细的可观测性建议见 `DEPLOY.md §5`（生产环境加固）。
+
+---
+
+## 13. 跑 migration runner（v2 F 任务）
+
+详见 [`migration-runner-deliverable.md`](../migration-runner-deliverable.md)。
+
+### 13.1 自动跑（推荐）
+
+API 重启时 `lifespan` 自动跑所有 pending migration：
+
+```powershell
+# 重启 API → 自动跑 pending
+docker compose -f infra\docker-compose.yml -f infra\docker-compose.override.yml restart api
+```
+
+### 13.2 HTTP 端点（admin 操作）
+
+```powershell
+# 1. login
+curl -c /tmp/c.txt -X POST http://localhost:18000/api/auth/login `
+  -H "Content-Type: application/json" `
+  -d '{"username":"admin","password":"admin123"}'
+
+# 2. 查 status
+curl -b /tmp/c.txt http://localhost:18000/api/admin/migrations/status | ConvertFrom-Json | ConvertTo-Json -Depth 5
+# → {"applied": [4 items], "pending": [], "drift": []}
+
+# 3. apply (super admin)
+curl -b /tmp/c.txt -X POST http://localhost:18000/api/admin/migrations/apply | ConvertFrom-Json
+# → {"applied_now": [], "skipped": [4 items], "errors": []}
+
+# 4. verify (drift 检测)
+curl -b /tmp/c.txt -X POST http://localhost:18000/api/admin/migrations/verify | ConvertFrom-Json
+# → [] (无 drift)
+```
+
+### 13.3 应急（手动 psql）
+
+```powershell
+# 手动跑某份
+docker compose -f infra\docker-compose.yml exec postgres psql -U finbp -d finbp -f /app/migrations/005_xxx.sql
+```
+
+### 13.4 4 份当前 migration（2026-09-04 已 apply）
+
+| # | 文件 | 用途 |
+|---|---|---|
+| 001 | `001_rbac_v2.sql` | `user_roles` 加 `scope` / `line_id` + backfill |
+| 002 | `002_placeholder.sql` | 验证多文件处理 |
+| 003 | `003_multi_tenant_setup.sql` | tenants + 6 表 tenant_id + RLS |
+| 004 | `004_tenant_m2_super_admin_and_triggers.sql` | is_super_admin + 触发器 fallback |
+
+---
+
+## 14. 跨租户查询（v2 M3 super admin）
+
+详见 [`multi-tenant-deliverable.md`](../multi-tenant-deliverable.md) §5.3 / §7。
+
+### 14.1 super admin 切租户
+
+```powershell
+# 1. 列 tenants
+curl -b /tmp/c.txt http://localhost:18000/api/admin/tenants | ConvertFrom-Json
+# → tenants[]: {id, slug, name, plan, is_active}
+
+# 2. 切到 acme tenant
+$ACME_ID = "<acme uuid>"
+curl -b /tmp/c.txt -H "X-Tenant-ID: $ACME_ID" `
+  http://localhost:18000/api/auth/me-tenant | ConvertFrom-Json
+# → {tenant_id, is_super_admin=true, source="header"}
+
+# 3. 切回 default
+curl -b /tmp/c.txt -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000000" `
+  http://localhost:18000/api/auth/me-tenant | ConvertFrom-Json
+```
+
+### 14.2 普通用户不能切租户
+
+```powershell
+# 普通用户带 X-Tenant-ID 头 → 忽略
+curl -b /tmp/normal.txt -H "X-Tenant-ID: $OTHER_TENANT_ID" `
+  http://localhost:18000/api/auth/me-tenant | ConvertFrom-Json
+# → {tenant_id: "<user 自己的 tenant>", is_super_admin: false, source: "user_default"}
+```
+
+### 14.3 跨租户 SQL（仅限审计 / 合规）
+
+普通 admin 看不到跨租户数据。如果需要跨租户审计：
+
+1. 用 super admin 切到 tenant A → 跑审计
+2. 切到 tenant B → 跑审计
+3. 对比结果
+
+**不要**绕过 RLS（`app.bypass_rls = 'on'` 仅 super admin 通过 `ctx.bypass_rls=True`）。

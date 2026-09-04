@@ -400,3 +400,147 @@ export const revalidate = 0;
 | 真实 LLM 必须可用 | fallback to mock | 移除 fallback，返回 503 |
 | 业务部门合并 | 9 条业务线 | 合并 + `bp:residential+retail` 多角色 |
 | RBAC 复杂化（行 / 列级） | `bp:<line>` 角色字符串 | OPA / Casbin |
+| 业务线卖给外部 + RBAC 行 / 列级 | v2 8 角色 + 5 域 | 迁移到 OPA / Cerbos |
+
+---
+
+## 17. v2 阶段新增决策（PR #1, 2026-09-04）
+
+### 17.1 为什么 v2 RBAC 8 角色用自实现（不直接用 Casbin / OPA）
+
+**问题**：5 大房地产咨询公司要求 8 角色 + 5 数据域 + FIN/HR 物理隔离 + 跨线 `*_global` 角色 + 视角切换。如果用 Casbin / OPA，要写 8×5×2 + scope + perspective = 80+ 规则；且 Casbin 的策略文件（`.conf` + `.csv`）很难在 admin UI 编辑。
+
+**决定**：自实现 `apps/api/app/core/rbac_v2.py`（8 角色枚举 + 5 域 + `PERMISSION_MATRIX` 静态 dict + `CurrentUserV2` + `require_domain_access` dep）。
+
+**后果**：
+- ✅ 业务紧密耦合：domain 检查是显式 Python 代码，IDE 自动补全、type check 友好
+- ✅ admin UI 可视化：5×2 矩阵直接渲染成 checkbox 组
+- ✅ 性能：静态 dict 查找 O(1)，无策略解析开销
+- ❌ 不支持行 / 列级策略（v2 是 domain 级，未来如需更细 → 17.5 反事实路径）
+- ❌ 角色 / 域变更需改代码（不能运行时改）
+
+**代码位置**：
+- `apps/api/app/core/rbac_v2.py:37-150`（枚举 + 矩阵 + scope 映射）
+- `apps/api/app/core/rbac_v2.py:166-302`（`CurrentUserV2` + `can_access_domain`）
+- `apps/api/app/core/rbac_v2.py:309-352`（FastAPI deps）
+
+**反事实**：如果需要行级（"只能看自己的项目"）+ 列级（"不能看 salary 列"）的细粒度控制，自实现 hold 不住 → 迁移到 OPA + 把 `PERMISSION_MATRIX` 翻译成 `.rego` 策略。
+
+---
+
+### 17.2 为什么 5 数据域（不直接用 ABAC attribute-based）
+
+**问题**：5 大行级别组织结构有 5 类数据：业务指标 / 财务 / 人力 / 客户 / 项目。ABAC（attribute-based access control）允许"任意属性组合"，灵活但规则爆炸。
+
+**决定**：5 个固定域 + 2 个 scope（global / business_line）。每条规则 = `(role, domain, write)` 三元组。
+
+**后果**：
+- ✅ 8 角色 × 5 域 × 2 写 = 80 个固定格子，每个用 1 行 dict 表示，可读性 100%
+- ✅ 域枚举有限（5 个），UI / API / DB 全部强类型
+- ✅ FIN / HR 隔离铁律直接用 2 个 `view: False` 表达，不需要复杂策略
+- ❌ 不支持跨域组合（如"只能看 HR 域里 salary < 10000 的"）— 当前需求不需要
+- ❌ 新增域需改代码 + DB migration
+
+**代码位置**：
+- `apps/api/app/core/rbac_v2.py:49-56`（`DataDomain` 枚举）
+- `apps/api/app/core/rbac_v2.py:70-137`（`PERMISSION_MATRIX` 完整表）
+
+**反事实**：如果未来需要"行级"（如 FINBP 只能看自己负责的项目）+ "列级"（如 HR 看不到 salary 字段），5 域太粗 → 迁移到 ABAC + 走 OPA。但当前 5 域 + PERMISSION_MATRIX 撑得住 5 大行级别客户。
+
+---
+
+### 17.3 为什么多租户用 Postgres RLS（不 separate DB per tenant）
+
+**问题**：5 大房地产咨询公司 = 5 个潜在 tenant。3 个备选：
+- **A. 独立 DB per tenant**：物理隔离最强，备份 N 倍
+- **B. 应用层 filter**：所有 SQL 加 `WHERE tenant_id = :tid`，10 个租户 = 10 套索引
+- **C. RLS**：DB 层强制 + FORCE（连 superuser 也强制）
+
+**决定**：方案 C (RLS) + `pg_advisory_xact_lock` 防并发 + `tenant_session` 包装。
+
+**后果**：
+- ✅ 物理隔离由 DB 保证（应用层 bug 不会跨租户泄露）
+- ✅ 单实例 / 单 migration / 单备份 / 单连接池
+- ✅ FORCE 防止 superuser 误操作
+- ❌ RLS 性能开销（~5%，索引仍 per-tenant）
+- ❌ GUC 配置复杂（必须 `SET LOCAL app.tenant_id`）
+- ❌ 表 owner 也强制 RLS（运维要 `SET LOCAL app.bypass_rls = 'on'`）
+
+**代码位置**：
+- `infra/migrations/003_multi_tenant_setup.sql:130-180`（RLS `tenant_lock` policy）
+- `apps/api/app/core/tenant_context.py:107-167`（`get_tenant_context`）
+- `apps/api/app/db/tenant.py:1`（`tenant_session` 包装）
+
+**反事实**：如果未来单实例撑不住 100+ tenant（连接池 / 锁竞争 / 备份慢），迁移到 A (separate DB)。但当前 5-10 租户 RLS 完全够用。
+
+---
+
+### 17.4 为什么触发器 fallback（不强制 audit middleware 改走 tenant_session）
+
+**问题**：`AuditMiddleware` 在请求早期写 `raw.audit_log` — 此时 router 还没设 `app.tenant_id` GUC，RLS 让 INSERT 缺 `tenant_id` → NOT NULL 违反 → 整个响应被拖垮（违背 audit sidecar 设计）。
+
+**决定**：`infra/migrations/004_tenant_m2_super_admin_and_triggers.sql:60-90` 定义 `set_tenant_from_guc()` BEFORE INSERT 触发器：INSERT 不带 `tenant_id` 时自动从 GUC 读取填入；GUC 也没设时回落 default tenant。
+
+**后果**：
+- ✅ audit middleware 不被 NOT NULL 违反拖垮（sidecar 设计保留）
+- ✅ 业务 router 走 `tenant_session` 时，触发器**不**覆盖（`NEW.tenant_id IS NULL` 才介入）
+- ✅ 触发器函数 idempotent（`CREATE OR REPLACE`）
+- ❌ Audit 写入的 tenant 不一定等于业务请求的 tenant（fallback 到 default 时）
+- ❌ 7.3 铁律：不要让 audit middleware 走 `tenant_session`（破坏 sidecar 设计）
+
+**代码位置**：
+- `infra/migrations/004_tenant_m2_super_admin_and_triggers.sql:60-90`（触发器函数）
+- `infra/migrations/004_tenant_m2_super_admin_and_triggers.sql:100-160`（6 张表触发器）
+- `apps/api/app/middleware/audit.py:1`（audit 写入路径）
+
+**反事实**：如果未来需要 audit 必须带请求真实 tenant（合规要求），让 audit middleware 显式传 `tenant_id` 而非依赖 GUC。但当前 fallback 是简单且合理的折中。
+
+---
+
+### 17.5 为什么 `X-Active-View` 是 header（不 URL query）
+
+**问题**：同一用户可能既是 `line_owner` 又是 `fin_bp`。前端需要告诉后端"现在想以哪个视角看数据"。2 个备选：
+- **URL query** `?view=fin`
+- **HTTP header** `X-Active-View: fin`
+
+**决定**：HTTP header。
+
+**后果**：
+- ✅ URL 仍是数据选择器（`?lines=*` / `?from=2026-01`），不被视角切换污染
+- ✅ 审计可读：`raw.audit_log.active_view` 列存 header 值，跨请求分析
+- ✅ BFF 简单：cookie 透传到 header 即可，不必拼 query string
+- ✅ URL 缓存友好（同一 URL 不同视角可以分别缓存）
+- ❌ 不在 URL 历史中（dev 工具 / bookmark 看不到）
+- ❌ CORS preflight 需把 header 加到 `Access-Control-Allow-Headers`（当前 BFF 内部不存在此问题）
+
+**代码位置**：
+- `apps/api/app/core/auth_v2.py:124-140`（`get_current_user_v2` 读 header）
+- `apps/web/app/api/dashboard/[[...path]]/route.ts`（BFF 透传 cookie → header）
+- `apps/web/app/(dashboard)/_components/PerspectiveSwitcher.tsx`（写 cookie `active_view`）
+
+**反事实**：如果未来需要"以视角为单位分享 URL"（如 `/dashboard/fin?lines=*`），改用 URL path 段（`/fin-dashboard/...`）即可。
+
+---
+
+### 17.6 为什么 migration runner 自实现（不直接用 Alembic）
+
+**问题**：v1 引入了 `infra/migrations/001_rbac_v2.sql`（手写 SQL），PR #1 又加了 3 份（002 / 003 / 004）。手动 `psql -f` 易漏跑 / 错顺序 / drift 无感知。Alembic 是业界标准但要重写所有 DDL。
+
+**决定**：`apps/api/app/db/migration_runner.py` 自实现：`pg_advisory_xact_lock` + SHA256 checksum + drift 检测 + 启动期自动跑 + HTTP 端点。
+
+**后果**：
+- ✅ 文件即真相：每份 migration 一个 `.sql`，prefix 锁定顺序
+- ✅ 启动期自动跑：新部署 / 升级无需手动 `psql`
+- ✅ drift 检测：手改已 apply 的文件被检测到，不自动重跑（防 tamper）
+- ✅ HTTP 端点：status / apply / verify（admin UI 可视化）
+- ❌ 不支持 down migration（没自动 rollback）
+- ❌ 不支持自动生成 migration（要手写 DDL）
+- ❌ 不支持多 DB dialect（仅 PostgreSQL）
+
+**代码位置**：
+- `apps/api/app/db/migration_runner.py:1`（核心；~700 行）
+- `apps/api/app/routers/migrations.py:1`（HTTP 端点）
+- `infra/migrations/00{1,2,3,4}_*.sql`（4 份已 apply）
+
+**反事实**：如果未来 schema 变更复杂到 SQL 手写 hold 不住（大量 ALTER / 多表 join / 列重命名），迁移到 Alembic + 让 `migration_runner.py` 做 wrapper。
+
