@@ -28,7 +28,8 @@ from sqlalchemy import text
 from ..core.auth import CurrentUser
 from ..core.logging import get_logger
 from ..core.rbac import require_auditor_or_admin_dep
-from ..db import get_session
+from ..core.tenant_context import TenantContext, get_tenant_context
+from ..db.tenant import tenant_session
 from ..services.parsers import parse_csv, parse_excel
 from ..services.parsers.bank_statement import parse_bank_statement
 from ..schemas.upload import UploadHistoryItem, UploadResponse
@@ -64,6 +65,7 @@ async def _persist_upload(
     filename: str,
     upload_type: str,
     rows: list[dict[str, Any]],
+    ctx: TenantContext,
 ) -> UploadResponse:
     """Insert one row into raw.uploads and return the response model."""
     if not rows:
@@ -86,7 +88,7 @@ async def _persist_upload(
         """
     )
 
-    async with get_session() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         result = await session.execute(
             insert_sql,
             {
@@ -121,6 +123,7 @@ async def _persist_upload(
 async def upload_excel(
     file: UploadFile = File(...),
     _user: CurrentUser = Depends(require_auditor_or_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UploadResponse:
     _check_ext(file.filename or "", _ALLOWED_EXCEL_EXT)
     contents = await file.read(_MAX_UPLOAD_BYTES + 1)
@@ -131,7 +134,7 @@ async def upload_excel(
     except Exception as exc:  # noqa: BLE001 — surface parser error to the user
         logger.exception("parse_excel failed for %s", file.filename)
         raise HTTPException(400, f"failed to parse excel: {exc}") from exc
-    return await _persist_upload(file.filename or "upload.xlsx", "excel", rows)
+    return await _persist_upload(file.filename or "upload.xlsx", "excel", rows, ctx)
 
 
 @router.post(
@@ -142,6 +145,7 @@ async def upload_excel(
 async def upload_csv(
     file: UploadFile = File(...),
     _user: CurrentUser = Depends(require_auditor_or_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UploadResponse:
     _check_ext(file.filename or "", _ALLOWED_CSV_EXT)
     contents = await file.read(_MAX_UPLOAD_BYTES + 1)
@@ -152,7 +156,7 @@ async def upload_csv(
     except Exception as exc:  # noqa: BLE001
         logger.exception("parse_csv failed for %s", file.filename)
         raise HTTPException(400, f"failed to parse csv: {exc}") from exc
-    return await _persist_upload(file.filename or "upload.csv", "csv", rows)
+    return await _persist_upload(file.filename or "upload.csv", "csv", rows, ctx)
 
 
 @router.post(
@@ -163,6 +167,7 @@ async def upload_csv(
 async def upload_bank_statement(
     file: UploadFile = File(...),
     _user: CurrentUser = Depends(require_auditor_or_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UploadResponse:
     """Optional endpoint for completeness — the spec only requires excel+csv
     but the bank-statement parser is already wired up, so we expose it too.
@@ -178,7 +183,7 @@ async def upload_bank_statement(
     except Exception as exc:  # noqa: BLE001
         logger.exception("parse_bank_statement failed for %s", file.filename)
         raise HTTPException(400, f"failed to parse bank statement: {exc}") from exc
-    return await _persist_upload(name, "bank_statement", rows)
+    return await _persist_upload(name, "bank_statement", rows, ctx)
 
 
 @router.get(
@@ -189,6 +194,7 @@ async def upload_bank_statement(
 async def upload_history(
     limit: int = Query(default=50, ge=1, le=500),
     _user: CurrentUser = Depends(require_auditor_or_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> list[UploadHistoryItem]:
     sql = text(
         """
@@ -198,7 +204,7 @@ async def upload_history(
         LIMIT :limit
         """
     )
-    async with get_session() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         result = await session.execute(sql, {"limit": limit})
         rows = result.mappings().all()
 

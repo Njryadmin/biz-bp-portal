@@ -63,9 +63,17 @@ import {
   CheckCircleTwoTone,
   CloseCircleTwoTone,
   WarningOutlined,
+  ExperimentOutlined,
 } from "@ant-design/icons";
 import { UniversalChart } from "@biz-bp/ui";
 import type { BusinessLine } from "@biz-bp/types";
+import { apiFetch, type ApiFetchOptions } from "../../../lib/api";
+import {
+  CopilotViewSwitcher,
+  readCopilotView,
+  writeCopilotView,
+  type CopilotView,
+} from "./_components/CopilotViewSwitcher";
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
@@ -199,18 +207,39 @@ export default function CopilotPage() {
   const [showDebug, setShowDebug] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [useRealLlm, setUseRealLlm] = useState(false);
+  // Copilot-local perspective (H, 2026-09-04). Persists to localStorage
+  // "biz-bp.copilot_view". "auto" means "follow the Topbar's view";
+  // anything else overrides the next /api/copilot/* fetch via the
+  // X-Active-View header (set by apiFetch when ``view`` is provided).
+  const [copilotView, setCopilotView] = useState<CopilotView>("auto");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Resolve the view we should forward to the next fetch.
+  //   "auto" → null  (apiFetch falls back to biz-bp.active_view, i.e. Topbar)
+  //   others → the value (sent as X-Active-View)
+  // Type-narrowed so the value is a valid ApiFetchOptions["view"].
+  const fetchView: ApiFetchOptions["view"] =
+    copilotView === "auto" ? null : copilotView;
+
+  // Hydrate the copilot view from localStorage AFTER mount (avoids the
+  // SSR/CSR mismatch window). Re-running on a later change is fine —
+  // localStorage is the user-chosen value, not a default.
+  useEffect(() => {
+    const stored = readCopilotView();
+    if (stored !== copilotView) setCopilotView(stored);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch health + suggestions + registry on mount.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await refreshHealth(cancelled, setHealth, setHealthLoading);
+      await refreshHealth(cancelled, setHealth, setHealthLoading, false, fetchView);
       try {
         const [s, r] = await Promise.all([
-          fetch("/api/copilot/suggestions", { cache: "no-store" }).then((x) =>
-            x.ok ? x.json() : null,
-          ),
+          apiFetch<CopilotSuggestions | null>("/api/copilot/suggestions", {
+            view: fetchView,
+          }).catch(() => null),
           fetch("/api/registry", { cache: "no-store" }).then((x) =>
             x.ok ? x.json() : null,
           ),
@@ -225,6 +254,9 @@ export default function CopilotPage() {
     return () => {
       cancelled = true;
     };
+    // We intentionally read fetchView once at mount; the view-change
+    // is reflected on the *next* ask(), not on a re-fetch of suggestions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-scroll to bottom on new message.
@@ -270,7 +302,9 @@ export default function CopilotPage() {
     setInput("");
     setSending(true);
     try {
-      const res = await fetch("/api/copilot/ask", {
+      // X-Active-View is forwarded via the ``view`` option (H, 2026-09-04);
+      // apiFetch writes the x-active-view header only when view is set.
+      const okData = await apiFetch<CopilotResponse>("/api/copilot/ask", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -280,26 +314,8 @@ export default function CopilotPage() {
           // The backend honours this only when a real backend is configured.
           prefer_real_llm: useRealLlm || undefined,
         }),
+        view: fetchView,
       });
-      const text = await res.text();
-      const data: CopilotResponse | { detail: string } = text
-        ? JSON.parse(text)
-        : { detail: "(empty body)" };
-      if (!res.ok) {
-        const detail =
-          "detail" in data ? data.detail : `HTTP ${res.status}`;
-        setMessages((m) =>
-          m.map((x) =>
-            x.id === pendingMsg.id
-              ? { ...x, pending: false, error: String(detail) }
-              : x,
-          ),
-        );
-        antdMessage.error(String(detail));
-        return;
-      }
-      // After the ok-branch the data is a CopilotResponse.
-      const okData = data as CopilotResponse;
       setMessages((m) =>
         m.map((x) =>
           x.id === pendingMsg.id
@@ -308,15 +324,17 @@ export default function CopilotPage() {
         ),
       );
       // Refresh health (call counts / last status may have changed).
-      void refreshHealth(false, setHealth, setHealthLoading);
+      void refreshHealth(false, setHealth, setHealthLoading, false, fetchView);
     } catch (err) {
+      const detail = (err as Error).message || String(err);
       setMessages((m) =>
         m.map((x) =>
           x.id === pendingMsg.id
-            ? { ...x, pending: false, error: String(err) }
+            ? { ...x, pending: false, error: String(detail) }
             : x,
         ),
       );
+      antdMessage.error(String(detail));
     } finally {
       setSending(false);
     }
@@ -332,6 +350,32 @@ export default function CopilotPage() {
     backendName === "deepseek" || backendName === "ollama";
   const backendIsFallback =
     health?.used_fallback === true && backendIsReal;
+
+  // Pretty label for the current copilot view (used by the badge in
+  // the Header). "auto" surfaces as "AUTO" so the user can see at a
+  // glance that the Topbar's perspective is the one in effect.
+  const viewBadgeLabel =
+    copilotView === "auto"
+      ? "AUTO"
+      : copilotView === "line_owner"
+        ? "LINE OWNER"
+        : copilotView.toUpperCase();
+  const viewBadgeColor: string =
+    copilotView === "auto"
+      ? "default"
+      : copilotView === "fin"
+        ? "orange"
+        : copilotView === "hr"
+          ? "cyan"
+          : copilotView === "line_owner"
+            ? "gold"
+            : copilotView === "admin"
+              ? "red"
+              : "blue";
+  const viewBadgeTitle =
+    copilotView === "auto"
+      ? "未覆盖 — 跟随 Topbar 的视角切换器;后端 fallback 到 biz-bp.active_view"
+      : `覆盖 Topbar — 下次 /api/copilot/* 调用会带 X-Active-View: ${copilotView}`;
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", height: "calc(100vh - 56px)" }}>
@@ -370,6 +414,16 @@ export default function CopilotPage() {
                 : (backendName || "unknown").toUpperCase()}
               {backendIsFallback ? " · FALLBACK" : ""}
             </Tag>
+            <Tooltip title={viewBadgeTitle}>
+              <Tag
+                color={viewBadgeColor}
+                icon={<ExperimentOutlined />}
+                data-testid="copilot-view-badge"
+                style={{ fontSize: 11 }}
+              >
+                视角: {viewBadgeLabel}
+              </Tag>
+            </Tooltip>
             {health?.model && (
               <Tag color="geekblue" style={{ fontSize: 11 }}>
                 {health.model}
@@ -391,7 +445,14 @@ export default function CopilotPage() {
           </Space>
         </Col>
         <Col>
-          <Space>
+          <Space wrap>
+            <CopilotViewSwitcher
+              value={copilotView}
+              onChange={(v) => {
+                writeCopilotView(v);
+                setCopilotView(v);
+              }}
+            />
             <Select
               allowClear
               placeholder="限定业务线 (可选)"
@@ -429,7 +490,7 @@ export default function CopilotPage() {
         visible={showSettings}
         health={health}
         loading={healthLoading}
-        onRefresh={() => refreshHealth(false, setHealth, setHealthLoading, true)}
+        onRefresh={() => refreshHealth(false, setHealth, setHealthLoading, true, fetchView)}
       />
 
       {/* ── Suggestions (collapsible) ──────────────────────────── */}
@@ -599,20 +660,29 @@ async function refreshHealth(
   setHealth: (h: CopilotHealth | null) => void,
   setLoading: (l: boolean) => void,
   showMessage = false,
+  view: ApiFetchOptions["view"] = null,
 ) {
   setLoading(true);
   try {
-    const r = await fetch("/api/copilot/health", { cache: "no-store" });
-    const data: CopilotHealth = r.ok ? await r.json() : { backend: "unknown", available_lines: [], error: `HTTP ${r.status}` };
+    // Forward X-Active-View for consistency with ask/suggestions
+    // (health is view-agnostic server-side but the header keeps the
+    // backend audit log coherent, H 2026-09-04).
+    const data = await apiFetch<CopilotHealth>("/api/copilot/health", {
+      view,
+    });
     if (!cancelled) setHealth(data);
-    if (showMessage && !r.ok) {
-      antdMessage.error(`健康检查失败: ${data.error ?? r.status}`);
-    } else if (showMessage) {
-      antdMessage.success("健康检查已更新");
-    }
+    if (showMessage) antdMessage.success("健康检查已更新");
   } catch (err) {
     if (!cancelled) {
-      setHealth({ backend: "unknown", available_lines: [], error: String(err) });
+      const detail = (err as Error).message || String(err);
+      setHealth({
+        backend: "unknown",
+        available_lines: [],
+        error: detail,
+      });
+    }
+    if (showMessage) {
+      antdMessage.error(`健康检查失败: ${(err as Error).message || String(err)}`);
     }
   } finally {
     setLoading(false);

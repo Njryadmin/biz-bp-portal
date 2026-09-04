@@ -1,8 +1,13 @@
 // apps/web/app/(dashboard)/_components/Topbar.tsx
 //
 // Client-side top bar. Right-hand side hosts:
+//   - PerspectiveSwitcher (FIN / HR / Shared, E 2026-09-04) —
+//     uses the v2 user to pick the default view; writes
+//     ``biz-bp.active_view`` to localStorage on change.
 //   - RoleSwitcher (now backed by /api/auth/me — read-only display of
 //     the active user's roles)
+//   - TenantBadge + TenantSwitcher (M3 2026-09-04) — current tenant
+//     name; super admin can pick a different tenant via the modal.
 //   - User menu with logout button (POST /api/auth/logout then
 //     redirect to /login)
 
@@ -11,12 +16,15 @@
 import { Avatar, Dropdown, Space } from "antd";
 import * as Icons from "@ant-design/icons";
 import { RoleSwitcher } from "@biz-bp/ui";
-import type { BusinessLine } from "@biz-bp/types";
+import type { BusinessLine, V2CurrentUser } from "@biz-bp/types";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCallback } from "react";
 import type { CurrentUser } from "../../../lib/auth";
 import { isAdmin, logout } from "../../../lib/auth";
+import { PerspectiveSwitcher } from "./PerspectiveSwitcher";
+import { TenantBadge } from "./TenantBadge";
+import { TenantSwitcher } from "./TenantSwitcher";
 
 export interface TopbarProps {
   /**
@@ -26,9 +34,15 @@ export interface TopbarProps {
   lines?: BusinessLine[];
   /** Current authenticated user (or null if not loaded yet). */
   user?: CurrentUser | null;
+  /**
+   * v2 user with bindings + active_view. When provided, forwarded to
+   * the PerspectiveSwitcher so it can pick the default view segment.
+   * Optional — when absent the switcher defaults to "shared".
+   */
+  v2User?: V2CurrentUser | null;
 }
 
-export function Topbar({ lines, user }: TopbarProps) {
+export function Topbar({ lines, user, v2User }: TopbarProps) {
   const router = useRouter();
   const onLogout = useCallback(async () => {
     try {
@@ -151,9 +165,32 @@ export function Topbar({ lines, user }: TopbarProps) {
             <Icons.RobotOutlined />
             AI 模型
           </Link>
+          {user?.is_super_admin ? (
+            <Link
+              href="/admin/tenants"
+              aria-label="租户管理"
+              style={{
+                color: "#ffd591",
+                fontSize: 13,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "2px 8px",
+                border: "1px solid rgba(255,213,145,0.45)",
+                borderRadius: 4,
+              }}
+              title="租户管理 (super admin only)"
+            >
+              <Icons.ClusterOutlined />
+              租户管理
+            </Link>
+          ) : null}
         </>
       ) : null}
       <RoleSwitcher lines={lines} activeRoles={user?.roles ?? null} />
+      <PerspectiveSwitcher user={v2User ?? null} />
+      {user ? <TenantBadge /> : null}
+      {user?.is_super_admin ? <TenantSwitcher /> : null}
       <Dropdown
         menu={{
           items: [

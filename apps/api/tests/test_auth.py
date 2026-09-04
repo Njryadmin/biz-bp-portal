@@ -437,26 +437,78 @@ def test_universal_endpoints_require_auth(client, path, method):
 
 
 def test_alerts_list_profiles_filtered_for_bp(client, store_with_users):
-    client.post(
-        "/api/auth/login", json={"username": "bp-retail", "password": "bp123456"}
+    # 4 通用 router 在 B1 升级到 v2 (commit B1), 改用 ``get_current_user_v2`` +
+    # ``check_domain_access``. v1 cookie 路径走的是 v2 loader, 没有 DB 时
+    # 不能用. 这里手动构造 v2 mock user, 验证 v1 ``bp:`` 角色映射到 v2
+    # ``line_owner`` 后的行为 (line_owner 在本线全权读, 跨线不返回).
+    from app.core.rbac_v2 import (
+        CurrentUserV2,
+        Role,
+        Scope,
+        UserRoleBinding,
     )
+    from app.core.auth_v2 import get_current_user_v2
+
+    # bp-retail (v1) → v2 line_owner @ retail
+    v2_user = CurrentUserV2(
+        id=2,
+        username="bp-retail",
+        display_name="bp retail",
+        email=None,
+        is_active=True,
+        roles=["line_owner"],
+        accessible_lines=["retail"],
+        bindings=[
+            UserRoleBinding(
+                role=Role.LINE_OWNER, scope=Scope.BUSINESS_LINE,
+                business_line_id="retail",
+            )
+        ],
+    )
+    app = client.app
+    app.dependency_overrides[get_current_user_v2] = lambda: v2_user
     r = client.get("/api/alerts/profiles")
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     data = r.json()
     line_ids = {ln["line_id"] for ln in data["lines"]}
-    # Only retail has an alerts.yaml
+    # Only retail has an alerts.yaml + line_owner 只看本线
     assert line_ids == {"retail"}
 
 
 def test_sensitivity_analyze_requires_business_line_access(client, store_with_users):
-    client.post(
-        "/api/auth/login", json={"username": "bp-residential", "password": "bp123456"}
+    # 同上, alerts/sensitivity/forecast/copilot 4 router 在 B1 升级到 v2.
+    # 构造 v2 line_owner @ residential, 跨线调 sensitivity analyze (FINANCE+PROJECT 写)
+    # 应被 v2 check_domain_access 拒绝.
+    from app.core.rbac_v2 import (
+        CurrentUserV2,
+        Role,
+        Scope,
+        UserRoleBinding,
     )
+    from app.core.auth_v2 import get_current_user_v2
+
+    v2_user = CurrentUserV2(
+        id=1,
+        username="bp-residential",
+        display_name="bp residential",
+        email=None,
+        is_active=True,
+        roles=["line_owner"],
+        accessible_lines=["residential"],
+        bindings=[
+            UserRoleBinding(
+                role=Role.LINE_OWNER, scope=Scope.BUSINESS_LINE,
+                business_line_id="residential",
+            )
+        ],
+    )
+    app = client.app
+    app.dependency_overrides[get_current_user_v2] = lambda: v2_user
     r = client.post(
         "/api/sensitivity/analyze",
         json={"line_id": "retail", "output_id": "irr", "input1_id": "rent"},
     )
-    assert r.status_code == 403
+    assert r.status_code == 403, r.text
 
 
 # ---------------------------------------------------------------------------

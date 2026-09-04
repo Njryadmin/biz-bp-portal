@@ -7,13 +7,16 @@ apps/api/app/routers/auth.py
 ----
 POST   /api/auth/login                       —— body {username, password} → 设置 cookie + me
 POST   /api/auth/logout                      —— 清除 cookie
-GET    /api/auth/me                          —— 当前用户（id/username/roles/lines）
+GET    /api/auth/me                          —— 当前用户（id/username/roles/lines）v1 shape
+GET    /api/auth/me-v2                       —— 当前用户 (v2 shape: bindings + active_view, E 2026-09-04)
 GET    /api/auth/accessible-lines            —— 当前用户可访问的业务线 id
 GET    /api/auth/users                       —— admin：列出全部用户
 POST   /api/auth/users                       —— admin：创建用户
 PATCH  /api/auth/users/{id}                  —— admin：更新 display_name/email/password/is_active
-PATCH  /api/auth/users/{id}/roles            —— admin：替换用户的角色 + 业务线
+PATCH  /api/auth/users/{id}/roles            —— admin：替换用户的角色 + 业务线 (v1, 保留)
 PATCH  /api/auth/users/{id}/lines            —— admin：仅替换用户的 accessible_lines
+GET    /api/auth/users/{id}/v2-roles         —— admin：读取 v2 角色绑定 (commit C1)
+PATCH  /api/auth/users/{id}/v2-roles         —— admin：替换 v2 角色绑定 (commit C1)
 POST   /api/auth/users/{id}/reset-password   —— admin：轮换用户密码
 DELETE /api/auth/users/{id}                  —— admin：停用用户（软删除）
 GET    /api/auth/audit-log                   —— admin/auditor：查询审计日志
@@ -35,6 +38,7 @@ from ..core.auth import (
     hash_password,
     verify_password,
 )
+from ..core.auth_v2 import CurrentUserV2, get_current_user_v2
 from ..core.config import get_settings
 from ..core.logging import get_logger
 from ..core.rbac import (
@@ -43,7 +47,9 @@ from ..core.rbac import (
     require_auditor_or_admin_dep,
 )
 from ..core.registry import load_registry
-from ..db.session import get_session_factory
+from ..core.tenant_context import TenantContext, get_tenant_context
+from ..db.session import get_session_factory  # kept for test mocks / plugin extensions
+from ..db.tenant import tenant_session
 from ..schemas.auth import (
     AccessibleLinesResponse,
     AuditLogItem,
@@ -57,13 +63,61 @@ from ..schemas.auth import (
     UpdateUserLinesRequest,
     UpdateUserRequest,
     UpdateUserRolesRequest,
+    UpdateUserV2RolesRequest,
     UserListItem,
     UserListResponse,
+    UserRoleBindingResponse,
+    UserV2RolesResponse,
 )
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+# ---------------------------------------------------------------------------
+# v2 RBAC binding helpers (commit C1, 2026-09-04)
+#
+# Three role classes that drive the wire-level validation in
+# PATCH /api/auth/users/{id}/v2-roles. Defined here (not in
+# app.core.rbac_v2) because they're an admin-UI concern — the rbac_v2
+# module stays focused on permission checks and has no business
+# knowing about HTTP request bodies.
+# ---------------------------------------------------------------------------
+
+# All 8 v2 roles. Duplicated from app.core.rbac_v2.Role to avoid
+# importing a heavy module just for a 8-element set; the source of
+# truth for the matrix still lives in rbac_v2.
+_ROLE_ENUM_VALUES: frozenset[str] = frozenset(
+    {
+        "admin",
+        "auditor",
+        "viewer",
+        "line_owner",
+        "fin_bp",
+        "hr_bp",
+        "fin_bp_global",
+        "hr_bp_global",
+    }
+)
+
+# Roles that must always carry scope=business_line + a real line id.
+# fin_bp_global / hr_bp_global are global by design.
+_LINE_SCOPED_ROLES: frozenset[str] = frozenset(
+    {"line_owner", "fin_bp", "hr_bp"}
+)
+
+# Roles that must always carry scope=global + line_id=None. The set
+# mirrors admin/auditor/viewer + the two *_global variants.
+_GLOBAL_ROLES: frozenset[str] = frozenset(
+    {
+        "admin",
+        "auditor",
+        "viewer",
+        "fin_bp_global",
+        "hr_bp_global",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +218,151 @@ async def me(user: CurrentUser = Depends(get_current_user)) -> CurrentUserRespon
 
 
 # ---------------------------------------------------------------------------
+# /api/auth/me-v2 — v2 shape with bindings + active_view (E, 2026-09-04)
+#
+# Why a separate endpoint instead of a query flag on /me?
+#   * The v1 /me shape is the wire contract for the existing frontend
+#     (Topbar / SidebarMenu / etc.) — adding a `bindings` field would
+#     change the type even when no caller asked for it.
+#   * The PerspectiveSwitcher is the *only* consumer that needs the v2
+#     shape, and it only loads on the dashboard layout — so an extra
+#     round-trip is acceptable.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/me-v2",
+    summary="Return the currently authenticated user in v2 shape (bindings + active_view)",
+)
+async def me_v2(user: CurrentUserV2 = Depends(get_current_user_v2)) -> dict:
+    """v2 shape: includes ``bindings`` (role + scope + line_id) and the
+    currently active view (``active_view`` from the X-Active-View header).
+
+    The frontend (PerspectiveSwitcher) uses this to:
+      * pick the default view segment (fin / hr / shared / line_owner / admin)
+      * render the role-based menu
+      * keep the localStorage ``biz-bp.active_view`` key in sync
+    """
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "email": user.email,
+        "is_active": user.is_active,
+        "roles": list(user.roles),
+        "accessible_lines": list(user.accessible_lines),
+        "bindings": [
+            {
+                "role": b.role.value,
+                "scope": b.scope.value,
+                "line_id": b.business_line_id,
+            }
+            for b in user.bindings
+        ],
+        "active_view": user.active_view,
+    }
+
+
+# ---------------------------------------------------------------------------
+# /api/auth/me-tenant — M3 (2026-09-04)
+#
+# Returns the current user's tenant (id + slug + name + plan). The
+# frontend layout (TenantBadge + the super-admin Tenant switcher)
+# calls this once on mount and renders the result. The response is
+# intentionally lean: no user_count, no is_active — those are
+# operator-facing fields, not a current-user self-view.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/me-tenant",
+    summary="Return the tenant the current user belongs to (any logged-in user)",
+)
+async def me_tenant(
+    user: CurrentUser = Depends(get_current_user),
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> dict:
+    """Look up the tenant row for the current user.
+
+    Behaviour
+    ---------
+    * The tenant id is sourced from ``ctx.tenant_id`` (resolved by
+      :func:`app.core.tenant_context.get_tenant_context`). For a
+      regular user that always equals ``user.tenant_id``; for a
+      super admin it can be overridden via the ``X-Tenant-ID``
+      header (so the "switcher" modal can preview a target tenant
+      before committing).
+    * 404 is returned when the tenant row is missing — the most
+      common cause is a fresh test DB whose seed users got inserted
+      before M1's backfill migration ran. Real deployments cannot
+      hit this path because every user has a non-null tenant_id
+      after M1's NOT NULL constraint.
+    """
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
+        row = (
+            await session.execute(
+                text(
+                    "SELECT id, slug, name, plan, is_active, created_at "
+                    "FROM tenants WHERE id = :tid"
+                ),
+                {"tid": str(ctx.tenant_id)},
+            )
+        ).mappings().first()
+    if row is None:
+        # Fall back to the user's stored tenant_id (ctx may be
+        # pointing at a header-overridden tenant that was just
+        # deleted). We don't 404 here — that would 500 the
+        # dashboard layout for any super admin in mid-switch.
+        logger.warning(
+            "me_tenant: tenant %s not found for user=%s; falling back to user.tenant_id",
+            ctx.tenant_id, user.username,
+        )
+        fallback = getattr(user, "tenant_id", None)
+        if fallback is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"current user has no tenant binding; "
+                    f"user.tenant_id is null and ctx resolved to {ctx.tenant_id}"
+                ),
+            )
+        async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT id, slug, name, plan, is_active, created_at "
+                        "FROM tenants WHERE id = :tid"
+                    ),
+                    {"tid": str(fallback)},
+                )
+            ).mappings().first()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"user {user.username!r} has no resolvable tenant "
+                    f"(user.tenant_id={fallback}, ctx.tenant_id={ctx.tenant_id})"
+                ),
+            )
+    return {
+        "id": str(row["id"]),
+        "slug": str(row["slug"]),
+        "name": str(row["name"]),
+        "plan": str(row["plan"]),
+        "is_active": bool(row["is_active"]),
+        "created_at": row["created_at"].isoformat()
+        if hasattr(row["created_at"], "isoformat")
+        else str(row["created_at"]),
+        # M3 (2026-09-04): expose is_super_admin so the frontend
+        # Topbar can decide whether to render the TenantSwitcher
+        # button. This is the only place the v1 frontend learns
+        # about super-admin status (deliberately not exposed in
+        # /api/auth/me to keep the v1 contract lean).
+        "is_super_admin": bool(user.is_super_admin),
+    }
+
+
+# ---------------------------------------------------------------------------
 # /api/auth/accessible-lines
 # ---------------------------------------------------------------------------
 
@@ -189,9 +388,12 @@ async def accessible_lines(
 # ---------------------------------------------------------------------------
 
 
-async def _load_user_with_perms(user_id: int) -> UserListItem | None:
-    factory = get_session_factory()
-    async with factory() as session:
+async def _load_user_with_perms(
+    user_id: int, ctx: TenantContext
+) -> UserListItem | None:
+    # M2: 用 tenant_session 让 RLS policy 放行; bypass_rls=True 让 super admin
+    # 能查任意租户的用户 (admin 跨租户用户管理用)
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         u = (
             await session.execute(
                 text(
@@ -218,6 +420,31 @@ async def _load_user_with_perms(user_id: int) -> UserListItem | None:
                 {"uid": user_id},
             )
         ).scalars().all()
+        # v2 bindings — additive (commit C1, 2026-09-04). We pull
+        # scope/line_id from user_roles so the admin UI can render
+        # the full triplet without a second round-trip. Rows whose
+        # scope is NULL (i.e. migration 001 hasn't run on this DB) are
+        # still surfaced as legacy entries with scope=``"legacy"`` and
+        # line_id=``None`` so the UI can flag them as "needs migration".
+        v2_rows = (
+            await session.execute(
+                text(
+                    "SELECT role, scope, line_id FROM user_roles "
+                    "WHERE user_id = :uid ORDER BY role, line_id"
+                ),
+                {"uid": user_id},
+            )
+        ).mappings().all()
+    v2_bindings: list[UserRoleBindingResponse] = []
+    for r in v2_rows or []:
+        scope_val = r["scope"] or "legacy"
+        v2_bindings.append(
+            UserRoleBindingResponse(
+                role=str(r["role"]),
+                scope=str(scope_val),
+                line_id=r["line_id"],
+            )
+        )
     return UserListItem(
         id=int(u["id"]),
         username=str(u["username"]),
@@ -227,6 +454,7 @@ async def _load_user_with_perms(user_id: int) -> UserListItem | None:
         roles=[str(r) for r in (roles or [])],
         accessible_lines=[str(x) for x in (lines or [])],
         created_at=str(u["created_at"]),
+        v2_bindings=v2_bindings,
     )
 
 
@@ -237,9 +465,11 @@ async def _load_user_with_perms(user_id: int) -> UserListItem | None:
 )
 async def list_users(
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListResponse:
-    factory = get_session_factory()
-    async with factory() as session:
+    # M2: 走 tenant_session 满足 RLS. 跨租户场景下 super admin 通过
+    # bypass_rls 看全部; 普通 admin 只看自己租户.
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         rows = (
             await session.execute(
                 text("SELECT id FROM users ORDER BY id")
@@ -247,7 +477,7 @@ async def list_users(
         ).scalars().all()
     items: list[UserListItem] = []
     for uid in rows:
-        item = await _load_user_with_perms(int(uid))
+        item = await _load_user_with_perms(int(uid), ctx)
         if item is not None:
             items.append(item)
     return UserListResponse(count=len(items), users=items)
@@ -262,10 +492,11 @@ async def list_users(
 async def create_user(
     body: CreateUserRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListItem:
-    factory = get_session_factory()
     pwd_hash = hash_password(body.password)
-    async with factory() as session:
+    # M2: 走 tenant_session; trigger set_tenant_from_guc 会从 GUC 自动填 tenant_id.
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         # Check for duplicate username
         existing = (
             await session.execute(
@@ -318,7 +549,7 @@ async def create_user(
                 {"uid": int(new_id), "line_id": line},
             )
         await session.commit()
-    item = await _load_user_with_perms(int(new_id))
+    item = await _load_user_with_perms(int(new_id), ctx)
     assert item is not None
     return item
 
@@ -332,6 +563,7 @@ async def update_user_roles(
     user_id: int,
     body: UpdateUserRolesRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListItem:
     if not body.roles and body.accessible_lines is None:
         raise HTTPException(
@@ -341,8 +573,7 @@ async def update_user_roles(
     # Refuse to demote the only admin (safety: at least one admin must exist)
     if "admin" in body.roles or "admin" not in body.roles:
         # only check if the target currently has admin and we're demoting
-        factory = get_session_factory()
-        async with factory() as session:
+        async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
             target_roles = set(
                 (
                     await session.execute(
@@ -352,7 +583,7 @@ async def update_user_roles(
                 ).scalars().all()
             )
         if "admin" in target_roles and "admin" not in body.roles:
-            async with factory() as session:
+            async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
                 other_admins = (
                     await session.execute(
                         text(
@@ -367,7 +598,7 @@ async def update_user_roles(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="cannot demote the last admin",
                 )
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         await session.execute(
             text("DELETE FROM user_roles WHERE user_id = :uid"),
             {"uid": user_id},
@@ -413,7 +644,7 @@ async def update_user_roles(
                 {"uid": user_id, "line_id": line},
             )
         await session.commit()
-    item = await _load_user_with_perms(user_id)
+    item = await _load_user_with_perms(user_id, ctx)
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -436,6 +667,7 @@ async def update_user(
     user_id: int,
     body: UpdateUserRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListItem:
     """Edit a single user's profile fields. Empty body = no-op (still 200).
 
@@ -449,7 +681,7 @@ async def update_user(
         # Nothing to do — return current state so the UI can re-fetch cheaply.
         # NOTE: clear_email is checked separately because it's a bool flag
         # (not None when the caller wants to clear the email column).
-        item = await _load_user_with_perms(user_id)
+        item = await _load_user_with_perms(user_id, ctx)
         if item is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -467,8 +699,7 @@ async def update_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="cannot deactivate yourself",
             )
-        factory = get_session_factory()
-        async with factory() as session:
+        async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
             target_roles = set(
                 (
                     await session.execute(
@@ -478,7 +709,7 @@ async def update_user(
                 ).scalars().all()
             )
         if "admin" in target_roles:
-            async with factory() as session:
+            async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
                 other_admins = (
                     await session.execute(
                         text(
@@ -518,8 +749,7 @@ async def update_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="no updatable fields supplied",
         )
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         result = await session.execute(
             text(
                 f"UPDATE users SET {', '.join(set_clauses)} WHERE id = :uid"
@@ -533,7 +763,7 @@ async def update_user(
                 detail=f"user not found: {user_id}",
             )
         await session.commit()
-    item = await _load_user_with_perms(user_id)
+    item = await _load_user_with_perms(user_id, ctx)
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -556,6 +786,7 @@ async def update_user_lines(
     user_id: int,
     body: UpdateUserLinesRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> UserListItem:
     """Single-purpose endpoint so the admin UI can edit the line list
     without re-sending the full role set.
@@ -566,8 +797,7 @@ async def update_user_lines(
     the existing ``bp:`` roles intact and only replace the explicit
     rows.
     """
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         # Reject unknown user (FK would also reject, but the 404 message
         # is friendlier).
         target_exists = (
@@ -608,9 +838,255 @@ async def update_user_lines(
                 {"uid": user_id, "line_id": line},
             )
         await session.commit()
-    item = await _load_user_with_perms(user_id)
+    item = await _load_user_with_perms(user_id, ctx)
     assert item is not None
     return item
+
+
+# ---------------------------------------------------------------------------
+# v2 RBAC bindings  — GET / PATCH /api/auth/users/{id}/v2-roles
+#
+# Added in commit C1 (2026-09-04) to express the 8-role × 2-scope × N-line
+# triplet that the v1 ``PATCH /users/{id}/roles`` (which only takes
+# ``roles: list[str]``) cannot represent. The v1 endpoint is kept
+# untouched — v1 web clients still call it; the new triplet endpoint
+# is additive and lives at a distinct URL so the two are easy to
+# distinguish in audit logs.
+#
+# Business rules enforced here (everything is 400 unless noted):
+#   • At least one ``admin`` binding must remain in the DB. The last
+#     admin cannot demote themselves — returns 409.
+#   • Every binding's (role, scope, line_id) must be self-consistent:
+#       - scope="business_line"  → line_id is a non-empty string
+#       - scope="global"         → line_id is None
+#       - line-scoped roles     (line_owner / fin_bp / hr_bp) must
+#         carry scope="business_line"
+#       - global-only roles     (admin / auditor / viewer / *_global)
+#         must carry scope="global"
+#   • (role, line_id) is unique within one request.
+# Side effect: the ``user_business_lines`` table is rewritten from
+# the union of the new bindings' line_ids so v1 ``accessible_lines``
+# stays in sync (v1 endpoints and the v1 /me payload still read it).
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/users/{user_id}/v2-roles",
+    response_model=UserV2RolesResponse,
+    summary="Admin: read a user's v2 role bindings (role + scope + line_id)",
+)
+async def get_user_v2_roles(
+    user_id: int,
+    user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> UserV2RolesResponse:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
+        target_exists = (
+            await session.execute(
+                text("SELECT 1 FROM users WHERE id = :uid"),
+                {"uid": user_id},
+            )
+        ).first()
+        if not target_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"user not found: {user_id}",
+            )
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT role, scope, line_id FROM user_roles "
+                    "WHERE user_id = :uid ORDER BY role, line_id"
+                ),
+                {"uid": user_id},
+            )
+        ).mappings().all()
+    return UserV2RolesResponse(
+        user_id=user_id,
+        bindings=[
+            UserRoleBindingResponse(
+                role=str(r["role"]),
+                scope=str(r["scope"] or "legacy"),
+                line_id=r["line_id"],
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.patch(
+    "/users/{user_id}/v2-roles",
+    response_model=UserV2RolesResponse,
+    summary=(
+        "Admin: replace a user's v2 role bindings (role + scope + line_id)"
+    ),
+)
+async def update_user_v2_roles(
+    user_id: int,
+    body: UpdateUserV2RolesRequest,
+    user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
+) -> UserV2RolesResponse:
+    """Replace a user's complete v2 role binding set.
+
+    See the section header above for the full business-rule list.
+    Returns the new binding set (so the admin UI can re-render
+    without a follow-up GET). Raises 400 for any rule violation and
+    409 if the operation would remove the last admin.
+    """
+    # 1) Shape validation. The Pydantic model already guarantees the
+    #    fields exist and have the right types; here we add the
+    #    cross-field invariants the JSON schema cannot express.
+    if not body.bindings:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "bindings cannot be empty — pass at least one admin "
+                "binding to keep system access (last-admin protection)"
+            ),
+        )
+    seen: set[tuple[str, str | None]] = set()
+    for b in body.bindings:
+        if b.role not in _ROLE_ENUM_VALUES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"unknown role: {b.role!r} (allowed: {sorted(_ROLE_ENUM_VALUES)})",
+            )
+        if b.scope not in ("global", "business_line"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"unknown scope: {b.scope!r} (allowed: 'global', 'business_line')",
+            )
+        if b.scope == "business_line" and not b.line_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"role {b.role!r} with scope='business_line' must "
+                    f"carry a non-empty line_id"
+                ),
+            )
+        if b.scope == "global" and b.line_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"role {b.role!r} with scope='global' must not "
+                    f"carry line_id (got {b.line_id!r})"
+                ),
+            )
+        if b.role in _LINE_SCOPED_ROLES and b.scope != "business_line":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"role {b.role!r} is line-scoped and must be paired "
+                    f"with scope='business_line' (got {b.scope!r})"
+                ),
+            )
+        if b.role in _GLOBAL_ROLES and b.scope != "global":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"role {b.role!r} is global-only and must be paired "
+                    f"with scope='global' (got {b.scope!r})"
+                ),
+            )
+        key = (b.role, b.line_id)
+        if key in seen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"duplicate binding: role={b.role!r} line_id={b.line_id!r}",
+            )
+        seen.add(key)
+
+    # 2) Last-admin protection. We only need to block the call when
+    #    (a) the target currently has admin, (b) the new bindings
+    #    don't include admin, and (c) no other user in the system
+    #    still has admin. Anyone with multiple admins can freely
+    #    demote one of them; an admin can give up their own admin
+    #    role only if at least one peer admin remains.
+    new_has_admin = any(b.role == "admin" for b in body.bindings)
+    # Always verify the user exists, regardless of the new bindings'
+    # admin status — the FK on user_roles would otherwise turn a
+    # missing user into a 500 instead of a friendly 404. We also
+    # need the current role set for the last-admin check below.
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
+        target_exists = (
+            await session.execute(
+                text("SELECT 1 FROM users WHERE id = :uid"),
+                {"uid": user_id},
+            )
+        ).first()
+        if not target_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"user not found: {user_id}",
+            )
+        target_roles = set(
+            (
+                await session.execute(
+                    text("SELECT role FROM user_roles WHERE user_id = :uid"),
+                    {"uid": user_id},
+                )
+            ).scalars().all()
+        )
+    if not new_has_admin:
+        if "admin" in target_roles:
+            async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
+                other_admins = (
+                    await session.execute(
+                        text(
+                            "SELECT COUNT(DISTINCT user_id) FROM user_roles "
+                            "WHERE role = 'admin' AND user_id <> :uid"
+                        ),
+                        {"uid": user_id},
+                    )
+                ).scalar_one()
+            if int(other_admins) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="cannot remove the last admin role from the system",
+                )
+
+    # 3) Persist. We rewrite user_roles from scratch and resync
+    #    user_business_lines from the union of the new line_ids so
+    #    v1 endpoints (which read user_business_lines) stay accurate.
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
+        await session.execute(
+            text("DELETE FROM user_roles WHERE user_id = :uid"),
+            {"uid": user_id},
+        )
+        for b in body.bindings:
+            await session.execute(
+                text(
+                    "INSERT INTO user_roles (user_id, role, scope, line_id) "
+                    "VALUES (:uid, :role, :scope, :line_id)"
+                ),
+                {
+                    "uid": user_id,
+                    "role": b.role,
+                    "scope": b.scope,
+                    "line_id": b.line_id,
+                },
+            )
+        derived_lines = sorted({b.line_id for b in body.bindings if b.line_id})
+        await session.execute(
+            text("DELETE FROM user_business_lines WHERE user_id = :uid"),
+            {"uid": user_id},
+        )
+        for line_id in derived_lines:
+            await session.execute(
+                text(
+                    "INSERT INTO user_business_lines (user_id, line_id) "
+                    "VALUES (:uid, :line_id) ON CONFLICT DO NOTHING"
+                ),
+                {"uid": user_id, "line_id": line_id},
+            )
+        await session.commit()
+    logger.info(
+        "update_user_v2_roles: admin=%s replaced v2 bindings for uid=%s "
+        "(%d bindings, %d lines)",
+        user.username, user_id, len(body.bindings), len(derived_lines),
+    )
+    return UserV2RolesResponse(user_id=user_id, bindings=body.bindings)
 
 
 # ---------------------------------------------------------------------------
@@ -627,10 +1103,10 @@ async def reset_user_password(
     user_id: int,
     body: ResetPasswordRequest,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> ResetPasswordResponse:
-    factory = get_session_factory()
     new_hash = hash_password(body.new_password)
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         result = await session.execute(
             text(
                 "UPDATE users SET password_hash = :h WHERE id = :uid"
@@ -663,14 +1139,14 @@ async def reset_user_password(
 async def deactivate_user(
     user_id: int,
     user: CurrentUser = Depends(require_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> LogoutResponse:
     if user_id == user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="cannot deactivate yourself",
         )
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         # If demoting an admin, refuse when it's the last one
         target_roles = set(
             (
@@ -724,6 +1200,7 @@ async def get_audit_log(
     user_id: Optional[int] = Query(None, description="filter by user_id"),
     path_prefix: Optional[str] = Query(None, description="filter by path prefix"),
     user: CurrentUser = Depends(require_auditor_or_admin_dep),
+    ctx: TenantContext = Depends(get_tenant_context),
 ) -> AuditLogResponse:
     where = ["1=1"]
     params: dict[str, object] = {"limit": limit, "offset": offset}
@@ -734,8 +1211,7 @@ async def get_audit_log(
         where.append("path LIKE :pfx")
         params["pfx"] = f"{path_prefix}%"
     where_sql = " AND ".join(where)
-    factory = get_session_factory()
-    async with factory() as session:
+    async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
         count_row = (
             await session.execute(
                 text(f"SELECT COUNT(*) FROM raw.audit_log WHERE {where_sql}"),

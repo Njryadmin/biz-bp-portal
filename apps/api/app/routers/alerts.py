@@ -20,14 +20,21 @@ Endpoints:
                                           write)
 
 The engine itself lives in `app.services.alert_engine`.
+
+v1 → v2 升级 (2026-09-04): 用 ``check_domain_access(BUSINESS)`` 替代
+v1 ``require_business_line``. 告警是业务指标监控,归 BUSINESS 域.
 """
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth_v2 import CurrentUserV2, get_current_user_v2
 from ..core.logging import get_logger
-from ..core.rbac import filter_accessible_lines, require_business_line
+from ..core.rbac_v2 import (
+    DataDomain,
+    check_domain_access,
+    filter_accessible_lines_v2,
+)
 from ..services.alert_engine import (
     AlertCheckRequest,
     AlertCheckResult,
@@ -59,9 +66,10 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 )
 async def list_rules_endpoint(
     line_id: str,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> dict:
-    await require_business_line(line_id, user)
+    # 列规则 = 读
+    await check_domain_access(user, line_id, DataDomain.BUSINESS, write=False)
     try:
         p = load_profile(line_id)
     except FileNotFoundError as exc:
@@ -81,9 +89,10 @@ async def list_rules_endpoint(
 )
 async def rules_summary_endpoint(
     line_id: str,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> dict:
-    await require_business_line(line_id, user)
+    # 列 summary = 读
+    await check_domain_access(user, line_id, DataDomain.BUSINESS, write=False)
     try:
         p = load_profile(line_id)
     except FileNotFoundError as exc:
@@ -112,10 +121,10 @@ async def rules_summary_endpoint(
     summary="List alert profiles for business lines the user can access",
 )
 async def list_profiles_endpoint(
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> dict:
     line_ids = list_profiles()
-    allowed = filter_accessible_lines(user, line_ids)
+    allowed = filter_accessible_lines_v2(user, line_ids)
     return {
         "count": len(allowed),
         "lines": [
@@ -140,9 +149,10 @@ async def list_profiles_endpoint(
 )
 async def check_endpoint(
     req: AlertCheckRequest,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> AlertCheckResult:
-    await require_business_line(req.line_id, user, require_write=True)
+    # check 触发评估 = 写
+    await check_domain_access(user, req.line_id, DataDomain.BUSINESS, write=True)
     try:
         profile = load_profile(req.line_id)
     except FileNotFoundError as exc:
@@ -164,18 +174,18 @@ async def history_endpoint(
     line_id: str | None = Query(None, description="filter by business line id"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> AlertHistoryResponse:
     # If a specific line is requested, require line access; otherwise
     # the engine filters to the union of accessible lines.
     if line_id is not None:
-        await require_business_line(line_id, user)
+        await check_domain_access(user, line_id, DataDomain.BUSINESS, write=False)
         items, total = history(line_id, limit, offset)
         return AlertHistoryResponse(
             line_id=line_id, total=total, limit=limit, offset=offset, items=items
         )
     # No line filter — restrict to the union of accessible lines.
-    allowed = filter_accessible_lines(user, list_profiles())
+    allowed = filter_accessible_lines_v2(user, list_profiles())
     if not allowed:
         return AlertHistoryResponse(
             line_id=None, total=0, limit=limit, offset=offset, items=[]
@@ -208,7 +218,7 @@ async def history_endpoint(
 )
 async def acknowledge_endpoint(
     alert_id: str,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> TriggeredAlert:
     # Look up the alert to know its line_id, then check write access.
     alert = get_alert(alert_id)
@@ -216,7 +226,10 @@ async def acknowledge_endpoint(
         raise HTTPException(
             status_code=404, detail=f"alert not found: {alert_id}"
         )
-    await require_business_line(alert.line_id, user, require_write=True)
+    # acknowledge 是写 (修改 alert 状态)
+    await check_domain_access(
+        user, alert.line_id, DataDomain.BUSINESS, write=True
+    )
     acked = acknowledge(alert_id)
     if acked is None:
         raise HTTPException(status_code=404, detail=f"alert not found: {alert_id}")
@@ -229,14 +242,17 @@ async def acknowledge_endpoint(
 )
 async def delete_endpoint(
     alert_id: str,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> dict:
     alert = get_alert(alert_id)
     if alert is None:
         raise HTTPException(
             status_code=404, detail=f"alert not found: {alert_id}"
         )
-    await require_business_line(alert.line_id, user, require_write=True)
+    # delete 是写
+    await check_domain_access(
+        user, alert.line_id, DataDomain.BUSINESS, write=True
+    )
     ok = delete(alert_id)
     if not ok:
         raise HTTPException(status_code=404, detail=f"alert not found: {alert_id}")

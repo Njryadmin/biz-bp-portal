@@ -15,14 +15,22 @@ Endpoints:
 * POST /compare                   — actual vs forecast; line access required
 
 The engine itself lives in `app.services.forecast_engine`.
+
+v1 → v2 升级 (2026-09-04): 用 ``check_domain_access(FINANCE, PROJECT)``
+替代 v1 ``require_business_line`` (后者只判断 line 范围,不区分数据域).
+财务预测涉及财务+项目指标,这两个域中任一允许即可 (any-of 语义).
 """
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth_v2 import CurrentUserV2, get_current_user_v2
 from ..core.logging import get_logger
-from ..core.rbac import filter_accessible_lines, require_business_line
+from ..core.rbac_v2 import (
+    DataDomain,
+    check_domain_access,
+    filter_accessible_lines_v2,
+)
 from ..services.forecast_engine import (
     ActualVsForecastRequest,
     ActualVsForecastResult,
@@ -78,10 +86,10 @@ def _profile_summary(line_id: str) -> dict:
     summary="List forecast profiles for business lines the user can access",
 )
 async def list_profiles_endpoint(
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> dict:
     line_ids = list_profiles()
-    allowed = filter_accessible_lines(user, line_ids)
+    allowed = filter_accessible_lines_v2(user, line_ids)
     return {
         "count": len(allowed),
         "profiles": [
@@ -96,9 +104,12 @@ async def list_profiles_endpoint(
 )
 async def get_profile_endpoint(
     line_id: str,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> dict:
-    await require_business_line(line_id, user)
+    # 预测 profile 涉及 finance + project 域,any-of 即可
+    await check_domain_access(
+        user, line_id, [DataDomain.FINANCE, DataDomain.PROJECT], write=False
+    )
     try:
         p = load_profile(line_id)
     except FileNotFoundError as exc:
@@ -123,9 +134,12 @@ async def get_profile_endpoint(
 )
 async def run_endpoint(
     req: ForecastRequest,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> ForecastResult:
-    await require_business_line(req.line_id, user, require_write=True)
+    # run 是写操作 (生成预测结果)
+    await check_domain_access(
+        user, req.line_id, [DataDomain.FINANCE, DataDomain.PROJECT], write=True
+    )
     try:
         profile = load_profile(req.line_id)
     except FileNotFoundError as exc:
@@ -150,9 +164,12 @@ async def run_endpoint(
 )
 async def compare_endpoint(
     req: ActualVsForecastRequest,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> ActualVsForecastResult:
-    await require_business_line(req.line_id, user, require_write=True)
+    # compare 也是写操作 (实际 vs 预测的 delta 计算)
+    await check_domain_access(
+        user, req.line_id, [DataDomain.FINANCE, DataDomain.PROJECT], write=True
+    )
     try:
         profile = load_profile(req.line_id)
     except FileNotFoundError as exc:

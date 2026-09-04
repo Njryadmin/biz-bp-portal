@@ -73,6 +73,33 @@ async def require_admin_dep(
     return user
 
 
+async def require_super_admin_dep(
+    user: CurrentUser = Depends(get_current_user),
+) -> CurrentUser:
+    """Dependency: caller must be flagged as super admin (``users.is_super_admin = TRUE``).
+
+    M3 多租户 (2026-09-04) — :class:`CurrentUser.is_super_admin` is loaded
+    by :func:`app.core.auth._load_user_by_id` and is the new privileged
+    flag that powers tenant management endpoints (the legacy ``admin``
+    role grants RBAC access but NOT cross-tenant bypass; only super
+    admin can do that).
+
+    Use this guard for endpoints that:
+      * List / create / edit / delete tenants
+      * Toggle other users' ``is_super_admin`` flag
+      * Cross-tenant administrative actions (future)
+
+    Plain ``admin`` (without super admin) is intentionally rejected
+    so the regular admin role is not enough to walk the tenant list.
+    """
+    if not user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="super_admin role required",
+        )
+    return user
+
+
 async def require_auditor_or_admin_dep(
     user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
@@ -205,4 +232,5 @@ __all__ = [
     "require_business_line",
     "business_line_dep",
     "require_role",
+    "require_super_admin_dep",
 ]

@@ -9,17 +9,22 @@
 // 4. 按当前用户的 accessible_lines 过滤业务线列表；
 //    SidebarMenu 只接收过滤后的子集。
 // 5. Topbar 显示真实用户名 + 登出按钮。
+// 6. E (2026-09-04): 同时拉 /api/auth/me-v2 拿 bindings + active_view
+//    推给 Topbar (PerspectiveSwitcher 用来挑默认 view).
+// 7. M3 (2026-09-04): 同时拉 /api/auth/me-tenant 拿 is_super_admin +
+//    自己的 tenant, 推给 Topbar (TenantBadge + TenantSwitcher 用).
 
 'use client';
 
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { BusinessLine } from "@biz-bp/types";
+import type { BusinessLine, V2CurrentUser } from "@biz-bp/types";
 
 import { SidebarMenu } from "./_components/SidebarMenu";
 import { Topbar } from "./_components/Topbar";
-import { getCurrentUser, type CurrentUser } from "../../lib/auth";
+import { getCurrentUser, getCurrentUserV2, type CurrentUser } from "../../lib/auth";
+import { getMyTenant } from "../../lib/tenants";
 
 interface RegistryResponse {
   version?: string;
@@ -33,6 +38,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [allLines, setAllLines] = useState<BusinessLine[]>([]);
   const [version, setVersion] = useState<string>("?");
   const [user, setUser] = useState<CurrentUser | null>(null);
+  const [v2User, setV2User] = useState<V2CurrentUser | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,7 +52,31 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           router.replace("/login?from=/dashboard");
           return;
         }
+        // 1b. M3 (2026-09-04) — also pull /api/auth/me-tenant so the
+        // local CurrentUser carries the is_super_admin flag. The flag
+        // isn't on v1 /me (v1 contract is locked) but the Topbar +
+        // TenantSwitcher want it.
+        getMyTenant()
+          .then((t) => {
+            if (cancelled) return;
+            if (t?.is_super_admin !== undefined) {
+              setUser({ ...me, is_super_admin: t.is_super_admin });
+            }
+          })
+          .catch(() => {
+            // 401 → not logged in (already handled above); 404 → no
+            // tenant row (degraded but non-fatal). Leave user as-is.
+          });
         setUser(me);
+        // 1c. v2 user — fetched in parallel; failure here is non-fatal
+        // (the v1 user alone is enough to render the layout).
+        getCurrentUserV2()
+          .then((u) => {
+            if (!cancelled) setV2User(u);
+          })
+          .catch(() => {
+            if (!cancelled) setV2User(null);
+          });
         // 2. 拉取注册表（BFF 携带 cookie 转发到 API）。
         const res = await fetch("/api/registry", { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -110,7 +140,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             {error ? ` · error: ${error}` : ""}
           </span>
         </div>
-        <Topbar lines={allLines} user={user} />
+        <Topbar lines={allLines} user={user} v2User={v2User} />
       </header>
       <div style={{ display: "flex", flex: 1 }}>
         <aside

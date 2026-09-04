@@ -19,13 +19,18 @@ Endpoints:
                                    lines (auth required)
 
 The engine (`app.services.copilot_engine`) does the heavy lifting.
+
+v1 → v2 升级 (2026-09-04): ask 端点有显式 line_id 时,改用 v2
+``check_domain_access(BUSINESS, write=True)`` 替代 v1 ``require_business_line``.
+Copilot 简化,先归 BUSINESS 域 (多域 follow-up 在 P2).
 """
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth_v2 import CurrentUserV2, get_current_user_v2
 from ..core.logging import get_logger
+from ..core.rbac_v2 import DataDomain, check_domain_access
 from ..services.copilot_engine import (
     CopilotEngine,
     CopilotHealth,
@@ -52,7 +57,7 @@ router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 )
 def ask_endpoint(
     req: CopilotRequest,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> CopilotResponse:
     # NOTE: deliberately NOT `async def` — the mock helper makes sync
     # HTTP calls to the same API process (e.g. GET /api/lines/.../projects).
@@ -64,18 +69,21 @@ def ask_endpoint(
     if err:
         # 400 for bad input — distinguish from internal errors.
         raise HTTPException(status_code=400, detail=err)
-    # RBAC: if the request carries an explicit line_id, the user must
-    # have access to that line. Otherwise the engine can fall back to
-    # the user's accessible lines.
+    # RBAC (v2): if the request carries an explicit line_id, the user must
+    # have BUSINESS domain access on that line. Otherwise the engine can
+    # fall back to the user's accessible lines.
     if req.line_id:
-        from ..core.rbac import require_business_line as _rbl
         # We can't await in a sync handler; run the coroutine in the
         # current thread via asyncio. FastAPI runs sync handlers in a
         # worker thread, so there's no event loop here — use a tiny
         # event-loop helper.
         import asyncio
         try:
-            asyncio.run(_rbl(req.line_id, user))
+            asyncio.run(
+                check_domain_access(
+                    user, req.line_id, DataDomain.BUSINESS, write=True
+                )
+            )
         except HTTPException:
             raise
     engine = CopilotEngine()
@@ -115,7 +123,7 @@ def ask_endpoint(
     summary="Get recommended starter questions, by line and cross-line",
 )
 async def suggestions_endpoint(
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> CopilotSuggestions:
     engine = CopilotEngine()
     try:
@@ -138,7 +146,7 @@ async def suggestions_endpoint(
     summary="Report the active LLM backend and registered lines",
 )
 async def health_endpoint(
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> CopilotHealth:
     engine = CopilotEngine()
     return engine.health()

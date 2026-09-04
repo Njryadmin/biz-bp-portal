@@ -192,6 +192,12 @@ class CurrentUser:
     is_active: bool
     roles: list[str] = field(default_factory=list)
     accessible_lines: list[str] = field(default_factory=list)
+    # M2 多租户 (2026-09-04) — 标记是否 super admin. 来自 users.is_super_admin.
+    # super admin 可通过 X-Tenant-ID header 显式切租户; 普通用户忽略 header,
+    # 用 user.tenant_id. tenant_id 字段 (UUID | None) 也加在这里, 让
+    # tenant_context 中间件能直接读.
+    is_super_admin: bool = False
+    tenant_id: str | None = None  # UUID 字符串, 由 _load_user_* 写入
 
     # -- role helpers --------------------------------------------------------
     def has_role(self, *roles: str) -> bool:
@@ -221,7 +227,15 @@ class CurrentUser:
         return False
 
     def to_public_dict(self) -> dict[str, Any]:
-        """Project to the public /me response shape."""
+        """Project to the public /me response shape.
+
+        ``is_super_admin`` and ``tenant_id`` are M2 internals — they
+        are NOT exposed in the public /me payload. The frontend
+        shouldn't need them; the tenant context is selected server-side
+        from the X-Tenant-ID header (or the user's stored tenant_id).
+        The fields stay on the dataclass so the tenant_context dep
+        can read them from ``request.state.current_user``.
+        """
         return {
             "id": self.id,
             "username": self.username,
@@ -251,7 +265,11 @@ async def _load_user_by_id(user_id: int) -> CurrentUser | None:
             user_row = (
                 await session.execute(
                     text(
-                        "SELECT id, username, display_name, email, is_active "
+                        # M2: 多读 is_super_admin + tenant_id (tenant_id 用于
+                        # tenant_context 中间件). v1 端点 /me 不暴露这两个字段
+                        # (见 to_public_dict 注释).
+                        "SELECT id, username, display_name, email, is_active, "
+                        "is_super_admin, tenant_id "
                         "FROM users WHERE id = :uid"
                     ),
                     {"uid": user_id},
@@ -294,6 +312,8 @@ async def _load_user_by_id(user_id: int) -> CurrentUser | None:
         is_active=bool(user_row["is_active"]),
         roles=roles,
         accessible_lines=lines,
+        is_super_admin=bool(user_row["is_super_admin"]),
+        tenant_id=str(user_row["tenant_id"]) if user_row["tenant_id"] else None,
     )
 
 
@@ -311,7 +331,9 @@ async def _load_user_by_credentials(
             row = (
                 await session.execute(
                     text(
+                        # M2: 多读 is_super_admin + tenant_id.
                         "SELECT id, username, display_name, email, is_active, "
+                        "is_super_admin, tenant_id, "
                         "password_hash FROM users WHERE username = :u"
                     ),
                     {"u": username},
@@ -354,6 +376,8 @@ async def _load_user_by_credentials(
         is_active=bool(row["is_active"]),
         roles=[str(r) for r in (roles_rows or [])],
         accessible_lines=[str(x) for x in (lines_rows or [])],
+        is_super_admin=bool(row["is_super_admin"]),
+        tenant_id=str(row["tenant_id"]) if row["tenant_id"] else None,
     )
 
 
@@ -383,13 +407,16 @@ async def get_current_user(
       2. ``Authorization: Bearer <jwt>`` header (curl / API clients).
 
     Raises 401 on missing / invalid / expired tokens.
+
+    M2: 同时把 user 写到 ``request.state.current_user`` (给
+    :func:`app.core.tenant_context.get_tenant_context` 读).
     """
     # 0. Service-token (in-process service-to-service)
     service_token = os.environ.get("BIZ_BP_SERVICE_TOKEN")
     if service_token:
         supplied = request.headers.get("x-service-token")
         if supplied and supplied == service_token:
-            return CurrentUser(
+            user = CurrentUser(
                 id=0,
                 username="__service__",
                 display_name="Internal Service",
@@ -397,7 +424,11 @@ async def get_current_user(
                 is_active=True,
                 roles=["admin", "auditor"],
                 accessible_lines=[],  # admin role grants all anyway
+                is_super_admin=True,  # service account treated as super admin
+                tenant_id=None,  # 走默认 tenant (DEFAULT_TENANT_ID)
             )
+            request.state.current_user = user
+            return user
 
     token = finbp_token
     if not token:
@@ -418,6 +449,8 @@ async def get_current_user(
             detail="user no longer exists or is inactive",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # M2: 写 request.state 给 tenant_context 读
+    request.state.current_user = user
     return user
 
 
