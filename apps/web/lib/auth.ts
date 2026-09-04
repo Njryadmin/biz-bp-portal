@@ -8,6 +8,7 @@ import type {
   UpdateUserV2RolesPayload,
   UserRoleBinding,
   UserV2RolesResponse,
+  V2CurrentUser,
   V2Role,
   V2Scope,
 } from "@biz-bp/types";
@@ -105,6 +106,24 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   });
   if (!res.ok) return null;
   const data = (await readJson(res)) as CurrentUser | null;
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// v2 CurrentUser (E, 2026-09-04)
+//
+// Used by PerspectiveSwitcher + dashboard pages. Always returns the v2
+// shape including `bindings` and `active_view`. Returns null if the
+// user is unauthenticated (the BFF will have given a 401).
+// ---------------------------------------------------------------------------
+
+export async function getCurrentUserV2(): Promise<V2CurrentUser | null> {
+  const res = await fetch("/api/auth/me-v2", {
+    cache: "no-store",
+    credentials: "include",
+  });
+  if (!res.ok) return null;
+  const data = (await readJson(res)) as V2CurrentUser | null;
   return data;
 }
 

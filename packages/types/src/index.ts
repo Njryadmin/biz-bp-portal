@@ -270,3 +270,56 @@ export interface BusinessLineListResponse {
   count: number;
   lines: BusinessLineSummary[];
 }
+
+/* ----------------------------- Dashboard (E) ----------------------------- */
+
+// Per-perspective dashboard response. Mirrors
+// apps/api/app/schemas/dashboard.py:DashboardResponse.
+export type DashboardView = "fin" | "hr" | "shared";
+
+export interface DashboardKpiItem {
+  line_id: string;
+  kpi_id: string;
+  title: string;
+  value: number;
+  unit?: string;
+  trend?: string; // e.g. "+5%" / "-3%" / "—"
+  source?: string | null;
+  formula?: string | null;
+}
+
+export interface DashboardLine {
+  line_id: string;
+  line_name: string;
+  kpi_count: number;
+}
+
+export interface DashboardResponse {
+  view: DashboardView;
+  kpis: DashboardKpiItem[];
+  lines: DashboardLine[];
+}
+
+/* --------------------------- v2 me (E) ----------------------------------- */
+
+// v2 user shape returned by GET /api/auth/me-v2.
+// Mirrors apps/api/app/routers/auth.py:me_v2.
+export type V2UserScope = "global" | "business_line";
+
+export interface V2UserRoleBinding {
+  role: string;
+  scope: V2UserScope;
+  line_id: string | null;
+}
+
+export interface V2CurrentUser {
+  id: number;
+  username: string;
+  display_name: string;
+  email: string | null;
+  is_active: boolean;
+  roles: string[];
+  accessible_lines: string[];
+  bindings: V2UserRoleBinding[];
+  active_view: string | null;
+}

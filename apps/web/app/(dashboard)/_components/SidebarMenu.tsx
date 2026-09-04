@@ -5,6 +5,11 @@
 // - Chevron rotates on toggle
 // - Active line auto-opens (other lines user-closed stay closed)
 // - Hover/active states for both the group header and child items
+//
+// E (2026-09-04): a top-level "Dashboard perspectives" section surfaces
+// the FIN / HR / Shared dashboard links; the item whose view matches
+// the localStorage ``biz-bp.active_view`` is highlighted even when
+// the URL is the generic ``/dashboard``.
 
 "use client";
 
@@ -13,7 +18,8 @@ import { usePathname } from "next/navigation";
 import { Tooltip } from "antd";
 import * as Icons from "@ant-design/icons";
 import Link from "next/link";
-import type { BusinessLine } from "@biz-bp/types";
+import type { BusinessLine, DashboardView } from "@biz-bp/types";
+import { readActiveView } from "../../../lib/api";
 
 type IconName = keyof typeof Icons;
 
@@ -67,6 +73,29 @@ export interface SidebarMenuProps {
 
 export function SidebarMenu({ lines, accessibleLineIds }: SidebarMenuProps) {
   const pathname = usePathname() ?? "/dashboard";
+
+  // Active view (fin / hr / shared). Hydrated from localStorage after
+  // mount to avoid SSR/CSR mismatch. Updates when the user clicks
+  // the PerspectiveSwitcher (which dispatches `biz-bp:view-change`).
+  const [activeView, setActiveView] = useState<DashboardView | null>(null);
+  useEffect(() => {
+    setActiveView(readActiveView());
+    const handler = (e: Event) => {
+      const v = (e as CustomEvent).detail as DashboardView | null;
+      setActiveView(v);
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("biz-bp:view-change", handler as EventListener);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener(
+          "biz-bp:view-change",
+          handler as EventListener,
+        );
+      }
+    };
+  }, []);
 
   // -------------------------------------------------------------------------
   // Filter to accessible lines (when provided) + sort by display name
@@ -183,6 +212,42 @@ export function SidebarMenu({ lines, accessibleLineIds }: SidebarMenuProps) {
         <Icons.DashboardOutlined style={{ fontSize: 16 }} />
         <span>Overview</span>
       </Link>
+
+      {/* E (2026-09-04): perspective dashboards (FIN / HR / Shared).
+          Highlight rule: the item whose view matches the active_view
+          (from localStorage) is active EVEN IF the URL is /dashboard
+          (because the user just toggled the segment but hasn't clicked
+          through yet). The direct URL match always wins. */}
+      <SidebarItem
+        href="/dashboard/fin"
+        label="FIN 视角"
+        icon={<Icons.AccountBookOutlined style={{ fontSize: 14 }} />}
+        active={
+          pathname === "/dashboard/fin" ||
+          (pathname === "/dashboard" && activeView === "fin")
+        }
+        palette={palette}
+      />
+      <SidebarItem
+        href="/dashboard/hr"
+        label="HR 视角"
+        icon={<Icons.TeamOutlined style={{ fontSize: 14 }} />}
+        active={
+          pathname === "/dashboard/hr" ||
+          (pathname === "/dashboard" && activeView === "hr")
+        }
+        palette={palette}
+      />
+      <SidebarItem
+        href="/dashboard/shared"
+        label="共享视角"
+        icon={<Icons.AppstoreOutlined style={{ fontSize: 14 }} />}
+        active={
+          pathname === "/dashboard/shared" ||
+          (pathname === "/dashboard" && activeView === "shared")
+        }
+        palette={palette}
+      />
 
       {/* One collapsible section per business line */}
       {sorted.map((line) => {
@@ -357,5 +422,66 @@ export function SidebarMenu({ lines, accessibleLineIds }: SidebarMenuProps) {
         );
       })}
     </nav>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// E (2026-09-04): SidebarItem — small helper for the top-level FIN / HR /
+// Shared dashboard links. Mirrors the styling of the existing "Overview"
+// item above so the perspective items feel native.
+// ---------------------------------------------------------------------------
+
+interface Palette {
+  bg: string;
+  border: string;
+  text: string;
+  textMuted: string;
+  primary: string;
+  hover: string;
+  activeBg: string;
+  activeText: string;
+}
+
+function SidebarItem({
+  href,
+  label,
+  icon,
+  active,
+  palette,
+}: {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  palette: Palette;
+}) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px 16px",
+        color: active ? palette.activeText : palette.text,
+        background: active ? palette.activeBg : "transparent",
+        fontWeight: active ? 600 : 500,
+        fontSize: 13,
+        textDecoration: "none",
+        borderLeft: active
+          ? `3px solid ${palette.primary}`
+          : "3px solid transparent",
+        transition: "background 0.12s",
+      }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.background = palette.hover;
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.background = "transparent";
+      }}
+    >
+      {icon}
+      <span>{label}</span>
+    </Link>
   );
 }

@@ -1,6 +1,9 @@
 // apps/web/app/(dashboard)/_components/Topbar.tsx
 //
 // Client-side top bar. Right-hand side hosts:
+//   - PerspectiveSwitcher (FIN / HR / Shared, E 2026-09-04) —
+//     uses the v2 user to pick the default view; writes
+//     ``biz-bp.active_view`` to localStorage on change.
 //   - RoleSwitcher (now backed by /api/auth/me — read-only display of
 //     the active user's roles)
 //   - User menu with logout button (POST /api/auth/logout then
@@ -11,12 +14,13 @@
 import { Avatar, Dropdown, Space } from "antd";
 import * as Icons from "@ant-design/icons";
 import { RoleSwitcher } from "@biz-bp/ui";
-import type { BusinessLine } from "@biz-bp/types";
+import type { BusinessLine, V2CurrentUser } from "@biz-bp/types";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCallback } from "react";
 import type { CurrentUser } from "../../../lib/auth";
 import { isAdmin, logout } from "../../../lib/auth";
+import { PerspectiveSwitcher } from "./PerspectiveSwitcher";
 
 export interface TopbarProps {
   /**
@@ -26,9 +30,15 @@ export interface TopbarProps {
   lines?: BusinessLine[];
   /** Current authenticated user (or null if not loaded yet). */
   user?: CurrentUser | null;
+  /**
+   * v2 user with bindings + active_view. When provided, forwarded to
+   * the PerspectiveSwitcher so it can pick the default view segment.
+   * Optional — when absent the switcher defaults to "shared".
+   */
+  v2User?: V2CurrentUser | null;
 }
 
-export function Topbar({ lines, user }: TopbarProps) {
+export function Topbar({ lines, user, v2User }: TopbarProps) {
   const router = useRouter();
   const onLogout = useCallback(async () => {
     try {
@@ -154,6 +164,7 @@ export function Topbar({ lines, user }: TopbarProps) {
         </>
       ) : null}
       <RoleSwitcher lines={lines} activeRoles={user?.roles ?? null} />
+      <PerspectiveSwitcher user={v2User ?? null} />
       <Dropdown
         menu={{
           items: [

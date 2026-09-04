@@ -7,7 +7,8 @@ apps/api/app/routers/auth.py
 ----
 POST   /api/auth/login                       —— body {username, password} → 设置 cookie + me
 POST   /api/auth/logout                      —— 清除 cookie
-GET    /api/auth/me                          —— 当前用户（id/username/roles/lines）
+GET    /api/auth/me                          —— 当前用户（id/username/roles/lines）v1 shape
+GET    /api/auth/me-v2                       —— 当前用户 (v2 shape: bindings + active_view, E 2026-09-04)
 GET    /api/auth/accessible-lines            —— 当前用户可访问的业务线 id
 GET    /api/auth/users                       —— admin：列出全部用户
 POST   /api/auth/users                       —— admin：创建用户
@@ -37,6 +38,7 @@ from ..core.auth import (
     hash_password,
     verify_password,
 )
+from ..core.auth_v2 import CurrentUserV2, get_current_user_v2
 from ..core.config import get_settings
 from ..core.logging import get_logger
 from ..core.rbac import (
@@ -211,6 +213,52 @@ async def logout(response: Response) -> LogoutResponse:
 )
 async def me(user: CurrentUser = Depends(get_current_user)) -> CurrentUserResponse:
     return CurrentUserResponse(**user.to_public_dict())
+
+
+# ---------------------------------------------------------------------------
+# /api/auth/me-v2 — v2 shape with bindings + active_view (E, 2026-09-04)
+#
+# Why a separate endpoint instead of a query flag on /me?
+#   * The v1 /me shape is the wire contract for the existing frontend
+#     (Topbar / SidebarMenu / etc.) — adding a `bindings` field would
+#     change the type even when no caller asked for it.
+#   * The PerspectiveSwitcher is the *only* consumer that needs the v2
+#     shape, and it only loads on the dashboard layout — so an extra
+#     round-trip is acceptable.
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/me-v2",
+    summary="Return the currently authenticated user in v2 shape (bindings + active_view)",
+)
+async def me_v2(user: CurrentUserV2 = Depends(get_current_user_v2)) -> dict:
+    """v2 shape: includes ``bindings`` (role + scope + line_id) and the
+    currently active view (``active_view`` from the X-Active-View header).
+
+    The frontend (PerspectiveSwitcher) uses this to:
+      * pick the default view segment (fin / hr / shared / line_owner / admin)
+      * render the role-based menu
+      * keep the localStorage ``biz-bp.active_view`` key in sync
+    """
+    return {
+        "id": user.id,
+        "username": user.username,
+        "display_name": user.display_name,
+        "email": user.email,
+        "is_active": user.is_active,
+        "roles": list(user.roles),
+        "accessible_lines": list(user.accessible_lines),
+        "bindings": [
+            {
+                "role": b.role.value,
+                "scope": b.scope.value,
+                "line_id": b.business_line_id,
+            }
+            for b in user.bindings
+        ],
+        "active_view": user.active_view,
+    }
 
 
 # ---------------------------------------------------------------------------

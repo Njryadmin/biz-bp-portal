@@ -24,6 +24,7 @@ from .routers.ai_models import router as ai_models_router
 from .routers.alerts import router as alerts_router
 from .routers.auth import router as auth_router
 from .routers.copilot import router as copilot_router
+from .routers.dashboard import router as dashboard_router
 from .routers.forecast import router as forecast_router
 from .routers.registry import mount_business_line_routers
 from .routers.scrapers import router as scrapers_router
@@ -119,6 +120,9 @@ def create_app() -> FastAPI:
 
     # Admin: 业务线 manifest / indicators 增删改 (D1, 2026-09-04)
     app.include_router(admin_business_lines_router)
+
+    # Per-perspective dashboard MVP (E, 2026-09-04) — fin / hr / shared
+    app.include_router(dashboard_router)
 
     @app.get("/")
     async def root() -> dict:
