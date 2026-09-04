@@ -12,8 +12,10 @@ GET    /api/auth/accessible-lines            —— 当前用户可访问的业�
 GET    /api/auth/users                       —— admin：列出全部用户
 POST   /api/auth/users                       —— admin：创建用户
 PATCH  /api/auth/users/{id}                  —— admin：更新 display_name/email/password/is_active
-PATCH  /api/auth/users/{id}/roles            —— admin：替换用户的角色 + 业务线
+PATCH  /api/auth/users/{id}/roles            —— admin：替换用户的角色 + 业务线 (v1, 保留)
 PATCH  /api/auth/users/{id}/lines            —— admin：仅替换用户的 accessible_lines
+GET    /api/auth/users/{id}/v2-roles         —— admin：读取 v2 角色绑定 (commit C1)
+PATCH  /api/auth/users/{id}/v2-roles         —— admin：替换 v2 角色绑定 (commit C1)
 POST   /api/auth/users/{id}/reset-password   —— admin：轮换用户密码
 DELETE /api/auth/users/{id}                  —— admin：停用用户（软删除）
 GET    /api/auth/audit-log                   —— admin/auditor：查询审计日志
@@ -57,13 +59,61 @@ from ..schemas.auth import (
     UpdateUserLinesRequest,
     UpdateUserRequest,
     UpdateUserRolesRequest,
+    UpdateUserV2RolesRequest,
     UserListItem,
     UserListResponse,
+    UserRoleBindingResponse,
+    UserV2RolesResponse,
 )
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+# ---------------------------------------------------------------------------
+# v2 RBAC binding helpers (commit C1, 2026-09-04)
+#
+# Three role classes that drive the wire-level validation in
+# PATCH /api/auth/users/{id}/v2-roles. Defined here (not in
+# app.core.rbac_v2) because they're an admin-UI concern — the rbac_v2
+# module stays focused on permission checks and has no business
+# knowing about HTTP request bodies.
+# ---------------------------------------------------------------------------
+
+# All 8 v2 roles. Duplicated from app.core.rbac_v2.Role to avoid
+# importing a heavy module just for a 8-element set; the source of
+# truth for the matrix still lives in rbac_v2.
+_ROLE_ENUM_VALUES: frozenset[str] = frozenset(
+    {
+        "admin",
+        "auditor",
+        "viewer",
+        "line_owner",
+        "fin_bp",
+        "hr_bp",
+        "fin_bp_global",
+        "hr_bp_global",
+    }
+)
+
+# Roles that must always carry scope=business_line + a real line id.
+# fin_bp_global / hr_bp_global are global by design.
+_LINE_SCOPED_ROLES: frozenset[str] = frozenset(
+    {"line_owner", "fin_bp", "hr_bp"}
+)
+
+# Roles that must always carry scope=global + line_id=None. The set
+# mirrors admin/auditor/viewer + the two *_global variants.
+_GLOBAL_ROLES: frozenset[str] = frozenset(
+    {
+        "admin",
+        "auditor",
+        "viewer",
+        "fin_bp_global",
+        "hr_bp_global",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +268,31 @@ async def _load_user_with_perms(user_id: int) -> UserListItem | None:
                 {"uid": user_id},
             )
         ).scalars().all()
+        # v2 bindings — additive (commit C1, 2026-09-04). We pull
+        # scope/line_id from user_roles so the admin UI can render
+        # the full triplet without a second round-trip. Rows whose
+        # scope is NULL (i.e. migration 001 hasn't run on this DB) are
+        # still surfaced as legacy entries with scope=``"legacy"`` and
+        # line_id=``None`` so the UI can flag them as "needs migration".
+        v2_rows = (
+            await session.execute(
+                text(
+                    "SELECT role, scope, line_id FROM user_roles "
+                    "WHERE user_id = :uid ORDER BY role, line_id"
+                ),
+                {"uid": user_id},
+            )
+        ).mappings().all()
+    v2_bindings: list[UserRoleBindingResponse] = []
+    for r in v2_rows or []:
+        scope_val = r["scope"] or "legacy"
+        v2_bindings.append(
+            UserRoleBindingResponse(
+                role=str(r["role"]),
+                scope=str(scope_val),
+                line_id=r["line_id"],
+            )
+        )
     return UserListItem(
         id=int(u["id"]),
         username=str(u["username"]),
@@ -227,6 +302,7 @@ async def _load_user_with_perms(user_id: int) -> UserListItem | None:
         roles=[str(r) for r in (roles or [])],
         accessible_lines=[str(x) for x in (lines or [])],
         created_at=str(u["created_at"]),
+        v2_bindings=v2_bindings,
     )
 
 
@@ -611,6 +687,252 @@ async def update_user_lines(
     item = await _load_user_with_perms(user_id)
     assert item is not None
     return item
+
+
+# ---------------------------------------------------------------------------
+# v2 RBAC bindings  — GET / PATCH /api/auth/users/{id}/v2-roles
+#
+# Added in commit C1 (2026-09-04) to express the 8-role × 2-scope × N-line
+# triplet that the v1 ``PATCH /users/{id}/roles`` (which only takes
+# ``roles: list[str]``) cannot represent. The v1 endpoint is kept
+# untouched — v1 web clients still call it; the new triplet endpoint
+# is additive and lives at a distinct URL so the two are easy to
+# distinguish in audit logs.
+#
+# Business rules enforced here (everything is 400 unless noted):
+#   • At least one ``admin`` binding must remain in the DB. The last
+#     admin cannot demote themselves — returns 409.
+#   • Every binding's (role, scope, line_id) must be self-consistent:
+#       - scope="business_line"  → line_id is a non-empty string
+#       - scope="global"         → line_id is None
+#       - line-scoped roles     (line_owner / fin_bp / hr_bp) must
+#         carry scope="business_line"
+#       - global-only roles     (admin / auditor / viewer / *_global)
+#         must carry scope="global"
+#   • (role, line_id) is unique within one request.
+# Side effect: the ``user_business_lines`` table is rewritten from
+# the union of the new bindings' line_ids so v1 ``accessible_lines``
+# stays in sync (v1 endpoints and the v1 /me payload still read it).
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/users/{user_id}/v2-roles",
+    response_model=UserV2RolesResponse,
+    summary="Admin: read a user's v2 role bindings (role + scope + line_id)",
+)
+async def get_user_v2_roles(
+    user_id: int,
+    user: CurrentUser = Depends(require_admin_dep),
+) -> UserV2RolesResponse:
+    factory = get_session_factory()
+    async with factory() as session:
+        target_exists = (
+            await session.execute(
+                text("SELECT 1 FROM users WHERE id = :uid"),
+                {"uid": user_id},
+            )
+        ).first()
+        if not target_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"user not found: {user_id}",
+            )
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT role, scope, line_id FROM user_roles "
+                    "WHERE user_id = :uid ORDER BY role, line_id"
+                ),
+                {"uid": user_id},
+            )
+        ).mappings().all()
+    return UserV2RolesResponse(
+        user_id=user_id,
+        bindings=[
+            UserRoleBindingResponse(
+                role=str(r["role"]),
+                scope=str(r["scope"] or "legacy"),
+                line_id=r["line_id"],
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.patch(
+    "/users/{user_id}/v2-roles",
+    response_model=UserV2RolesResponse,
+    summary=(
+        "Admin: replace a user's v2 role bindings (role + scope + line_id)"
+    ),
+)
+async def update_user_v2_roles(
+    user_id: int,
+    body: UpdateUserV2RolesRequest,
+    user: CurrentUser = Depends(require_admin_dep),
+) -> UserV2RolesResponse:
+    """Replace a user's complete v2 role binding set.
+
+    See the section header above for the full business-rule list.
+    Returns the new binding set (so the admin UI can re-render
+    without a follow-up GET). Raises 400 for any rule violation and
+    409 if the operation would remove the last admin.
+    """
+    # 1) Shape validation. The Pydantic model already guarantees the
+    #    fields exist and have the right types; here we add the
+    #    cross-field invariants the JSON schema cannot express.
+    if not body.bindings:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "bindings cannot be empty — pass at least one admin "
+                "binding to keep system access (last-admin protection)"
+            ),
+        )
+    seen: set[tuple[str, str | None]] = set()
+    for b in body.bindings:
+        if b.role not in _ROLE_ENUM_VALUES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"unknown role: {b.role!r} (allowed: {sorted(_ROLE_ENUM_VALUES)})",
+            )
+        if b.scope not in ("global", "business_line"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"unknown scope: {b.scope!r} (allowed: 'global', 'business_line')",
+            )
+        if b.scope == "business_line" and not b.line_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"role {b.role!r} with scope='business_line' must "
+                    f"carry a non-empty line_id"
+                ),
+            )
+        if b.scope == "global" and b.line_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"role {b.role!r} with scope='global' must not "
+                    f"carry line_id (got {b.line_id!r})"
+                ),
+            )
+        if b.role in _LINE_SCOPED_ROLES and b.scope != "business_line":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"role {b.role!r} is line-scoped and must be paired "
+                    f"with scope='business_line' (got {b.scope!r})"
+                ),
+            )
+        if b.role in _GLOBAL_ROLES and b.scope != "global":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"role {b.role!r} is global-only and must be paired "
+                    f"with scope='global' (got {b.scope!r})"
+                ),
+            )
+        key = (b.role, b.line_id)
+        if key in seen:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"duplicate binding: role={b.role!r} line_id={b.line_id!r}",
+            )
+        seen.add(key)
+
+    # 2) Last-admin protection. We only need to block the call when
+    #    (a) the target currently has admin, (b) the new bindings
+    #    don't include admin, and (c) no other user in the system
+    #    still has admin. Anyone with multiple admins can freely
+    #    demote one of them; an admin can give up their own admin
+    #    role only if at least one peer admin remains.
+    new_has_admin = any(b.role == "admin" for b in body.bindings)
+    factory = get_session_factory()
+    # Always verify the user exists, regardless of the new bindings'
+    # admin status — the FK on user_roles would otherwise turn a
+    # missing user into a 500 instead of a friendly 404. We also
+    # need the current role set for the last-admin check below.
+    async with factory() as session:
+        target_exists = (
+            await session.execute(
+                text("SELECT 1 FROM users WHERE id = :uid"),
+                {"uid": user_id},
+            )
+        ).first()
+        if not target_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"user not found: {user_id}",
+            )
+        target_roles = set(
+            (
+                await session.execute(
+                    text("SELECT role FROM user_roles WHERE user_id = :uid"),
+                    {"uid": user_id},
+                )
+            ).scalars().all()
+        )
+    if not new_has_admin:
+        if "admin" in target_roles:
+            async with factory() as session:
+                other_admins = (
+                    await session.execute(
+                        text(
+                            "SELECT COUNT(DISTINCT user_id) FROM user_roles "
+                            "WHERE role = 'admin' AND user_id <> :uid"
+                        ),
+                        {"uid": user_id},
+                    )
+                ).scalar_one()
+            if int(other_admins) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="cannot remove the last admin role from the system",
+                )
+
+    # 3) Persist. We rewrite user_roles from scratch and resync
+    #    user_business_lines from the union of the new line_ids so
+    #    v1 endpoints (which read user_business_lines) stay accurate.
+    async with factory() as session:
+        await session.execute(
+            text("DELETE FROM user_roles WHERE user_id = :uid"),
+            {"uid": user_id},
+        )
+        for b in body.bindings:
+            await session.execute(
+                text(
+                    "INSERT INTO user_roles (user_id, role, scope, line_id) "
+                    "VALUES (:uid, :role, :scope, :line_id)"
+                ),
+                {
+                    "uid": user_id,
+                    "role": b.role,
+                    "scope": b.scope,
+                    "line_id": b.line_id,
+                },
+            )
+        derived_lines = sorted({b.line_id for b in body.bindings if b.line_id})
+        await session.execute(
+            text("DELETE FROM user_business_lines WHERE user_id = :uid"),
+            {"uid": user_id},
+        )
+        for line_id in derived_lines:
+            await session.execute(
+                text(
+                    "INSERT INTO user_business_lines (user_id, line_id) "
+                    "VALUES (:uid, :line_id) ON CONFLICT DO NOTHING"
+                ),
+                {"uid": user_id, "line_id": line_id},
+            )
+        await session.commit()
+    logger.info(
+        "update_user_v2_roles: admin=%s replaced v2 bindings for uid=%s "
+        "(%d bindings, %d lines)",
+        user.username, user_id, len(body.bindings), len(derived_lines),
+    )
+    return UserV2RolesResponse(user_id=user_id, bindings=body.bindings)
 
 
 # ---------------------------------------------------------------------------

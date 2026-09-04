@@ -95,3 +95,50 @@ export interface KpiResponse {
   line_id: string;
   items: KpiValue[];
 }
+
+/* ----------------------------- RBAC v2 ----------------------------------- */
+
+// 8 v2 role ids (see apps/api/app/core/rbac_v2.py:Role). Defined as a
+// literal-union type so the admin UI gets IntelliSense when picking
+// from the dropdown. The set is duplicated in the Python router's
+// ``_ROLE_ENUM_VALUES``; keep them in sync when adding a role.
+export type V2Role =
+  | "admin"
+  | "auditor"
+  | "viewer"
+  | "line_owner"
+  | "fin_bp"
+  | "hr_bp"
+  | "fin_bp_global"
+  | "hr_bp_global";
+
+// v2 scope literal-union. ``"legacy"`` is a fallback the API uses for
+// rows whose scope column is NULL (i.e. migration 001 hasn't been run
+// yet on that DB). The admin UI surfaces it as "needs migration".
+export type V2Scope = "global" | "business_line" | "legacy";
+
+// Single v2 role binding. Maps to apps/api/app/schemas/auth.py:
+// UserRoleBindingResponse. The 4-tuple (role, scope, line_id) drives
+// every permission check in the v2 router guards.
+export interface UserRoleBinding {
+  /** fin_bp / hr_bp / line_owner / admin / auditor / viewer / fin_bp_global / hr_bp_global */
+  role: string;
+  /** "global"  → line_id must be null; "business_line" → line_id required */
+  scope: V2Scope;
+  /** business-line id, required iff scope==="business_line" */
+  line_id: string | null;
+}
+
+// PATCH /api/auth/users/{id}/v2-roles body. The list is a full
+// replacement (not a patch); the router rejects empty arrays so at
+// least one admin always remains in the system.
+export interface UpdateUserV2RolesPayload {
+  bindings: UserRoleBinding[];
+}
+
+// GET / PATCH /api/auth/users/{id}/v2-roles response. The admin UI
+// re-renders directly from this without a follow-up GET.
+export interface UserV2RolesResponse {
+  user_id: number;
+  bindings: UserRoleBinding[];
+}
