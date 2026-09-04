@@ -323,3 +323,35 @@ export interface V2CurrentUser {
   bindings: V2UserRoleBinding[];
   active_view: string | null;
 }
+
+/* -------------------- Cross-line summary (G) ----------------------------- */
+
+// Cross-line KPI summary response. Mirrors
+// apps/api/app/schemas/cross_line_summary.py:CrossLineSummaryResponse.
+// Re-uses DashboardKpiItem for the per-KPI shape (the wire contract is
+// identical; only the rollup envelope differs).
+export type CrossLineSummaryView = "fin" | "hr";
+export type CrossLineSummaryScope = "global" | "business_line";
+export type CrossLineSummaryDomain = "finance" | "hr";
+
+export interface CrossLineSummaryLine {
+  line_id: string;
+  line_name: string;
+  kpi_count: number;
+  domain: CrossLineSummaryDomain;
+}
+
+export interface CrossLineSummaryResponse {
+  view: CrossLineSummaryView;
+  scope: CrossLineSummaryScope;
+  lines: CrossLineSummaryLine[];
+  /**
+   * Cross-line rollup keyed by kpi_id. Summable KPIs (e.g. revenue /
+   * headcount) are summed across lines; rate-like KPIs (e.g. margin /
+   * variance) are explicitly `null` because summing a rate is
+   * mathematically wrong. See `_is_summable_kpi` in the router.
+   */
+  totals: Record<string, number | null>;
+  kpis: DashboardKpiItem[];
+  generated_at: string;
+}

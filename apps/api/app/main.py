@@ -24,6 +24,7 @@ from .routers.ai_models import router as ai_models_router
 from .routers.alerts import router as alerts_router
 from .routers.auth import router as auth_router
 from .routers.copilot import router as copilot_router
+from .routers.cross_line_summary import router as cross_line_summary_router
 from .routers.dashboard import router as dashboard_router
 from .routers.forecast import router as forecast_router
 from .routers.migrations import router as migrations_router
@@ -127,6 +128,11 @@ def create_app() -> FastAPI:
 
     # Migration runner (F, 2026-09-04) — admin-only status / apply / verify
     app.include_router(migrations_router)
+
+    # Cross-line summary (G, 2026-09-04) — FIN/HR global rollup for
+    # ``fin_bp_global`` / ``hr_bp_global`` and per-line downgrades for
+    # line-scoped roles.
+    app.include_router(cross_line_summary_router)
 
     @app.get("/")
     async def root() -> dict:
