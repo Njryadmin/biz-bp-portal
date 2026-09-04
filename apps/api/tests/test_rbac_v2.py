@@ -421,12 +421,44 @@ def test_can_view_line_admin() -> None:
 
 
 def test_can_view_line_auditor() -> None:
-    """auditor (GLOBAL) 可看任何 line, ``can_write_line`` 实现允许
-    (matrix 在 ``can_access_domain`` 层拒绝). 这里只断言 view 行为.
+    """auditor (GLOBAL) 可看任何 line, 不可写 (matrix 全域 write=False).
+
+    P1 修复: 旧实现对 global+non-admin 一律返 True, 把 auditor/viewer
+    也错算成"能写". 修复后 ``can_write_line`` 拒绝 admin/auditor/viewer
+    三个全局只读角色.
     """
     u = make_user(Role.AUDITOR)
     assert u.can_view_line("residential") is True
     assert u.can_view_line("retail") is True
+    assert u.can_write_line("residential") is False
+    assert u.can_write_line("retail") is False
+
+
+def test_can_view_line_viewer() -> None:
+    """viewer (GLOBAL) 跟 auditor 行为一致: 可看不可写."""
+    u = make_user(Role.VIEWER)
+    assert u.can_view_line("residential") is True
+    assert u.can_view_line("retail") is True
+    assert u.can_write_line("residential") is False
+    assert u.can_write_line("retail") is False
+
+
+def test_can_write_line_global_readonly_roles_rejected() -> None:
+    """参数化覆盖: admin / auditor / viewer 全部 ``can_write_line=False``.
+
+    对照 fin_bp_global / hr_bp_global 必须 ``can_write_line=True``
+    (它们按各自域权限写, 由 ``can_access_domain`` 决定具体域).
+    """
+    for role in (Role.ADMIN, Role.AUDITOR, Role.VIEWER):
+        u = make_user(role)
+        assert u.can_write_line("residential") is False, (
+            f"{role.value} 应该拒绝写"
+        )
+    for role in (Role.FIN_BP_GLOBAL, Role.HR_BP_GLOBAL):
+        u = make_user(role)
+        assert u.can_write_line("residential") is True, (
+            f"{role.value} 应该允许写 (具体域由 can_access_domain 决定)"
+        )
 
 
 def test_can_view_line_and_write_line_owner() -> None:

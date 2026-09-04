@@ -225,9 +225,22 @@ class CurrentUserV2:
         )
 
     def can_write_line(self, line_id: str) -> bool:
-        """是否能写这条业务线。admin 不行(避免裁判运动员);其他都行。"""
+        """是否能写这条业务线。
+
+        全局只读角色 (admin/auditor/viewer) 一律不允许 — 矩阵里它们的
+        write 全是 False, 与 ``can_access_domain(..., write=True)`` 保持一致.
+        admin 另因"裁判运动员"原因排除, 业务数据写入由 line_owner /
+        fin_bp / hr_bp / *_global 承担.
+
+        fin_bp_global / hr_bp_global 在本方法上按"能写"处理, 具体哪些
+        域能写由 ``can_access_domain`` 决定.
+        """
         for b in self.bindings:
-            if b.scope == Scope.GLOBAL and b.role != Role.ADMIN:
+            if b.scope == Scope.GLOBAL and b.role not in (
+                Role.ADMIN,
+                Role.AUDITOR,
+                Role.VIEWER,
+            ):
                 return True  # fin_bp_global / hr_bp_global 可写(各自域)
             if b.scope == Scope.BUSINESS_LINE and b.business_line_id == line_id:
                 # fin_bp / hr_bp / line_owner 都可写(各自允许的域)
