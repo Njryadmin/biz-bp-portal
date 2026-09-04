@@ -313,6 +313,23 @@ class CurrentUserV2:
             return "viewer"
         return "none"
 
+    def to_public_dict(self) -> dict:
+        """Project to the public /me response shape (与 v1 ``CurrentUser.to_public_dict`` 兼容).
+
+        保留 v1 字段 (id/username/display_name/email/is_active/roles/accessible_lines)
+        保证 copilot engine 调 ``set_active_user(user.to_public_dict())`` 时不破.
+        v2 新增字段 (bindings, active_view) 不暴露给前端 — 前端是 v1 schema.
+        """
+        return {
+            "id": self.id,
+            "username": self.username,
+            "display_name": self.display_name,
+            "email": self.email,
+            "is_active": self.is_active,
+            "roles": list(self.roles),
+            "accessible_lines": list(self.accessible_lines),
+        }
+
 
 # ---------------------------------------------------------------------------
 # FastAPI Dependencies
@@ -365,6 +382,83 @@ def require_domain_access(
     return _dep
 
 
+# ---------------------------------------------------------------------------
+# Imperative helper (for line_id in body / header / arg)
+# ---------------------------------------------------------------------------
+
+
+async def check_domain_access(
+    user: "CurrentUserV2",
+    line_id: str,
+    domains: "DataDomain | list[DataDomain]",
+    *,
+    write: bool = False,
+) -> None:
+    """域级权限检查（imperative 版，供 ``await`` 调用）。
+
+    与 ``require_domain_access`` 的区别:
+        * ``require_domain_access`` 是 FastAPI dependency,从 ``path_params``
+          读 ``line_id`` (适合 ``/lines/{line_id}/...`` 路由)
+        * ``check_domain_access`` 接收显式 ``line_id`` 参数,适合 ``line_id``
+          在 body / header / query 的场景,或者在 handler 内根据业务逻辑
+          动态决定 line_id 的场景
+
+    语义: **any-of** (任一域允许即通过). 这是最宽松的解读,适合"端点涉及
+    多域"的场景. 调用方若需要 all-of 语义,自行在 handler 内多次调用.
+
+    Args:
+        user: 当前用户 (v2)
+        line_id: 业务线 id
+        domains: 单个或多个数据域 (任一允许即通过)
+        write: True=写, False=读
+
+    Raises:
+        HTTPException(400): line_id 为空
+        HTTPException(403): 所有域都被拒绝
+
+    Examples:
+        # 单域
+        await check_domain_access(user, line_id, DataDomain.BUSINESS, write=True)
+
+        # 多域任一即可 (敏感性 = finance + project)
+        await check_domain_access(
+            user, line_id, [DataDomain.FINANCE, DataDomain.PROJECT], write=False
+        )
+    """
+    if not line_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="line_id is required",
+        )
+    if isinstance(domains, DataDomain):
+        domains_list: list[DataDomain] = [domains]
+    else:
+        domains_list = list(domains)
+    for d in domains_list:
+        if user.can_access_domain(line_id, d, write=write):
+            return  # 至少一个域允许即通过 (any-of 语义)
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            f"no {'write' if write else 'view'} access to any of "
+            f"{[d.value for d in domains_list]} on business line '{line_id}'; "
+            f"user roles={user.roles}"
+        ),
+    )
+
+
+def filter_accessible_lines_v2(
+    user: "CurrentUserV2", all_line_ids: "Iterable[str]"
+) -> list[str]:
+    """v2 版 ``filter_accessible_lines`` 模块级 wrapper (与 v1 同名函数对应).
+
+    实际委托给 ``CurrentUserV2.filter_accessible_lines``,只是把方法调用
+    简化成函数式 API,方便 handler 写起来跟 v1 风格一致 (``filter_accessible_lines(user, ids)``).
+    行为:global scope 角色看全部;业务线范围角色只看在 ``accessible_lines`` 里的 line.
+    """
+    return user.filter_accessible_lines(all_line_ids)
+
+
 __all__ = [
     "Role",
     "DataDomain",
@@ -375,4 +469,6 @@ __all__ = [
     "ROLE_SCOPE",
     "require_role_v2",
     "require_domain_access",
+    "check_domain_access",
+    "filter_accessible_lines_v2",
 ]
