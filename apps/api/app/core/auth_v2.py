@@ -246,6 +246,12 @@ async def get_current_user_v2(
     if service_token:
         supplied = request.headers.get("x-service-token")
         if supplied and supplied == service_token:
+            # M3 service-token 链路 (2026-09-05): 内部调用 (Copilot mock engine
+            # → /api/lines/{line}/projects 等) 也会带 X-Tenant-ID header 透传
+            # 外层请求的 tenant. 这里把它存到 request.state, 给
+            # ``get_tenant_context`` dep 读 — 否则 service-token 用户会落到
+            # DEFAULT_TENANT_ID, 跨 tenant 数据泄露.
+            service_tenant_id = request.headers.get("x-tenant-id")
             user = CurrentUserV2(
                 id=0,
                 username="__service__",
@@ -268,10 +274,13 @@ async def get_current_user_v2(
                 ],
                 active_view="admin",
                 is_super_admin=True,  # M2: service account 当 super admin
-                tenant_id=None,  # 走默认 tenant (DEFAULT_TENANT_ID)
+                tenant_id=service_tenant_id,  # 透传外层 tenant, 缺省时 None → DEFAULT
             )
             # M2: 写 request.state 给 tenant_context 读
             request.state.current_user = user
+            # M3: service-token 标记, 给 tenant_context dep 走专用 source
+            request.state.is_service_token = True
+            request.state.tenant_id = service_tenant_id  # str | None
             return user
 
     # 1. cookie (parameter name 匹配默认 cookie 名 "finbp_token";

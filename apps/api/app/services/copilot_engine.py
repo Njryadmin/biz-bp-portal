@@ -368,12 +368,25 @@ class CopilotEngine:
 
     # ── Public API ─────────────────────────────────────────────────────
 
-    def ask(self, req: CopilotRequest) -> CopilotResponse:
+    def ask(
+        self,
+        req: CopilotRequest,
+        *,
+        outer_tenant_id: str | None = None,
+    ) -> CopilotResponse:
         """Run the full ask pipeline. Returns a CopilotResponse.
 
         For the mock backend, this is mostly synchronous (one call to
         ``MockBackend.answer()``). For real backends, this calls the LLM
         and parses citations from the response.
+
+        M3 service-token 链路 (2026-09-05) — ``outer_tenant_id`` 是外层
+        HTTP 请求的 X-Tenant-ID header. 当 mock engine 用 X-Service-Token
+        调内层 ``/api/lines/{line}/...`` 端点时, 把这个 header 一并带
+        过去, 让内层 service-token 用户的 tenant context 走
+        :func:`_resolve_tenant_context` 的 ``source="service_token"`` 分支,
+        跟外层请求**同 tenant**, 避免跨 tenant 数据泄露. 调用方 (router
+        handler) 负责从 request.headers 读 X-Tenant-ID 传进来.
         """
         question = req.question.strip()
 
@@ -390,14 +403,35 @@ class CopilotEngine:
         parsed = parse_question(effective_question)
 
         if isinstance(effective_backend, MockBackend):
-            # Pass the explicit line_id (if any) so the mock helper can
-            # target it even if the in-question parser didn't pick it up.
-            # Example: line_id="tmp-line" + question="这个 line 的指标"
-            # → parsed.line is None, but req.line_id is "tmp-line".
-            mock_answer = effective_backend.answer(
-                effective_question,
-                line_override=req.line_id,
+            # Inject outer X-Tenant-ID into the per-request header override,
+            # so the in-process HTTP calls in mock_helpers._http_json will
+            # forward it to the inner line APIs. Restore previous override
+            # in a finally block to avoid leaks between concurrent requests
+            # (the engine runs synchronously in a thread pool, but defensive
+            # cleanup makes the test path more reliable).
+            from .llm.mock_helpers import (
+                set_request_headers,
+                clear_request_headers,
             )
+            headers_override: dict[str, str] = {}
+            if outer_tenant_id:
+                headers_override["X-Tenant-ID"] = str(outer_tenant_id)
+            prev = set_request_headers(headers_override)
+            try:
+                # Pass the explicit line_id (if any) so the mock helper can
+                # target it even if the in-question parser didn't pick it up.
+                # Example: line_id="tmp-line" + question="这个 line 的指标"
+                # → parsed.line is None, but req.line_id is "tmp-line".
+                mock_answer = effective_backend.answer(
+                    effective_question,
+                    line_override=req.line_id,
+                )
+            finally:
+                # Restore previous state, falling back to clearing.
+                if prev:
+                    set_request_headers(prev)
+                else:
+                    clear_request_headers()
             return self._build_response_from_mock(
                 question=question,
                 mock=mock_answer,

@@ -23,10 +23,16 @@ The engine (`app.services.copilot_engine`) does the heavy lifting.
 v1 → v2 升级 (2026-09-04): ask 端点有显式 line_id 时,改用 v2
 ``check_domain_access(BUSINESS, write=True)`` 替代 v1 ``require_business_line``.
 Copilot 简化,先归 BUSINESS 域 (多域 follow-up 在 P2).
+
+M3 service-token 链路 (2026-09-05): ask 端点从 Request 读 X-Tenant-ID
+header, 透传给 engine, engine 在 mock backend 调用时把 X-Tenant-ID 加到
+每次 in-process HTTP 调用, 内层 ``/api/lines/...`` 端点的 service-token
+service account 跑在跟外层同 tenant 的 context, RLS 锁住, 防跨 tenant
+数据泄露.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..core.auth_v2 import CurrentUserV2, get_current_user_v2
 from ..core.logging import get_logger
@@ -57,6 +63,7 @@ router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 )
 def ask_endpoint(
     req: CopilotRequest,
+    request: Request,
     user: CurrentUserV2 = Depends(get_current_user_v2),
 ) -> CopilotResponse:
     # NOTE: deliberately NOT `async def` — the mock helper makes sync
@@ -86,6 +93,14 @@ def ask_endpoint(
             )
         except HTTPException:
             raise
+    # M3: 透传外层 X-Tenant-ID 给 engine, 让 mock backend 的 in-process
+    # HTTP 调用带上这个 header, 内层 service-token service account 跑到
+    # 同 tenant 的 context (见 :func:`tenant_context._resolve_tenant_context`
+    # source="service_token" 分支).
+    outer_tenant_id = (
+        request.headers.get("x-tenant-id")
+        or request.headers.get("X-Tenant-ID")
+    )
     engine = CopilotEngine()
     try:
         # Inject the active user into the engine so the system prompt
@@ -94,7 +109,7 @@ def ask_endpoint(
             engine.set_active_user(user.to_public_dict())
         except AttributeError:
             pass
-        return engine.ask(req)
+        return engine.ask(req, outer_tenant_id=outer_tenant_id)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001 — never let the engine crash the API

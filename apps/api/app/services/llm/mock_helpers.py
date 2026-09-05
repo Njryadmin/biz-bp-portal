@@ -44,6 +44,41 @@ HTTP_TIMEOUT = float(os.environ.get("BIZ_BP_COPILOT_HTTP_TIMEOUT", "2.0"))
 SERVICE_TOKEN = os.environ.get("BIZ_BP_SERVICE_TOKEN", "")
 
 # ---------------------------------------------------------------------------
+# Per-request header override (M3, 2026-09-05)
+# ---------------------------------------------------------------------------
+# Copilot engine sets this via ``set_request_headers()`` before calling
+# the mock backend, so that the in-process HTTP calls made by ``_http_json``
+# can forward outer request headers (notably ``X-Tenant-ID``) to the inner
+# API endpoints. The mock backend runs synchronously in a thread pool, so
+# a module-level variable is safe — each request sets + clears around
+# the engine call. The copilot engine is the only writer; ``_http_json``
+# is the only reader.
+_REQUEST_HEADERS: dict[str, str] = {}
+
+
+def set_request_headers(headers: dict[str, str] | None) -> dict[str, str]:
+    """Install (or clear) the per-request header override.
+
+    Returns the previous value so the caller can restore it in a
+    ``finally`` block — important for any error path that doesn't
+    explicitly unset.
+
+    M3 service-token 链路 (2026-09-05): 内部调用要透传外层 X-Tenant-ID,
+    Copilot engine 在 ask() 入口处调这个函数, 把外层 header 注入, 让
+    ``_http_json`` 在每次 urllib 调用时把 X-Tenant-ID 一并发出.
+    """
+    global _REQUEST_HEADERS
+    previous = _REQUEST_HEADERS
+    _REQUEST_HEADERS = dict(headers) if headers else {}
+    return previous
+
+
+def clear_request_headers() -> None:
+    """Reset the per-request header override (defensive, never rely on this)."""
+    global _REQUEST_HEADERS
+    _REQUEST_HEADERS = {}
+
+# ---------------------------------------------------------------------------
 # Per-line endpoint conventions
 # ---------------------------------------------------------------------------
 #
@@ -109,7 +144,11 @@ def _fetch_list(line: str) -> tuple[list[dict[str, Any]], str | None]:
 # ---------------------------------------------------------------------------
 
 
-def _http_json(path: str, base: str | None = None) -> dict[str, Any] | None:
+def _http_json(
+    path: str,
+    base: str | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, Any] | None:
     """GET `base+path` and parse JSON. Return None on any error.
 
     Short timeout — copilot should degrade gracefully if a line API is
@@ -122,11 +161,21 @@ def _http_json(path: str, base: str | None = None) -> dict[str, Any] | None:
     internal caller. Without a configured service token, the call is
     unauthenticated and the API returns 401 — the mock will then return
     its "no data" fallback text.
+
+    M3 service-token 链路 (2026-09-05) — 透传外层请求的 ``X-Tenant-ID``
+    header. 调用方不显式传 ``extra_headers`` 时, 自动用
+    :func:`set_request_headers` 注入的 per-request override (M3 新增).
+    优先级: extra_headers > per-request override > SERVICE_TOKEN (X-Service-Token).
     """
     base = base or API_BASE
     headers: dict[str, str] = {}
     if SERVICE_TOKEN:
         headers["X-Service-Token"] = SERVICE_TOKEN
+    # Per-request header override (set by Copilot engine from outer X-Tenant-ID)
+    if _REQUEST_HEADERS:
+        headers.update(_REQUEST_HEADERS)
+    if extra_headers:
+        headers.update(extra_headers)
     try:
         req = urllib.request.Request(f"{base}{path}", headers=headers)
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:

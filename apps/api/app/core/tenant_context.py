@@ -9,8 +9,13 @@ M2 起步 — 把"当前请求的 tenant"绑到 FastAPI request lifecycle 上.
 - tenant_id 来自 :http:header:`X-Tenant-ID` (或 query param ``?tenant=``).
 - super admin (``is_super_admin=True`` in ``users`` table) 可显式切 tenant.
 - 普通用户从 ``user.tenant_id`` 拿, 忽略 ``X-Tenant-ID``.
+- M3 service-token (2026-09-05) 内部调用 (Copilot mock engine) 透传
+  ``X-Tenant-ID`` header — 走专用 ``source="service_token"`` 路径, 解析
+  service 头里带的 tenant.
 - 没 tenant_id 的请求 → default tenant (:data:`DEFAULT_TENANT_ID`).
-- ``bypass_rls`` 仅 super admin 可开.
+- ``bypass_rls`` 仅 super admin 可开. 内部 service-token 调用**不**开
+  bypass_rls — 即透传 tenant 后, 内层 SQL 仍走 RLS 锁, 跟外层请求同
+  tenant. 这正是 M3 修的"engine router tenant 泄露链"语义.
 
 为什么需要这个 dep
 ------------------
@@ -32,6 +37,17 @@ M1 启用了 RLS (Row-Level Security) on 6 张业务表 + ``tenant_lock`` policy
     async def handler(ctx: TenantContext = Depends(get_tenant_context)):
         async with tenant_session(ctx.tenant_id, bypass_rls=ctx.bypass_rls) as session:
             rows = await session.execute(text("SELECT id FROM users"))
+
+    # 业务线 router 用 get_tenant_session_dep 拿到 ctx, 再显式
+    # ``async with tenant_session(ctx.tenant_id, ctx.bypass_rls)``:
+    from app.core.tenant_context import get_tenant_session_dep
+
+    async def my_handler(
+        user: CurrentUser = Depends(get_current_user),
+        ctx: TenantContext = Depends(get_tenant_session_dep),
+    ):
+        async with tenant_session(ctx.tenant_id, ctx.bypass_rls) as session:
+            ...
 
 请求 lifecycle 集成
 -------------------
@@ -87,6 +103,8 @@ class TenantContext:
     source:
         Where ``tenant_id`` came from. One of:
           - ``"header"``  — super admin provided :http:header:`X-Tenant-ID`
+          - ``"service_token"`` — service-token 内部调用, header 透传
+            (M3, 2026-09-05)
           - ``"user_default"`` — taken from ``user.tenant_id``
           - ``"default"`` — fallback (:data:`DEFAULT_TENANT_ID`)
         Useful for logging / debugging but not consulted by any
@@ -100,18 +118,20 @@ class TenantContext:
 
 
 # ---------------------------------------------------------------------------
-# FastAPI dep
+# Core resolution
 # ---------------------------------------------------------------------------
 
 
-async def get_tenant_context(
+async def _resolve_tenant_context(
     request: Request,
-    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-ID"),
+    x_tenant_id: Optional[str],
 ) -> TenantContext:
-    """FastAPI dep — 解析当前请求的 tenant context.
+    """Resolve the per-request :class:`TenantContext`.
 
     优先级
     ------
+    0. service-token 内部调用 + ``X-Tenant-ID`` header (M3 2026-09-05) —
+       走 source="service_token", bypass_rls=False (RLS 仍锁, 防跨 tenant).
     1. ``X-Tenant-ID`` header (super admin 显式切)
     2. 当前用户的 ``user.tenant_id`` (普通用户)
     3. :data:`DEFAULT_TENANT_ID` (兜底, 兼容未登录路径)
@@ -119,11 +139,28 @@ async def get_tenant_context(
     Raises
     ------
     fastapi.HTTPException
-        400 if :http:header:`X-Tenant-ID` is provided but unparseable
-        (super admin path only — non-super-admins never see the header).
+        400 if :http:header:`X-Tenant-ID` is provided but unparseable.
     """
     user = getattr(request.state, "current_user", None)
     is_super = bool(user and getattr(user, "is_super_admin", False))
+    is_service = bool(getattr(request.state, "is_service_token", False))
+
+    # 0. service-token 内部调用 (M3, 2026-09-05) — 透传外层 tenant,
+    #    不开 bypass_rls, 走 RLS tenant_lock.
+    if is_service and x_tenant_id:
+        try:
+            tid = UUID(x_tenant_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"invalid X-Tenant-ID (service-token): {x_tenant_id!r}",
+            )
+        return TenantContext(
+            tenant_id=tid,
+            bypass_rls=False,
+            is_super_admin=False,
+            source="service_token",
+        )
 
     # 1. super admin + header
     if is_super and x_tenant_id:
@@ -167,7 +204,40 @@ async def get_tenant_context(
     )
 
 
+# ---------------------------------------------------------------------------
+# FastAPI deps
+# ---------------------------------------------------------------------------
+
+
+async def get_tenant_context(
+    request: Request,
+    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-ID"),
+) -> TenantContext:
+    """FastAPI dep — 解析当前请求的 tenant context.
+
+    行为: 同 :func:`_resolve_tenant_context`. 单独抽出 dep 是为了 FastAPI
+    依赖注入时能直接 ``Depends(get_tenant_context)`` 调用.
+    """
+    return await _resolve_tenant_context(request, x_tenant_id)
+
+
+async def get_tenant_session_dep(
+    request: Request,
+    x_tenant_id: Optional[str] = Header(default=None, alias="X-Tenant-ID"),
+) -> TenantContext:
+    """FastAPI dep — 业务线 router 用的 ``TenantContext`` 注入.
+
+    与 :func:`get_tenant_context` 等价, 只是命名上明确"用于
+    ``tenant_session`` 调用". 业务线 router 写在 :file:`registry.py` 的
+    ``include_router(..., dependencies=[...])`` 时也用 :func:`get_tenant_context`
+    (那是给 dep 列表用的); 业务线 handler 自身显式调 :func:`tenant_session`
+    时用这个 dep 拿 ``ctx.tenant_id``.
+    """
+    return await _resolve_tenant_context(request, x_tenant_id)
+
+
 __all__ = [
     "TenantContext",
     "get_tenant_context",
+    "get_tenant_session_dep",
 ]

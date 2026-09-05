@@ -37,6 +37,7 @@ from ..core.rbac import (
 )
 from ..core.registry import RegistryEntry, load_registry, registry_version
 from ..core.logging import get_logger
+from ..core.tenant_context import get_tenant_context
 
 logger = get_logger(__name__)
 
@@ -195,6 +196,12 @@ def mount_business_line_routers(app: FastAPI) -> None:
     that requires the caller to be authenticated AND to have access to
     the specific line id. So a user with only ``bp:residential`` cannot
     hit ``/api/lines/retail/...`` even if they know the URL.
+
+    M3 multi-tenant (2026-09-05) — 额外加一个 dep ``get_tenant_context``,
+    让业务线 router 的 handler 在调 SQL 时拿 ``ctx.tenant_id``, 跟外层
+    请求同 tenant. 这关掉了"engine router → in-process HTTP → 业务线
+    API" 的 tenant 泄露链 (service-token service account 默认走
+    DEFAULT_TENANT_ID, 不带 X-Tenant-ID 调内层会跨 tenant).
     """
     for entry, obj in discover_business_line_routers():
         prefix = entry.line.api_prefix
@@ -246,6 +253,22 @@ def mount_business_line_routers(app: FastAPI) -> None:
                             {"detail": "user not found or inactive"},
                             status_code=401,
                         )
+                    # M3: 解析 tenant context (写 request.state) — 业务线
+                    # handler 后续可用 ``get_tenant_context`` dep 拿
+                    # ``ctx.tenant_id`` 调 ``tenant_session``. 这一步只
+                    # 解析 + 写 state, 不阻塞请求 (跟之前的 get_current_user
+                    # 一样, RLS 在 handler 调 SQL 时才生效).
+                    try:
+                        ctx = await get_tenant_context(request)
+                    except Exception as exc:  # noqa: BLE001
+                        # get_tenant_context 失败 (比如 X-Tenant-ID 不合法)
+                        # → 直接 400. service-token 走的是 DEFAULT 兜底,
+                        # 不会在这里抛.
+                        return JSONResponse(
+                            {"detail": f"invalid tenant context: {exc}"},
+                            status_code=400,
+                        )
+                    request.state.tenant_context = ctx
                     if (
                         user.has_admin()
                         or user.has_auditor()
@@ -273,13 +296,20 @@ def mount_business_line_routers(app: FastAPI) -> None:
             )
         else:
             # APIRouter: include_router supports dependencies= kwarg.
+            # M3: 加 ``get_tenant_context`` dep, 业务线 handler 调 SQL 时
+            # 可拿 ``ctx.tenant_id`` 走 ``tenant_session``. 这个 dep 即使
+            # handler 现在没用 SQL, 加了也无害 (FastAPI 解析 dep 不读
+            # 任何 DB), 但保证未来加 SQL 时自动锁 tenant.
             app.include_router(
                 obj,
                 prefix=prefix,
-                dependencies=[Depends(business_line_router_guard(line_id))],
+                dependencies=[
+                    Depends(business_line_router_guard(line_id)),
+                    Depends(get_tenant_context),
+                ],
             )
             logger.info(
-                "Mounted business line '%s' (APIRouter, line-guard) at %s",
+                "Mounted business line '%s' (APIRouter, line-guard + tenant) at %s",
                 entry.line.id,
                 prefix,
             )

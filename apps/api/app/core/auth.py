@@ -416,6 +416,12 @@ async def get_current_user(
     if service_token:
         supplied = request.headers.get("x-service-token")
         if supplied and supplied == service_token:
+            # M3 service-token 链路 (2026-09-05): 内部调用 (Copilot mock engine
+            # → /api/lines/{line}/projects 等) 也会带 X-Tenant-ID header 透传
+            # 外层请求的 tenant. 这里把它存到 request.state, 给
+            # ``get_tenant_context`` dep 读 — 否则 service-token 用户会落到
+            # DEFAULT_TENANT_ID, 跨 tenant 数据泄露.
+            service_tenant_id = request.headers.get("x-tenant-id")
             user = CurrentUser(
                 id=0,
                 username="__service__",
@@ -425,9 +431,12 @@ async def get_current_user(
                 roles=["admin", "auditor"],
                 accessible_lines=[],  # admin role grants all anyway
                 is_super_admin=True,  # service account treated as super admin
-                tenant_id=None,  # 走默认 tenant (DEFAULT_TENANT_ID)
+                tenant_id=service_tenant_id,  # 透传外层 tenant, 缺省时 None → DEFAULT
             )
             request.state.current_user = user
+            # 把 is_service_token flag 也写进 state, 给 tenant_context dep 读
+            request.state.is_service_token = True
+            request.state.tenant_id = service_tenant_id  # str | None
             return user
 
     token = finbp_token
